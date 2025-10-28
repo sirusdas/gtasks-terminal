@@ -1,0 +1,90 @@
+Metadata-Version: 2.4
+Name: gtasks-cli
+Version: 0.1.0
+Summary: A powerful CLI for managing Google Tasks
+Home-page: https://github.com/example/gtasks-cli
+Author: Google Tasks CLI Team
+Author-email: example@example.com
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+Requires-Dist: click>=8.1.0
+Requires-Dist: google-auth-oauthlib>=1.0.0
+Requires-Dist: google-api-python-client>=2.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: sqlalchemy>=2.0.0
+Requires-Dist: rich>=13.0.0
+Requires-Dist: tabulate>=0.9.0
+Requires-Dist: python-dateutil>=2.8.0
+Requires-Dist: pytz>=2023.3
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: appdirs>=1.4.4
+Requires-Dist: cryptography>=41.0.0
+Requires-Dist: requests>=2.31.0
+Requires-Dist: matplotlib>=3.7.0
+Requires-Dist: prompt-toolkit>=3.0.0
+Requires-Dist: colorama>=0.4.6
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# Google Tasks CLI
+
+A powerful, feature-rich CLI application for Google Tasks management in Python.
+
+## Features
+
+- Full Google Tasks API integration with OAuth2 authentication
+- Advanced filtering and search capabilities
+- Context management for different task views
+- Reporting and analytics
+- Time tracking and Pomodoro technique integration
+- Recurring tasks and dependencies
+- Offline mode with synchronization
+- Import/export functionality
+
+## Installation
+
+```bash
+pip install -r requirements.txt
+```
+
+## Usage
+
+```bash
+python -m gtasks_cli.main --help
+```
+
+Or after installation:
+
+```bash
+gtasks --help
+```
+
+## Development
+
+This project follows a modular architecture with clear separation of concerns:
+- **CLI Layer**: Command-line interface using Click framework
+- **Core Layer**: Business logic for task and tasklist management
+- **Integration Layer**: Google Tasks API integration and authentication
+- **Storage Layer**: Local caching and configuration management
+- **Reporting Layer**: Analytics and reporting functionality
+
+## License
+
+MIT

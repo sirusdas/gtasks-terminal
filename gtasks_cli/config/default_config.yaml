@@ -1,0 +1,27 @@
+# Google Tasks CLI - Default Configuration
+
+# General settings
+default_tasklist: "My Tasks"
+date_format: "%Y-%m-%d"
+time_format: "%H:%M"
+sync_on_action: true
+offline_mode: false
+
+# Display settings
+display:
+  colors: true
+  table_style: "simple"
+  max_width: 100
+
+# Aliases
+aliases:
+  ls: list
+  rm: delete
+  complete: done
+
+# Custom reports
+custom_reports:
+  urgent:
+    filter: "priority:high status:pending"
+    sort: "due"
+    columns: ["id", "title", "due", "project"]
