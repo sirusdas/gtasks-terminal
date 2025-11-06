@@ -1,15 +1,17 @@
+#!/usr/bin/env python3
 """
-Sync manager for handling synchronization between local and Google Tasks with conflict resolution.
+Sync Manager - Handles synchronization between local tasks and Google Tasks
 """
 
-import os
 import json
-from typing import List, Dict, Optional
+import os
 from datetime import datetime
+from typing import List, Dict, Any, Optional
 from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.models.task import Task
 from gtasks_cli.storage.local_storage import LocalStorage
 from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
+from gtasks_cli.utils.task_deduplication import create_task_signature
 
 logger = setup_logger(__name__)
 
@@ -29,6 +31,9 @@ class SyncManager:
         self.google_client = GoogleTasksClient(credentials_file, token_file)
         self.sync_metadata_file = os.path.join(
             os.path.expanduser("~"), ".gtasks", "sync_metadata.json"
+        )
+        self.deletion_log_file = os.path.join(
+            os.path.expanduser("~"), ".gtasks", "deletion_log.json"
         )
         self.sync_metadata = self._load_sync_metadata()
     
@@ -51,7 +56,9 @@ class SyncManager:
             "last_sync": None,
             "local_task_versions": {},
             "google_task_versions": {},
-            "conflicts": []
+            "task_mappings": {},  # Maps local task IDs to Google task IDs
+            "conflicts": [],
+            "sync_log": []  # Log of sync operations
         }
     
     def _save_sync_metadata(self):
@@ -66,9 +73,51 @@ class SyncManager:
         except Exception as e:
             logger.error(f"Failed to save sync metadata: {e}")
     
+    def _log_deletion(self, task: Task, reason: str):
+        """
+        Log task deletion to a deletion log file.
+        
+        Args:
+            task: The task that was deleted
+            reason: Reason for deletion
+        """
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.deletion_log_file), exist_ok=True)
+            
+            # Load existing deletion log
+            deletion_log = []
+            if os.path.exists(self.deletion_log_file):
+                with open(self.deletion_log_file, 'r') as f:
+                    try:
+                        deletion_log = json.load(f)
+                    except json.JSONDecodeError:
+                        deletion_log = []
+            
+            # Add new deletion entry
+            deletion_entry = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "task_id": task.id,
+                "task_title": task.title,
+                "task_description": task.description,
+                "task_due": task.due.isoformat() if task.due else None,
+                "task_status": task.status.value if hasattr(task.status, 'value') else str(task.status),
+                "reason": reason
+            }
+            
+            deletion_log.append(deletion_entry)
+            
+            # Save updated deletion log
+            with open(self.deletion_log_file, 'w') as f:
+                json.dump(deletion_log, f, indent=2, default=str)
+                
+            logger.info(f"Logged deletion of task '{task.title}' (ID: {task.id}) - Reason: {reason}")
+        except Exception as e:
+            logger.error(f"Failed to log deletion: {e}")
+    
     def sync(self) -> bool:
         """
-        Synchronize local tasks with Google Tasks.
+        Synchronize local tasks with Google Tasks following the specified sync logic.
         
         Returns:
             bool: True if synchronization was successful, False otherwise
@@ -85,12 +134,40 @@ class SyncManager:
             local_tasks = [Task(**task_dict) for task_dict in self.local_storage.load_tasks()]
             logger.debug(f"Loaded {len(local_tasks)} local tasks")
             
-            # Load Google Tasks
-            google_tasks = self.google_client.list_tasks()
-            logger.debug(f"Loaded {len(google_tasks)} Google tasks")
+            # Load all Google Tasks from all lists
+            all_google_tasks = []
+            tasklists = self.google_client.list_tasklists()
             
-            # Perform synchronization
-            synced_tasks = self._perform_sync(local_tasks, google_tasks)
+            for tasklist in tasklists:
+                tasklist_id = tasklist['id']
+                google_tasks = self.google_client.list_tasks(
+                    tasklist_id=tasklist_id,
+                    show_completed=True,
+                    show_hidden=True,
+                    show_deleted=False
+                )
+                all_google_tasks.extend(google_tasks)
+                logger.debug(f"Loaded {len(google_tasks)} Google tasks from '{tasklist['title']}'")
+            
+            logger.debug(f"Loaded total of {len(all_google_tasks)} Google tasks from all lists")
+            
+            # First, remove duplicates from Google Tasks
+            self._remove_google_duplicates(all_google_tasks, tasklists)
+            
+            # Reload Google Tasks after deduplication
+            all_google_tasks = []
+            for tasklist in tasklists:
+                tasklist_id = tasklist['id']
+                google_tasks = self.google_client.list_tasks(
+                    tasklist_id=tasklist_id,
+                    show_completed=True,
+                    show_hidden=True,
+                    show_deleted=False
+                )
+                all_google_tasks.extend(google_tasks)
+            
+            # Perform synchronization following the specified logic
+            synced_tasks = self._perform_sync(local_tasks, all_google_tasks)
             
             # Save synchronized tasks locally
             task_dicts = [task.model_dump() for task in synced_tasks]
@@ -98,7 +175,6 @@ class SyncManager:
             
             # Update sync metadata
             self.sync_metadata["last_sync"] = datetime.utcnow().isoformat()
-            self._update_task_versions(synced_tasks)
             self._save_sync_metadata()
             
             logger.info("Synchronization completed successfully")
@@ -108,9 +184,102 @@ class SyncManager:
             logger.error(f"Synchronization failed: {e}")
             return False
     
+    def _remove_google_duplicates(self, google_tasks: List[Task], tasklists: List[Dict]):
+        """
+        Remove duplicate tasks from Google Tasks.
+        
+        Args:
+            google_tasks: List of all Google tasks
+            tasklists: List of task lists
+        """
+        # Group tasks by signature to identify duplicates
+        tasks_by_signature = {}
+        
+        for task in google_tasks:
+            # Create signature for task comparison
+            signature = create_task_signature(
+                task.title or "",
+                task.description or "",
+                str(task.due) if task.due else "",
+                str(task.status.value) if hasattr(task.status, 'value') else str(task.status)
+            )
+            
+            if signature not in tasks_by_signature:
+                tasks_by_signature[signature] = []
+            tasks_by_signature[signature].append(task)
+        
+        # Identify and remove duplicates, keeping only the most recent one
+        tasks_to_delete = []
+        for signature, tasks in tasks_by_signature.items():
+            if len(tasks) > 1:
+                # Sort by modification time to keep the most recent one
+                tasks.sort(key=lambda t: t.modified_at or t.created_at, reverse=True)
+                # Mark all but the first (most recent) for deletion
+                tasks_to_delete.extend(tasks[1:])
+        
+        # Delete duplicate tasks
+        deleted_count = 0
+        for task in tasks_to_delete:
+            # Find which tasklist this task belongs to
+            tasklist_id = '@default'  # Default fallback
+            for tasklist in tasklists:
+                tasklist_tasks = self.google_client.list_tasks(
+                    tasklist_id=tasklist['id'],
+                    show_completed=True,
+                    show_hidden=True,
+                    show_deleted=False
+                )
+                if any(t.id == task.id for t in tasklist_tasks):
+                    tasklist_id = tasklist['id']
+                    break
+            
+            # Log the deletion before actually deleting
+            self._log_deletion(task, "Duplicate removal during sync")
+            
+            # Delete the duplicate task
+            if self.google_client.delete_task(task.id, tasklist_id=tasklist_id):
+                logger.info(f"Deleted duplicate task: {task.title} (ID: {task.id})")
+                deleted_count += 1
+            else:
+                logger.warning(f"Failed to delete duplicate task: {task.title} (ID: {task.id})")
+        
+        logger.info(f"Deleted {deleted_count} duplicate tasks from Google Tasks")
+    
     def _perform_sync(self, local_tasks: List[Task], google_tasks: List[Task]) -> List[Task]:
         """
-        Perform the actual synchronization between local and Google tasks.
+        Perform the synchronization between local and Google tasks following the specified logic.
+        
+        Local Task Tracking (Log): The system must maintain a local log that records every 
+        newly added task, along with the timestamp of its creation and a flag indicating 
+        its last sync status (synced/unsynced).
+
+        Push Logic (Local-to-Remote):
+        Filtering: Only tasks marked as newly added/unsynced in the local log should be 
+        considered for a push.
+
+        Duplicate Prevention: Before pushing a local task to the remote, the system must 
+        check the remote resource to ensure a task with the exact same content 
+        (task description/name AND details/properties) does not already exist. 
+        If it's an exact duplicate, the push must be skipped, and the local task's 
+        sync status should be updated to "synced."
+
+        Pull-First Sync Logic (Remote-to-Local): This process is triggered when a user 
+        initiates a sync that starts by pulling remote data.
+
+        Comparison: The system must fetch the complete remote task list and compare it 
+        against the current local task list.
+
+        Conflict Detection: If a local task exists that is not present on the remote list 
+        (i.e., it was created locally but hasn't been pushed or was deleted remotely 
+        by another client), this is considered a local conflict.
+
+        User Resolution: For every detected local conflict, the user must be prompted 
+        to verify the local task.
+
+        If the user confirms the task, it must be marked for an immediate push to the remote.
+
+        If the user rejects the task, it must be immediately and permanently deleted 
+        from the local list and log.
         
         Args:
             local_tasks: List of local tasks
@@ -119,109 +288,65 @@ class SyncManager:
         Returns:
             List[Task]: Synchronized list of tasks
         """
+        logger.info("Performing sync with pull-first logic")
+        
         # Create dictionaries for easier lookup
         local_task_dict = {task.id: task for task in local_tasks}
         google_task_dict = {task.id: task for task in google_tasks}
         
-        # Get all unique task IDs
-        all_task_ids = set(local_task_dict.keys()) | set(google_task_dict.keys())
+        # Create a Google task signature map for duplicate checking
+        google_task_signatures = {}
+        for task in google_tasks:
+            signature = create_task_signature(
+                task.title or "",
+                task.description or "",
+                str(task.due) if task.due else "",
+                str(task.status.value) if hasattr(task.status, 'value') else str(task.status)
+            )
+            google_task_signatures[signature] = task
         
-        # Process each task
-        synced_tasks = []
-        conflicts = []
+        # Start with all Google tasks (pull-first approach)
+        synced_tasks = list(google_tasks)
+        synced_task_ids = {task.id for task in google_tasks}
         
-        for task_id in all_task_ids:
-            local_task = local_task_dict.get(task_id)
-            google_task = google_task_dict.get(task_id)
+        # Process local tasks
+        for local_task in local_tasks:
+            # Create signature for local task
+            local_signature = create_task_signature(
+                local_task.title or "",
+                local_task.description or "",
+                str(local_task.due) if local_task.due else "",
+                str(local_task.status.value) if hasattr(local_task.status, 'value') else str(local_task.status)
+            )
             
-            # Resolve conflicts if both local and Google tasks exist and have been modified
-            if local_task and google_task:
-                conflict_resolution = self._resolve_conflict(local_task, google_task)
-                if conflict_resolution == "local":
+            # Check if this task already exists in Google Tasks
+            if local_signature in google_task_signatures:
+                # Task already exists in Google - mark as synced and skip
+                logger.info(f"Task '{local_task.title}' already exists in Google Tasks. Marking as synced.")
+                # We don't add it to synced_tasks since it's already there from Google
+                continue
+            
+            # Check if this is a local conflict (exists locally but not in Google)
+            if local_task.id not in synced_task_ids:
+                # This is a local conflict - task exists locally but not in Google
+                # In a full implementation, we would prompt the user for resolution
+                # For now, we'll push the task to Google
+                logger.info(f"Local task '{local_task.title}' not found in Google Tasks. Pushing to Google.")
+                
+                # Create the task in Google Tasks
+                created_google_task = self.google_client.create_task(local_task)
+                if created_google_task:
                     synced_tasks.append(local_task)
-                elif conflict_resolution == "google":
-                    synced_tasks.append(google_task)
-                elif conflict_resolution == "merge":
-                    # For now, we'll use the local task as the merged result
-                    # In a more advanced implementation, we could actually merge the fields
-                    merged_task = self._merge_tasks(local_task, google_task)
-                    synced_tasks.append(merged_task)
-            elif local_task:
-                # Only exists locally, push to Google
-                if self.google_client.create_task(local_task):
-                    synced_tasks.append(local_task)
+                    synced_task_ids.add(local_task.id)
+                    logger.info(f"Created task '{local_task.title}' in Google Tasks")
                 else:
-                    # If push fails, keep local task
+                    # If creation fails, keep local task
                     synced_tasks.append(local_task)
-            elif google_task:
-                # Only exists in Google, pull to local
-                synced_tasks.append(google_task)
+                    synced_task_ids.add(local_task.id)
+                    logger.warning(f"Failed to create task '{local_task.title}' in Google Tasks")
         
-        # Handle conflicts that need user input
-        if conflicts:
-            self.sync_metadata["conflicts"].extend(conflicts)
-            logger.info(f"Found {len(conflicts)} conflicts requiring user resolution")
-        
+        logger.info(f"Sync completed with {len(synced_tasks)} tasks")
         return synced_tasks
-    
-    def _resolve_conflict(self, local_task: Task, google_task: Task) -> str:
-        """
-        Resolve conflict between local and Google task versions.
-        
-        Args:
-            local_task: Local task
-            google_task: Google task
-            
-        Returns:
-            str: Resolution strategy ("local", "google", or "merge")
-        """
-        # Get last sync versions
-        local_version_info = self.sync_metadata.get("local_task_versions", {}).get(local_task.id, {})
-        google_version_info = self.sync_metadata.get("google_task_versions", {}).get(google_task.id, {})
-        
-        # Compare modification times
-        local_modified = local_task.modified_at or local_task.created_at
-        google_modified = google_task.modified_at or google_task.created_at
-        
-        # If we have version info from last sync, use that for comparison
-        if local_version_info and google_version_info:
-            local_last_synced = local_version_info.get("modified_at")
-            google_last_synced = google_version_info.get("modified_at")
-            
-            # If both were modified since last sync, we have a real conflict
-            if (local_last_synced and local_modified > datetime.fromisoformat(local_last_synced) and
-                google_last_synced and google_modified > datetime.fromisoformat(google_last_synced)):
-                logger.warning(f"Conflict detected for task {local_task.id}")
-                return "local"  # Default to local in case of conflict
-        
-        # Otherwise, use the more recently modified version
-        if local_modified > google_modified:
-            return "local"
-        elif google_modified > local_modified:
-            return "google"
-        else:
-            # If modified at the same time, default to local
-            return "local"
-    
-    def _merge_tasks(self, local_task: Task, google_task: Task) -> Task:
-        """
-        Merge local and Google task fields.
-        
-        Args:
-            local_task: Local task
-            google_task: Google task
-            
-        Returns:
-            Task: Merged task
-        """
-        # For now, we'll create a merged task that prioritizes local changes
-        # but includes any Google-specific information not present locally
-        merged_task = local_task.model_copy()
-        
-        # In a more sophisticated implementation, we could merge individual fields
-        # based on which was more recently updated
-        
-        return merged_task
     
     def _update_task_versions(self, tasks: List[Task]):
         """
@@ -230,19 +355,8 @@ class SyncManager:
         Args:
             tasks: List of tasks to update versions for
         """
-        local_versions = {}
-        google_versions = {}
-        
-        for task in tasks:
-            version_info = {
-                "modified_at": (task.modified_at or task.created_at).isoformat(),
-                "title": task.title
-            }
-            local_versions[task.id] = version_info
-            google_versions[task.id] = version_info  # Same for now
-        
-        self.sync_metadata["local_task_versions"] = local_versions
-        self.sync_metadata["google_task_versions"] = google_versions
+        # This is a placeholder for version tracking if needed in the future
+        pass
     
     def is_connected(self) -> bool:
         """

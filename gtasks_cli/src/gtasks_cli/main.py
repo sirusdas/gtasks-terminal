@@ -5,6 +5,8 @@ Google Tasks CLI - Main Entry Point
 
 import click
 import os
+import json
+from datetime import datetime
 from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.models.task import Priority
 
@@ -19,7 +21,28 @@ logger = setup_logger(__name__)
 @click.option('--google', '-g', is_flag=True, help='Use Google Tasks API instead of local storage')
 @click.pass_context
 def cli(ctx, config, verbose, google):
-    """Google Tasks CLI with superpowers ⚡"""
+    """Google Tasks CLI with superpowers ⚡
+
+    A powerful command-line interface for managing Google Tasks with advanced features
+    like task dependencies, recurrence, projects, tags, and synchronization.
+    
+    \b
+    Examples:
+      # Add a simple task
+      gtasks add -t "Buy groceries"
+      
+      # Add a task with due date and priority
+      gtasks add -t "Finish report" --due "2024-12-31" --priority high
+      
+      # List all pending tasks
+      gtasks list --status pending
+      
+      # Sync with Google Tasks
+      gtasks sync
+      
+      # Search for tasks
+      gtasks search "meeting"
+    """
     ctx.ensure_object(dict)
     ctx.obj['CONFIG'] = config
     ctx.obj['VERBOSE'] = verbose
@@ -50,7 +73,28 @@ def cli(ctx, config, verbose, google):
 @click.option('--recurring', '-r', help='Recurrence rule (e.g., daily, weekly, monthly, yearly, or "every 2 weeks")')
 @click.pass_context
 def add(ctx, title, description, due, priority, project, tags, notes, depends_on, recurring):
-    """Add a new task"""
+    """Add a new task
+    
+    \b
+    Examples:
+      # Add a simple task
+      gtasks add -t "Buy groceries"
+      
+      # Add a task with due date and priority
+      gtasks add -t "Finish report" --due "2024-12-31T17:00:00" --priority high
+      
+      # Add a task with project and tags
+      gtasks add -t "Code review" -p "Project X" --tags "development,review"
+      
+      # Add a recurring task
+      gtasks add -t "Daily standup" --recurring daily
+      
+      # Add a task with dependencies
+      gtasks add -t "Deploy to production" --depends-on "task123,task456"
+      
+      # Add a task using Google Tasks directly
+      gtasks add -t "Team meeting" -g
+    """
     use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
     logger.info(f"Adding task: {title} {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
@@ -96,7 +140,28 @@ def add(ctx, title, description, due, priority, project, tags, notes, depends_on
 @click.option('--recurring', '-r', is_flag=True, help='Show only recurring tasks')
 @click.pass_context
 def list(ctx, status, priority, project, recurring):
-    """List all tasks"""
+    """List all tasks
+    
+    \b
+    Examples:
+      # List all tasks
+      gtasks list
+      
+      # List only pending tasks
+      gtasks list --status pending
+      
+      # List high priority tasks
+      gtasks list --priority high
+      
+      # List tasks for a specific project
+      gtasks list --project "Project X"
+      
+      # List only recurring tasks
+      gtasks list --recurring
+      
+      # List using Google Tasks directly
+      gtasks list -g
+    """
     use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
     logger.info(f"Listing tasks {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
@@ -182,7 +247,16 @@ def list(ctx, status, priority, project, recurring):
 @click.argument('query')
 @click.pass_context
 def search(ctx, query):
-    """Search tasks by query string"""
+    """Search tasks by query string
+    
+    \b
+    Examples:
+      # Search for tasks containing "meeting"
+      gtasks search meeting
+      
+      # Search using Google Tasks directly
+      gtasks search "important" -g
+    """
     use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
     use_offline = ctx.obj.get('OFFLINE_MODE', False)
     
@@ -252,7 +326,16 @@ def search(ctx, query):
 @click.argument('task_id')
 @click.pass_context
 def view(ctx, task_id):
-    """View detailed information about a task"""
+    """View detailed information about a task
+    
+    \b
+    Examples:
+      # View details of a task
+      gtasks view task123
+      
+      # View using Google Tasks directly
+      gtasks view task456 -g
+    """
     use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
     logger.info(f"Viewing task: {task_id} {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
@@ -354,7 +437,16 @@ def view(ctx, task_id):
 @click.argument('task_id')
 @click.pass_context
 def done(ctx, task_id):
-    """Mark task as done"""
+    """Mark task as done
+    
+    \b
+    Examples:
+      # Mark a task as done
+      gtasks done task123
+      
+      # Mark using Google Tasks directly
+      gtasks done task456 -g
+    """
     use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
     logger.info(f"Marking task {task_id} as done {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
@@ -381,7 +473,16 @@ def done(ctx, task_id):
 @click.argument('task_id')
 @click.pass_context
 def delete(ctx, task_id):
-    """Delete a task"""
+    """Delete a task
+    
+    \b
+    Examples:
+      # Delete a task
+      gtasks delete task123
+      
+      # Delete using Google Tasks directly
+      gtasks delete task456 -g
+    """
     use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
     logger.info(f"Deleting task {task_id} {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
@@ -414,7 +515,25 @@ def delete(ctx, task_id):
 @click.option('--recurring', '-r', help='New recurrence rule')
 @click.pass_context
 def update(ctx, task_id, title, description, due, priority, project, status, tags, notes, depends_on, recurring):
-    """Update a task"""
+    """Update a task
+    
+    \b
+    Examples:
+      # Update task title
+      gtasks update task123 -t "New title"
+      
+      # Update task due date and priority
+      gtasks update task123 --due "2024-12-31" --priority high
+      
+      # Update task tags
+      gtasks update task123 --tags "work,important"
+      
+      # Clear task notes
+      gtasks update task123 --notes ""
+      
+      # Update using Google Tasks directly
+      gtasks update task456 -t "New title" -g
+    """
     use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
     logger.info(f"Updating task {task_id} {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
@@ -459,15 +578,39 @@ def update(ctx, task_id, title, description, due, priority, project, status, tag
 
 
 @cli.command()
+@click.option('--batch', '-b', is_flag=True, help='Use batch operations for faster sync')
+@click.option('--dry-run', '-d', is_flag=True, help='Preview changes without actually making them')
 @click.pass_context
-def sync(ctx):
-    """Synchronize tasks with Google Tasks"""
+def sync(ctx, batch, dry_run):
+    """Synchronize tasks with Google Tasks
+    
+    This command synchronizes your local tasks with Google Tasks, ensuring that
+    changes made on either side are properly reflected on both sides.
+    
+    \b
+    Examples:
+      # Standard sync
+      gtasks sync
+      
+      # Fast batch sync (recommended for large task lists)
+      gtasks sync --batch
+      
+      # Preview what would be deleted without actually deleting
+      gtasks sync --dry-run
+      
+      # Preview batch sync operations
+      gtasks sync --batch --dry-run
+    """
     use_offline = ctx.obj.get('OFFLINE_MODE', False)
     
     if use_offline:
         logger.info("Synchronization skipped - Offline mode enabled")
         click.echo("🚫 Cannot synchronize: Offline mode is active")
         return
+    
+    if dry_run:
+        logger.info("Dry-run mode enabled for synchronization")
+        click.echo("🔍 Dry-run mode: Previewing changes without actually making them")
     
     logger.info("Synchronizing with Google Tasks")
     
@@ -478,11 +621,26 @@ def sync(ctx):
     task_manager = TaskManager(use_google_tasks=True)
     
     try:
-        if task_manager.sync_with_google_tasks():
-            click.echo("✅ Synchronization with Google Tasks completed successfully!")
+        if batch:
+            # Use the new batch sync method
+            if task_manager.batch_sync_with_google_tasks(dry_run=dry_run):
+                if dry_run:
+                    click.echo("✅ Batch synchronization preview completed successfully!")
+                else:
+                    click.echo("✅ Batch synchronization with Google Tasks completed successfully!")
+            else:
+                click.echo("❌ Failed to batch synchronize with Google Tasks!")
+                exit(1)
         else:
-            click.echo("❌ Failed to synchronize with Google Tasks!")
-            exit(1)
+            # Use standard sync method
+            if task_manager.sync_with_google_tasks():
+                if dry_run:
+                    click.echo("✅ Synchronization preview completed successfully!")
+                else:
+                    click.echo("✅ Synchronization with Google Tasks completed successfully!")
+            else:
+                click.echo("❌ Failed to synchronize with Google Tasks!")
+                exit(1)
     except Exception as e:
         logger.error(f"Synchronization error: {e}")
         click.echo(f"❌ Synchronization error: {str(e)}")
@@ -491,7 +649,13 @@ def sync(ctx):
 
 @cli.command()
 def auth():
-    """Authenticate with Google Tasks API"""
+    """Authenticate with Google Tasks API
+    
+    \b
+    Examples:
+      # Authenticate with Google Tasks
+      gtasks auth
+    """
     logger.info("Starting Google authentication flow")
     
     # Import here to avoid issues with module loading
@@ -505,6 +669,213 @@ def auth():
     else:
         click.echo("❌ Failed to authenticate with Google Tasks API!")
         exit(1)
+
+
+@cli.command()
+def deletion_log():
+    """View the deletion log
+    
+    This command shows a log of all tasks that have been deleted,
+    including the reason for deletion.
+    
+    \b
+    Examples:
+      # View deletion log
+      gtasks deletion-log
+    """
+    logger.info("Viewing deletion log")
+    
+    import os
+    deletion_log_file = os.path.join(
+        os.path.expanduser("~"), ".gtasks", "deletion_log.json"
+    )
+    
+    if not os.path.exists(deletion_log_file):
+        click.echo("No deletion log found.")
+        return
+    
+    try:
+        with open(deletion_log_file, 'r') as f:
+            deletion_log = json.load(f)
+    except json.JSONDecodeError:
+        click.echo("Error reading deletion log file.")
+        return
+    
+    if not deletion_log:
+        click.echo("Deletion log is empty.")
+        return
+    
+    click.echo("Google Tasks Deletion Log")
+    click.echo("=" * 50)
+    click.echo(f"Total deletions: {len(deletion_log)}")
+    click.echo()
+    
+    # Sort by timestamp (newest first)
+    deletion_log.sort(key=lambda x: x['timestamp'], reverse=True)
+    
+    for entry in deletion_log:
+        timestamp = entry['timestamp']
+        task_title = entry['task_title']
+        task_id = entry['task_id']
+        reason = entry['reason']
+        
+        # Format the timestamp
+        try:
+            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            formatted_time = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+        except:
+            formatted_time = timestamp
+        
+        click.echo(f"Time: {formatted_time}")
+        click.echo(f"Task: {task_title}")
+        click.echo(f"ID: {task_id}")
+        click.echo(f"Reason: {reason}")
+        click.echo("-" * 30)
+
+
+@cli.command()
+@click.option('--dry-run', '-d', is_flag=True, help='Preview changes without actually making them')
+@click.option('--yes', is_flag=True, help='Confirm the action without prompting.')
+@click.pass_context
+def deduplicate(ctx, dry_run, yes):
+    """Remove duplicate tasks while preserving one copy of each
+    
+    This command identifies and removes duplicate tasks from all task lists,
+    keeping only one copy of each task.
+    
+    \b
+    Examples:
+      # Preview duplicate removal
+      gtasks deduplicate --dry-run
+      
+      # Actually remove duplicates
+      gtasks deduplicate
+    """
+    logger.info("Starting duplicate removal process")
+    
+    if not yes and not dry_run:
+        if not click.confirm("Are you sure you want to remove duplicate tasks?"):
+            return
+    
+    if dry_run:
+        click.echo("🔍 Dry-run mode: Previewing duplicates without actually removing them")
+    else:
+        click.echo("🗑️ Removing duplicate tasks...")
+    
+    # Import here to avoid issues with module loading
+    from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
+    from gtasks_cli.models.task import TaskStatus
+    import hashlib
+    from collections import defaultdict
+    
+    # Connect to Google Tasks
+    google_client = GoogleTasksClient()
+    if not google_client.connect():
+        click.echo("❌ Failed to connect to Google Tasks")
+        exit(1)
+    
+    click.echo("✅ Connected to Google Tasks API")
+    
+    # Get all task lists
+    tasklists = google_client.list_tasklists()
+    total_removed = 0
+    total_errors = 0
+    
+    for tasklist in tasklists:
+        tasklist_id = tasklist['id']
+        tasklist_title = tasklist['title']
+        
+        click.echo(f"\nProcessing '{tasklist_title}' list...")
+        
+        # Get all tasks (including deleted) from this list
+        all_tasks = google_client.list_tasks(
+            tasklist_id=tasklist_id,
+            show_completed=True,
+            show_hidden=True,
+            show_deleted=True
+        )
+        
+        click.echo(f"  Total tasks in list: {len(all_tasks)}")
+        
+        # Group tasks by signature
+        def create_task_signature(task):
+            """Create a signature for a task based on its key attributes"""
+            signature_parts = [
+                str(task.title or ''),
+                str(task.description or ''),
+                str(task.due) if task.due else '',
+                str(task.status.value) if hasattr(task.status, 'value') else str(task.status)
+            ]
+            
+            signature_string = '|'.join(signature_parts)
+            return hashlib.md5(signature_string.encode('utf-8')).hexdigest()
+        
+        task_groups = defaultdict(list)
+        for task in all_tasks:
+            signature = create_task_signature(task)
+            task_groups[signature].append(task)
+        
+        # Find duplicates (groups with more than one task)
+        duplicates = []
+        for signature, tasks in task_groups.items():
+            if len(tasks) > 1:
+                # Sort by modification date to keep the most recent one
+                tasks.sort(key=lambda t: t.modified_at or t.created_at, reverse=True)
+                # Keep the first (most recent) and mark others for deletion
+                duplicates.extend(tasks[1:])
+        
+        click.echo(f"  Found {len(duplicates)} duplicate tasks")
+        
+        if not duplicates:
+            continue
+            
+        # Show sample duplicates
+        if len(duplicates) <= 10:
+            click.echo("  Duplicates to be removed:")
+            for i, task in enumerate(duplicates):
+                mod_date = task.modified_at or task.created_at
+                click.echo(f"    {i+1}. {task.title} (ID: {task.id}, Modified: {mod_date})")
+        else:
+            click.echo("  Sample of duplicates to be removed:")
+            for i, task in enumerate(duplicates[:10]):
+                mod_date = task.modified_at or task.created_at
+                click.echo(f"    {i+1}. {task.title} (ID: {task.id}, Modified: {mod_date})")
+            click.echo(f"    ... and {len(duplicates) - 10} more")
+        
+        # Remove duplicates if not in dry-run mode
+        if not dry_run:
+            removed_count = 0
+            failed_count = 0
+            
+            for task in duplicates:
+                try:
+                    # Delete the task
+                    success = google_client.delete_task(task.id, tasklist_id=tasklist_id)
+                    if success:
+                        removed_count += 1
+                    else:
+                        failed_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to remove {task.title}: {e}")
+                    failed_count += 1
+            
+            click.echo(f"  Removed: {removed_count}, Failed: {failed_count}")
+            total_removed += removed_count
+            total_errors += failed_count
+    
+    # Summary
+    if dry_run:
+        click.echo(f"\n📊 Dry-run Summary:")
+        click.echo(f"   Total duplicate tasks found: {total_removed + total_errors}")
+    else:
+        click.echo(f"\n📊 Removal Summary:")
+        click.echo(f"   Successfully removed: {total_removed}")
+        click.echo(f"   Failed to remove: {total_errors}")
+        click.echo(f"   Total processed: {total_removed + total_errors}")
+    
+    if total_removed > 0 and not dry_run:
+        click.echo("\n✅ Duplicate removal completed.")
+        click.echo("You may want to run 'gtasks sync' to ensure consistency.")
 
 
 def main():

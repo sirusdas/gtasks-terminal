@@ -26,3 +26,4 @@ src/gtasks_cli/ui/__init__.py
 src/gtasks_cli/utils/__init__.py
 src/gtasks_cli/utils/exceptions.py
 src/gtasks_cli/utils/logger.py
+src/gtasks_cli/utils/task_deduplication.py

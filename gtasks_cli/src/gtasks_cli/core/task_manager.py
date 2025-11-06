@@ -9,6 +9,10 @@ from gtasks_cli.storage.local_storage import LocalStorage
 from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
 from gtasks_cli.integrations.sync_manager import SyncManager
 from datetime import datetime
+import json
+
+# Add the new import
+from gtasks_cli.utils.task_deduplication import is_task_duplicate, get_existing_task_signatures
 
 logger = setup_logger(__name__)
 
@@ -55,73 +59,90 @@ class TaskManager:
         Returns:
             Task: Created task object
         """
+        # Check if task already exists to prevent duplicates
+        if is_task_duplicate(
+            title, 
+            description or "", 
+            due or "", 
+            "pending"
+        ):
+            logger.info(f"Task '{title}' already exists. Skipping creation.")
+            return None
+
         if self.use_google_tasks:
-            # For Google Tasks, we need to first create a local task, then sync to Google
-            import uuid
-            task_id = str(uuid.uuid4())
-            
-            # Convert due date string to datetime if provided
-            from datetime import datetime
-            due_date = None
-            if due:
-                try:
-                    due_date = datetime.fromisoformat(due)
-                except ValueError:
-                    logger.warning(f"Invalid due date format: {due}")
-            
-            task = Task(
-                id=task_id,
-                title=title,
-                description=description,
-                due=due_date,
-                priority=priority,
-                project=project,
-                tags=tags or [],
-                tasklist_id=tasklist_id,
-                notes=notes,
-                dependencies=dependencies or [],
-                recurrence_rule=recurrence_rule,
-                is_recurring=bool(recurrence_rule)
-            )
-            
-            # Try to sync with Google Tasks
-            if self.sync_manager.is_connected():
-                google_task = self.google_client.create_task(task)
-                if google_task:
+            try:
+                # Create task in Google Tasks
+                task = self.google_client.create_task(
+                    title=title,
+                    description=description,
+                    due=due,
+                    priority=priority,
+                    project=project,
+                    tags=tags,
+                    tasklist_id=tasklist_id,
+                    notes=notes,
+                    dependencies=dependencies,
+                    recurrence_rule=recurrence_rule
+                )
+                
+                if task:
                     # Save locally as well for offline access
                     tasks = self._load_tasks()
-                    tasks.append(google_task)
+                    tasks.append(task)
                     self._save_tasks(tasks)
-                    return google_task
+                    logger.info(f"Created task in Google Tasks: {task.title}")
+                    return task
+                else:
+                    logger.error(f"Failed to create task in Google Tasks: {title}")
+                    return None
+                    
+            except Exception as e:
+                logger.error(f"Error creating task in Google Tasks: {e}")
+                # Create task locally and mark for sync later
+                task = Task(
+                    id=str(uuid.uuid4()),
+                    title=title,
+                    description=description,
+                    due=datetime.fromisoformat(due) if due else None,
+                    priority=priority,
+                    project=project,
+                    tags=tags or [],
+                    tasklist_id=tasklist_id,
+                    notes=notes,
+                    dependencies=dependencies or [],
+                    recurrence_rule=recurrence_rule,
+                    is_recurring=bool(recurrence_rule)
+                )
+                
+                tasks = self._load_tasks()
+                tasks.append(task)
+                self._save_tasks(tasks)
+                logger.warning("Created task locally, will sync with Google Tasks when online")
+                return task
             
-            # If Google sync failed, save locally and mark for sync later
-            tasks = self._load_tasks()
-            tasks.append(task)
-            self._save_tasks(tasks)
             logger.warning("Created task locally, will sync with Google Tasks when online")
             return task
         else:
-            # Load existing tasks
+            # Check if task already exists in local storage
             tasks = self._load_tasks()
+            task_signatures = get_existing_task_signatures(tasks)
             
-            # Generate a simple ID for now (in real implementation, this would come from API)
-            import uuid
-            task_id = str(uuid.uuid4())
-            
-            # Convert due date string to datetime if provided
-            from datetime import datetime
-            due_date = None
-            if due:
-                try:
-                    due_date = datetime.fromisoformat(due)
-                except ValueError:
-                    logger.warning(f"Invalid due date format: {due}")
-            
+            if is_task_duplicate(
+                title, 
+                description or "", 
+                due or "", 
+                "pending",
+                task_signatures
+            ):
+                logger.info(f"Task '{title}' already exists in local storage. Skipping creation.")
+                return None
+                
+            # Create task in local storage
             task = Task(
-                id=task_id,
+                id=str(uuid.uuid4()),
                 title=title,
                 description=description,
-                due=due_date,
+                due=datetime.fromisoformat(due) if due else None,
                 priority=priority,
                 project=project,
                 tags=tags or [],
@@ -134,7 +155,7 @@ class TaskManager:
             
             tasks.append(task)
             self._save_tasks(tasks)
-            logger.info(f"Created task: {task_id} - {title}")
+            logger.info(f"Created task in local storage: {task.title}")
             return task
     
     def get_task(self, task_id: str) -> Optional[Task]:
@@ -352,7 +373,7 @@ class TaskManager:
     
     def delete_task(self, task_id: str) -> bool:
         """
-        Delete a task (mark as deleted).
+        Delete a task (mark as deleted) and log the deletion.
         
         Args:
             task_id: Task ID
@@ -373,6 +394,7 @@ class TaskManager:
                             from datetime import datetime
                             task.modified_at = datetime.utcnow()
                             self._save_tasks(tasks)
+                            self._log_deletion(task)
                             logger.info(f"Deleted task: {task_id}")
                             return True
             
@@ -384,6 +406,7 @@ class TaskManager:
                     from datetime import datetime
                     task.modified_at = datetime.utcnow()
                     self._save_tasks(tasks)
+                    self._log_deletion(task)
                     logger.warning("Deleted task locally, will sync with Google Tasks when online")
                     return True
             
@@ -404,8 +427,58 @@ class TaskManager:
             task.modified_at = datetime.utcnow()
             
             self._save_tasks(tasks)
+            self._log_deletion(task)
             logger.info(f"Deleted task: {task_id}")
             return True
+
+    def _log_deletion(self, task: Task) -> None:
+        """
+        Log a deleted task to the deletion log.
+        
+        Args:
+            task: The task that was deleted
+        """
+        try:
+            from datetime import datetime
+            deletion_log = {
+                "task_id": task.id,
+                "title": task.title,
+                "deleted_at": datetime.utcnow().isoformat(),
+                "status": task.status.value if hasattr(task.status, "value") else task.status,
+                "project": task.project,
+                "tags": task.tags,
+                "dependencies": task.dependencies
+            }
+            
+            # Load existing log
+            try:
+                with open("deletion_log.json", "r") as f:
+                    logs = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                logs = []
+            
+            # Add new log entry
+            logs.append(deletion_log)
+            
+            # Save back to file
+            with open("deletion_log.json", "w") as f:
+                json.dump(logs, f, indent=2)
+                
+        except Exception as e:
+            logger.error(f"Failed to log task deletion: {e}")
+    
+    def get_deletion_log(self) -> List[dict]:
+        """
+        Get the deletion log entries.
+        
+        Returns:
+            List[dict]: List of deletion log entries
+        """
+        try:
+            with open("deletion_log.json", "r") as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
     
     def complete_task(self, task_id: str) -> bool:
         """
@@ -670,6 +743,28 @@ class TaskManager:
             logger.info("Successfully synchronized with Google Tasks")
         else:
             logger.error("Failed to synchronize with Google Tasks")
+        return success
+    
+    def batch_sync_with_google_tasks(self, dry_run: bool = False) -> bool:
+        """
+        Synchronize local tasks with Google Tasks using batch operations for better performance.
+        
+        Args:
+            dry_run: If True, only preview what would be deleted without actually deleting
+            
+        Returns:
+            bool: True if synchronization was successful, False otherwise
+        """
+        if not self.use_google_tasks:
+            logger.warning("Cannot sync with Google Tasks when not using Google Tasks mode")
+            return False
+        
+        logger.info("Starting batch synchronization with Google Tasks")
+        success = self.sync_manager.sync_with_batch_operations(dry_run=dry_run)
+        if success:
+            logger.info("Successfully batch synchronized with Google Tasks")
+        else:
+            logger.error("Failed to batch synchronize with Google Tasks")
         return success
     
     def _load_tasks(self):

@@ -45,15 +45,19 @@ class GoogleAuthManager:
         token_file = os.path.join(config_dir, "token.pickle")
         return token_file
     
-    def authenticate(self) -> bool:
-        """
-        Authenticate with Google OAuth2.
-        
-        Returns:
-            bool: True if authentication was successful, False otherwise
-        """
+    def _save_credentials(self):
+        """Save credentials to file."""
         try:
-            # Load existing credentials from file
+            with open(self.token_file, 'wb') as token:
+                pickle.dump(self.credentials, token)
+            logger.debug(f"Saved credentials to {self.token_file}")
+        except Exception as e:
+            logger.error(f"Error saving credentials: {e}")
+    
+    def authenticate(self):
+        """Authenticate with Google and return credentials."""
+        try:
+            # The file token.json stores the user's access and refresh tokens.
             if os.path.exists(self.token_file):
                 with open(self.token_file, 'rb') as token:
                     self.credentials = pickle.load(token)
@@ -68,7 +72,7 @@ class GoogleAuthManager:
                     if not os.path.exists(self.credentials_file):
                         logger.error(f"Credentials file not found: {self.credentials_file}")
                         logger.error("Please download the OAuth2 credentials file from the Google Cloud Console")
-                        return False
+                        return None
                     
                     flow = InstalledAppFlow.from_client_secrets_file(
                         self.credentials_file, SCOPES)
@@ -78,20 +82,11 @@ class GoogleAuthManager:
                 self._save_credentials()
             
             logger.info("Google authentication successful")
-            return True
+            return self.credentials
             
         except Exception as e:
             logger.error(f"Authentication failed: {e}")
-            return False
-    
-    def _save_credentials(self):
-        """Save credentials to file."""
-        try:
-            with open(self.token_file, 'wb') as token:
-                pickle.dump(self.credentials, token)
-            logger.debug("Credentials saved successfully")
-        except Exception as e:
-            logger.error(f"Failed to save credentials: {e}")
+            return None
     
     def get_service(self):
         """
