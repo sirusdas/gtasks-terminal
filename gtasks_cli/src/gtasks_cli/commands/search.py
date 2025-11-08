@@ -5,76 +5,78 @@ Search command for Google Tasks CLI
 
 import click
 from gtasks_cli.utils.logger import setup_logger
+from gtasks_cli.models.task import Priority
 
 # Set up logger
 logger = setup_logger(__name__)
 
 
+
 @click.command()
 @click.argument('query')
+@click.option('--status', type=click.Choice(['pending', 'in_progress', 'completed', 'waiting', 'deleted']), 
+              help='Filter by status')
+@click.option('--priority', type=click.Choice(['low', 'medium', 'high', 'critical']), 
+              help='Filter by priority')
+@click.option('--project', help='Filter by project')
+@click.option('--recurring', '-r', is_flag=True, help='Show only recurring tasks')
 @click.pass_context
-def search(ctx, query):
-    """Search tasks by query string
+def search(ctx, query, status, priority, project, recurring):
+    """Search for tasks by query string
     
     \b
     Examples:
       # Search for tasks containing "meeting"
       gtasks search meeting
       
+      # Search for high priority tasks containing "report"
+      gtasks search report --priority high
+      
+      # Search for completed tasks
+      gtasks search done --status completed
+      
       # Search using Google Tasks directly
-      gtasks search "important" -g
+      gtasks search -g "important"
     """
     use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
-    use_offline = ctx.obj.get('OFFLINE_MODE', False)
-    
-    if use_offline and use_google_tasks:
-        logger.info("Operating in offline mode - searching local tasks only")
-        use_google_tasks = False
-    
-    logger.info(f"Searching tasks with query: {query} {'(Google Tasks)' if use_google_tasks else '(Local)'}")
+    logger.info(f"Searching tasks {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
     # Import here to avoid issues with module loading
     from gtasks_cli.core.task_manager import TaskManager
+    from gtasks_cli.models.task import TaskStatus
+    from gtasks_cli.commands.list import task_state
     
     # Create task manager
     task_manager = TaskManager(use_google_tasks=use_google_tasks)
     
+    # Convert string parameters to enums where needed
+    status_enum = TaskStatus(status) if status else None
+    priority_enum = Priority(priority) if priority else None
+    
     # Search tasks
     tasks = task_manager.search_tasks(query)
     
+    # Apply additional filters
+    if status_enum:
+        tasks = [t for t in tasks if t.status == status_enum]
+        
+    if priority_enum:
+        tasks = [t for t in tasks if t.priority == priority_enum]
+        
+    if project:
+        tasks = [t for t in tasks if t.project == project]
+        
+    if recurring:
+        tasks = [t for t in tasks if t.is_recurring]
+    
     if not tasks:
-        click.echo("No tasks found matching your query.")
+        click.echo(f"No tasks found matching '{query}'.")
         return
     
+    # Store tasks for interactive mode
+    task_state.set_tasks(tasks)
+    
     click.echo(f"🔍 Found {len(tasks)} task(s) matching '{query}':")
-    for task in tasks:
-        # For enum values, we need to check if they are already strings or enum instances
-        status_value = task.status if isinstance(task.status, str) else task.status.value
-        priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
-        
-        status_icon = {
-            'pending': '⏳',
-            'in_progress': '🔄',
-            'completed': '✅',
-            'waiting': '⏸️',
-            'deleted': '🗑️'
-        }.get(status_value, '❓')
-        
-        priority_icon = {
-            'low': '🔽',
-            'medium': '🔸',
-            'high': '🔺',
-            'critical': '💥'
-        }.get(priority_value, '🔹')
-        
-        # Format due date if present
-        due_info = ""
-        if task.due:
-            due_info = f" 📅 {task.due}"
-        
-        # Format project if present
-        project_info = ""
-        if task.project:
-            project_info = f" 📁 {task.project}"
-        
-        click.echo(f"  {status_icon} {priority_icon} {task.title} (ID: {task.id}){due_info}{project_info}")
+    # Import the display function from list command
+    from gtasks_cli.commands.list import _display_tasks
+    _display_tasks(tasks)

@@ -77,9 +77,11 @@ class GoogleTasksClient:
         Returns:
             List of task list dictionaries
         """
+        # Connect if not already connected
         if not self.service:
-            logger.error("Google Tasks client not connected")
-            return []
+            if not self.connect():
+                logger.error("Failed to connect to Google Tasks API")
+                return []
             
         try:
             tasklists_result = self.service.tasklists().list().execute()

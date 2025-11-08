@@ -22,6 +22,7 @@ from gtasks_cli.commands.update import update
 from gtasks_cli.commands.sync import sync
 from gtasks_cli.commands.auth import auth
 from gtasks_cli.commands.summary import summary
+from gtasks_cli.commands.interactive import interactive
 
 # Set up logger
 logger = setup_logger(__name__)
@@ -50,27 +51,31 @@ def cli(ctx, config, verbose, google):
       # List all pending tasks
       gtasks list --status pending
       
-      # Sync with Google Tasks
-      gtasks sync
-      
       # Search for tasks
-      gtasks search "meeting"
+      gtasks search "report"
+      
+      # Mark task as completed
+      gtasks done <task-id>
+      
+      # Start interactive mode
+      gtasks interactive
+      
+      # Use Google Tasks API
+      gtasks --google list
     """
+    # Store context for subcommands
     ctx.ensure_object(dict)
     ctx.obj['CONFIG'] = config
     ctx.obj['VERBOSE'] = verbose
     ctx.obj['USE_GOOGLE_TASKS'] = google
-
-    # Setup logging level based on verbosity
-    if verbose >= 2:
-        logger.setLevel("DEBUG")
-    elif verbose == 1:
-        logger.setLevel("INFO")
     
-    logger.debug("Starting Google Tasks CLI")
-    logger.debug(f"Config file: {config}")
-    logger.debug(f"Verbosity level: {verbose}")
-    logger.debug(f"Use Google Tasks: {google}")
+    # Set up logging based on verbosity
+    if verbose >= 2:
+        import logging
+        logging.getLogger().setLevel(logging.DEBUG)
+    elif verbose >= 1:
+        import logging
+        logging.getLogger().setLevel(logging.INFO)
 
 
 # Register commands
@@ -85,16 +90,12 @@ cli.add_command(update)
 cli.add_command(sync)
 cli.add_command(auth)
 cli.add_command(summary)
+cli.add_command(interactive)
 
 
 def main():
     """Main entry point for the application"""
-    try:
-        cli()
-    except Exception as e:
-        logger.error(f"Application error: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        exit(1)
+    cli()
 
 
 if __name__ == '__main__':

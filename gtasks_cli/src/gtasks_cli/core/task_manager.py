@@ -32,6 +32,8 @@ class TaskManager:
         self.storage = LocalStorage()
         if use_google_tasks:
             self.google_client = GoogleTasksClient()
+            # Connect to Google Tasks API
+            self.google_client.connect()
             self.sync_manager = SyncManager()
         logger.debug(f"TaskManager initialized with {'Google Tasks' if use_google_tasks else 'local storage'}")
     
@@ -237,6 +239,41 @@ class TaskManager:
             
             logger.warning(f"Task not found: {task_id}")
             return None
+    
+    def list_tasks_by_list(self, tasklist_id: str, status: Optional[TaskStatus] = None, 
+                          priority: Optional[Priority] = None,
+                          project: Optional[str] = None) -> List[Task]:
+        """
+        List tasks from a specific task list with optional filtering.
+        
+        Args:
+            tasklist_id: ID of the task list to retrieve tasks from
+            status: Filter by status
+            priority: Filter by priority
+            project: Filter by project
+            
+        Returns:
+            List[Task]: List of tasks matching criteria
+        """
+        if self.use_google_tasks:
+            # Get tasks from specific task list
+            tasks = self.google_client.list_tasks(tasklist_id=tasklist_id)
+        else:
+            tasks = self._load_tasks()
+        
+        filtered_tasks = tasks
+        
+        if status:
+            filtered_tasks = [t for t in filtered_tasks if t.status == status]
+            
+        if priority:
+            filtered_tasks = [t for t in filtered_tasks if t.priority == priority]
+            
+        if project:
+            filtered_tasks = [t for t in filtered_tasks if t.project == project]
+            
+        logger.debug(f"Listed {len(filtered_tasks)} tasks from list {tasklist_id}")
+        return filtered_tasks
     
     def list_tasks(self, status: Optional[TaskStatus] = None, 
                   priority: Optional[Priority] = None,
