@@ -3,7 +3,48 @@ Utility functions for task deduplication and duplicate checking.
 """
 
 import hashlib
+import logging
 from typing import Set, Optional
+from datetime import datetime
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+
+def _format_due_date_for_signature(due_date_str: str) -> str:
+    """
+    Format due date consistently for signature creation.
+    
+    Args:
+        due_date_str: Due date string to format
+        
+    Returns:
+        Formatted due date string
+    """
+    if not due_date_str or due_date_str == "None":
+        return ""
+    
+    try:
+        # Parse the due date
+        if isinstance(due_date_str, str):
+            # Handle string dates
+            try:
+                due_date = datetime.fromisoformat(due_date_str.replace('Z', '+00:00'))
+            except ValueError:
+                # If parsing fails, try another format
+                due_date = datetime.fromisoformat(due_date_str)
+        elif isinstance(due_date_str, datetime):
+            # Already a datetime object
+            due_date = due_date_str
+        else:
+            # Some other type, convert to string first
+            due_date = datetime.fromisoformat(str(due_date_str).replace('Z', '+00:00'))
+        
+        # Format consistently without microseconds to match Google Tasks storage format
+        return due_date.strftime('%Y-%m-%d %H:%M:%S%z')
+    except Exception as e:
+        logger.warning(f"Failed to format due date '{due_date_str}': {e}")
+        return str(due_date_str)
 
 
 def create_task_signature(title: str, description: str = "", due_date: str = "", status: str = "") -> str:
@@ -19,8 +60,13 @@ def create_task_signature(title: str, description: str = "", due_date: str = "",
     Returns:
         MD5 hash of the task signature
     """
-    signature_string = f"{title}|{description}|{due_date}|{status}"
-    return hashlib.md5(signature_string.encode('utf-8')).hexdigest()
+    # Format due date consistently
+    formatted_due_date = _format_due_date_for_signature(due_date)
+    
+    signature_string = f"{title}|{description}|{formatted_due_date}|{status}"
+    signature = hashlib.md5(signature_string.encode('utf-8')).hexdigest()
+    logger.debug(f"Created signature '{signature}' for task: {title}|{description}|{formatted_due_date}|{status}")
+    return signature
 
 
 def get_existing_task_signatures(use_google_tasks: bool = True) -> Set[str]:
@@ -108,15 +154,20 @@ def is_task_duplicate(task_title: str,
     """
     # Create signature for the task to check
     task_signature = create_task_signature(task_title, task_description, task_due_date, task_status)
+    logger.debug(f"Checking for duplicate with signature: {task_signature}")
     
     # Use provided signatures or get fresh ones
     if existing_signatures is not None:
         signatures = existing_signatures
+        logger.debug(f"Using provided signatures set with {len(signatures)} items")
     else:
         signatures = get_existing_task_signatures(use_google_tasks)
+        logger.debug(f"Retrieved fresh signatures set with {len(signatures)} items")
     
     # Check if task already exists
-    return task_signature in signatures
+    is_duplicate = task_signature in signatures
+    logger.debug(f"Task is duplicate: {is_duplicate}")
+    return is_duplicate
 
 
 def check_and_add_task(task_title: str,

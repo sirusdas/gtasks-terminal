@@ -10,6 +10,7 @@ from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
 from gtasks_cli.integrations.sync_manager import SyncManager
 from datetime import datetime
 import json
+import uuid
 
 # Add the new import
 from gtasks_cli.utils.task_deduplication import is_task_duplicate, get_existing_task_signatures
@@ -28,17 +29,16 @@ class TaskManager:
             use_google_tasks: Whether to use Google Tasks API instead of local storage
         """
         self.use_google_tasks = use_google_tasks
+        self.storage = LocalStorage()
         if use_google_tasks:
             self.google_client = GoogleTasksClient()
             self.sync_manager = SyncManager()
-        else:
-            self.storage = LocalStorage()
         logger.debug(f"TaskManager initialized with {'Google Tasks' if use_google_tasks else 'local storage'}")
     
     def create_task(self, title: str, description: Optional[str] = None, 
                    due: Optional[str] = None, priority: Priority = Priority.MEDIUM,
                    project: Optional[str] = None, tags: Optional[List[str]] = None,
-                   tasklist_id: str = "default", notes: Optional[str] = None,
+                   tasklist_id: str = None, notes: Optional[str] = None,
                    dependencies: Optional[List[str]] = None,
                    recurrence_rule: Optional[str] = None) -> Task:
         """
@@ -59,31 +59,70 @@ class TaskManager:
         Returns:
             Task: Created task object
         """
-        # Check if task already exists to prevent duplicates
-        if is_task_duplicate(
-            title, 
-            description or "", 
-            due or "", 
-            "pending"
-        ):
-            logger.info(f"Task '{title}' already exists. Skipping creation.")
-            return None
-
         if self.use_google_tasks:
             try:
-                # Create task in Google Tasks
-                task = self.google_client.create_task(
-                    title=title,
-                    description=description,
-                    due=due,
-                    priority=priority,
-                    project=project,
-                    tags=tags,
-                    tasklist_id=tasklist_id,
-                    notes=notes,
-                    dependencies=dependencies,
-                    recurrence_rule=recurrence_rule
+                # Prepare task data as a dictionary
+                task_data = {
+                    'title': title,
+                    'description': description,
+                    'due': due,
+                    'priority': priority,
+                    'project': project,
+                    'tags': tags,
+                    'tasklist_id': tasklist_id,
+                    'notes': notes,
+                    'dependencies': dependencies,
+                    'recurrence_rule': recurrence_rule
+                }
+
+                # Get existing task signatures to avoid duplicates
+                # Format the data the same way it will be stored in Google Tasks for accurate duplicate detection
+                formatted_due = None
+                if due:
+                    if isinstance(due, str):
+                        # Handle string dates
+                        try:
+                            due_date = datetime.fromisoformat(due.replace('Z', '+00:00'))
+                        except ValueError:
+                            # If parsing fails, try another format
+                            due_date = datetime.fromisoformat(due)
+                    elif isinstance(due, datetime):
+                        # Already a datetime object
+                        due_date = due
+                    else:
+                        # Some other type, convert to string first
+                        due_date = datetime.fromisoformat(str(due).replace('Z', '+00:00'))
+                    
+                    # Format the due date the same way Google Tasks API stores it (without microseconds)
+                    formatted_due = due_date.strftime('%Y-%m-%d 00:00:00+00:00')
+
+                from gtasks_cli.utils.task_deduplication import get_existing_task_signatures, is_task_duplicate
+                existing_signatures = get_existing_task_signatures(use_google_tasks=True)
+
+                # Check for duplicates using the same format as what will be stored
+                is_dup = is_task_duplicate(
+                    task_title=title,
+                    task_description=description or "",
+                    task_due_date=formatted_due or "",
+                    task_status="pending",
+                    existing_signatures=existing_signatures,
+                    use_google_tasks=True
                 )
+                
+                logger.debug(f"Duplicate check result: {is_dup}")
+                
+                if is_dup:
+                    logger.info(f"Task '{title}' already exists. Skipping creation.")
+                    # Find and return the existing task
+                    tasks = self._load_tasks()
+                    for task in tasks:
+                        if task.title == title and getattr(task, 'status', None) != TaskStatus.DELETED:
+                            logger.debug(f"Returning existing task: {task.id}")
+                            return task
+                    logger.debug("Existing task not found in local storage")
+                    return None
+
+                task = self.google_client.create_task(task_data, existing_signatures)
                 
                 if task:
                     # Save locally as well for offline access
@@ -103,7 +142,7 @@ class TaskManager:
                     id=str(uuid.uuid4()),
                     title=title,
                     description=description,
-                    due=datetime.fromisoformat(due) if due else None,
+                    due=datetime.fromisoformat(due) if isinstance(due, str) else due,
                     priority=priority,
                     project=project,
                     tags=tags or [],
@@ -111,17 +150,17 @@ class TaskManager:
                     notes=notes,
                     dependencies=dependencies or [],
                     recurrence_rule=recurrence_rule,
+                    status=TaskStatus.PENDING,
+                    created_at=datetime.now(),
+                    modified_at=datetime.now(),
                     is_recurring=bool(recurrence_rule)
                 )
-                
+
                 tasks = self._load_tasks()
                 tasks.append(task)
                 self._save_tasks(tasks)
-                logger.warning("Created task locally, will sync with Google Tasks when online")
+                logger.info(f"Created task locally (marked for sync): {task.title}")
                 return task
-            
-            logger.warning("Created task locally, will sync with Google Tasks when online")
-            return task
         else:
             # Check if task already exists in local storage
             tasks = self._load_tasks()
@@ -548,6 +587,79 @@ class TaskManager:
             
             self._save_tasks(tasks)
             logger.info(f"Completed task: {task_id}")
+            return True
+    
+    def uncomplete_task(self, task_id: str) -> bool:
+        """
+        Mark a completed task as pending again.
+        
+        Args:
+            task_id: Task ID
+            
+        Returns:
+            bool: True if task was uncompleted, False if not found
+        """
+        if self.use_google_tasks:
+            # Try to update in Google Tasks
+            if self.sync_manager.is_connected():
+                # First get the task to make sure it exists
+                task = self.get_task(task_id)
+                if not task:
+                    return False
+                    
+                # Update the task status to pending
+                task.status = TaskStatus.PENDING
+                task.completed_at = None
+                from datetime import datetime
+                task.modified_at = datetime.utcnow()
+                
+                updated_task = self.google_client.update_task(task)
+                if updated_task:
+                    # Also update locally
+                    tasks = self._load_tasks()
+                    # Remove existing task with same ID if present
+                    tasks = [t for t in tasks if t.id != task_id]
+                    tasks.append(task)
+                    self._save_tasks(tasks)
+                    logger.info(f"Uncompleted task: {task_id}")
+                    return True
+            
+            # If Google sync failed, update locally and mark for sync later
+            tasks = self._load_tasks()
+            for task in tasks:
+                if task.id == task_id:
+                    task.status = TaskStatus.PENDING
+                    task.completed_at = None
+                    from datetime import datetime
+                    task.modified_at = datetime.utcnow()
+                    self._save_tasks(tasks)
+                    logger.warning("Uncompleted task locally, will sync with Google Tasks when online")
+                    return True
+            
+            return False
+        else:
+            tasks = self._load_tasks()
+            task = None
+            for t in tasks:
+                if t.id == task_id:
+                    task = t
+                    break
+                    
+            if not task:
+                return False
+                
+            # Only uncomplete if task is actually completed
+            if task.status != TaskStatus.COMPLETED:
+                logger.warning(f"Task {task_id} is not completed, cannot uncomplete")
+                return False
+                
+            task.status = TaskStatus.PENDING
+            task.completed_at = None
+            from datetime import datetime
+            task.modified_at = datetime.utcnow()
+            
+            self._save_tasks(tasks)
+            logger.info(f"Uncompleted task: {task_id}")
             return True
     
     def _create_next_recurring_task(self, recurring_task: Task) -> Optional[Task]:

@@ -1,0 +1,92 @@
+[
+  {
+    "task_id": "84d6855d-e760-46dc-83dc-fcca86a8d748",
+    "title": "Test Task for Sync Verification",
+    "deleted_at": "2025-11-06T19:58:39.571313",
+    "status": "deleted",
+    "project": null,
+    "tags": [],
+    "dependencies": []
+  },
+  {
+    "task_id": "5fcb76db-c7ae-453e-8d9d-7d96b2b23238",
+    "title": "Sync Test Task",
+    "deleted_at": "2025-11-06T19:58:39.588566",
+    "status": "deleted",
+    "project": null,
+    "tags": [],
+    "dependencies": []
+  },
+  {
+    "task_id": "84d6855d-e760-46dc-83dc-fcca86a8d748",
+    "title": "Test Task for Sync Verification",
+    "deleted_at": "2025-11-06T19:59:30.528161",
+    "status": "deleted",
+    "project": null,
+    "tags": [],
+    "dependencies": []
+  },
+  {
+    "task_id": "5fcb76db-c7ae-453e-8d9d-7d96b2b23238",
+    "title": "Sync Test Task",
+    "deleted_at": "2025-11-06T19:59:30.546815",
+    "status": "deleted",
+    "project": null,
+    "tags": [],
+    "dependencies": []
+  },
+  {
+    "task_id": "2d45ca94-9c35-4cc7-9530-56000f752650",
+    "title": "Test Task 2025-11-07 01:29:30",
+    "deleted_at": "2025-11-06T19:59:45.425079",
+    "status": "deleted",
+    "project": null,
+    "tags": [],
+    "dependencies": []
+  },
+  {
+    "task_id": "c347c689-8e74-4a51-9079-e91e970c5a00",
+    "title": "CLI Test Task",
+    "deleted_at": "2025-11-06T20:01:09.271650",
+    "status": "deleted",
+    "project": null,
+    "tags": [],
+    "dependencies": []
+  },
+  {
+    "task_id": "20064389-e004-4816-9f4f-a06ef8471972",
+    "title": "Sync Test 2025-11-07 01:38:55",
+    "deleted_at": "2025-11-06T20:09:07.983156",
+    "status": "deleted",
+    "project": null,
+    "tags": [],
+    "dependencies": []
+  },
+  {
+    "task_id": "MktTdk9ocFcxdE5UTnlrcA",
+    "title": "Sync Test Task 2025-11-07 01:54:02",
+    "deleted_at": "2025-11-06T20:24:37.843427",
+    "status": "deleted",
+    "project": null,
+    "tags": [],
+    "dependencies": []
+  },
+  {
+    "task_id": "SmRrSU1rSF9VZ1czNWx2Qw",
+    "title": "Sync Test Task 2025-11-07 01:57:36",
+    "deleted_at": "2025-11-06T20:28:11.229680",
+    "status": "deleted",
+    "project": null,
+    "tags": [],
+    "dependencies": []
+  },
+  {
+    "task_id": "NnQyTDV5YzRFNVRDQXFoTg",
+    "title": "Simple Test Task - ccf3aa37-cabc-4cc1-b11b-476c2b932a98",
+    "deleted_at": "2025-11-07T01:47:49.043669",
+    "status": "deleted",
+    "project": null,
+    "tags": [],
+    "dependencies": []
+  }
+]

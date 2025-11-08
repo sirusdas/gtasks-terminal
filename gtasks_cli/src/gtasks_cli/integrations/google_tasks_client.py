@@ -2,12 +2,12 @@
 Google Tasks API client for the Google Tasks CLI application.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Optional, Set, Any
+from datetime import datetime
 from googleapiclient.errors import HttpError
 from gtasks_cli.models.task import Task, TaskStatus, Priority
 from gtasks_cli.integrations.google_auth import GoogleAuthManager
 from gtasks_cli.utils.logger import setup_logger
-from datetime import datetime
 
 logger = setup_logger(__name__)
 
@@ -28,6 +28,7 @@ class GoogleTasksClient:
         self.auth_manager = GoogleAuthManager(credentials_file, token_file)
         self.service = None
         self.connected = False
+        self._default_tasklist_id = None
         logger.debug("GoogleTasksClient initialized")
     
     def connect(self) -> bool:
@@ -46,7 +47,24 @@ class GoogleTasksClient:
             from googleapiclient.discovery import build
             self.service = build('tasks', 'v1', credentials=credentials, cache_discovery=False)
             self.connected = True
+            
+            # Get the default task list ID
+            tasklists = self.service.tasklists().list().execute()
+            for tasklist in tasklists.get('items', []):
+                if tasklist.get('kind') == 'tasks#taskList' and tasklist.get('title') == 'My Tasks':
+                    self._default_tasklist_id = tasklist['id']
+                    break
+            
+            # If we didn't find "My Tasks", use the first task list
+            if not self._default_tasklist_id and tasklists.get('items'):
+                self._default_tasklist_id = tasklists['items'][0]['id']
+            
+            # Fallback to "@default" if nothing else works
+            if not self._default_tasklist_id:
+                self._default_tasklist_id = "@default"
+                
             logger.info("Successfully connected to Google Tasks API")
+            logger.debug(f"Using tasklist ID: {self._default_tasklist_id}")
             return True
         except Exception as e:
             logger.error(f"Error connecting to Google Tasks API: {e}")
@@ -72,19 +90,21 @@ class GoogleTasksClient:
             logger.error(f"Error listing task lists: {error}")
             return []
     
-    def create_task(self, task_data):
+    def create_task(self, task_data, existing_signatures: Optional[Set[str]] = None):
         """
         Create a new task in Google Tasks.
         
         Args:
             task_data: Either a Task object or parameters for creating a task
+            existing_signatures: Optional set of existing task signatures to avoid duplicates
             
         Returns:
             Task object if successful, None otherwise
         """
         if not self.service:
-            logger.error("Google Tasks client not connected")
-            return None
+            if not self.connect():
+                logger.error("Failed to connect to Google Tasks")
+                return None
             
         # Handle both Task objects and individual parameters
         if hasattr(task_data, 'title'):  # It's a Task object
@@ -94,36 +114,69 @@ class GoogleTasksClient:
             priority = task_data.priority
             project = task_data.project
             tags = task_data.tags
-            tasklist_id = getattr(task_data, 'tasklist_id', '@default')
+            tasklist_id = getattr(task_data, 'tasklist_id', None) or self._default_tasklist_id or "@default"
             notes = task_data.notes
             dependencies = task_data.dependencies
             recurrence_rule = task_data.recurrence_rule
         else:
-            # It's individual parameters
-            title = task_data
-            description = None
-            due = None
-            priority = Priority.MEDIUM
-            project = None
-            tags = None
-            tasklist_id = "@default"
-            notes = None
-            dependencies = None
-            recurrence_rule = None
-
+            # It's individual parameters (dict)
+            title = task_data.get('title')
+            description = task_data.get('description')
+            due = task_data.get('due')
+            priority = task_data.get('priority', Priority.MEDIUM)
+            project = task_data.get('project')
+            tags = task_data.get('tags')
+            tasklist_id = task_data.get('tasklist_id') or self._default_tasklist_id or "@default"
+            notes = task_data.get('notes')
+            dependencies = task_data.get('dependencies')
+            recurrence_rule = task_data.get('recurrence_rule')
+        
+        logger.debug(f"Tasklist ID from task_data: {task_data.get('tasklist_id') if isinstance(task_data, dict) else getattr(task_data, 'tasklist_id', None)}")
+        logger.debug(f"Default tasklist ID: {self._default_tasklist_id}")
+        logger.debug(f"Final tasklist ID: {tasklist_id}")
+        
         # Import the deduplication utility here to avoid circular imports
         from gtasks_cli.utils.task_deduplication import is_task_duplicate
             
+        # Format the due date the same way it will be stored in Google Tasks
+        formatted_due = None
+        if due:
+            if isinstance(due, str):
+                # Handle string dates
+                try:
+                    due_date = datetime.fromisoformat(due.replace('Z', '+00:00'))
+                except ValueError:
+                    # If parsing fails, try another format
+                    due_date = datetime.fromisoformat(due)
+            elif isinstance(due, datetime):
+                # Already a datetime object
+                due_date = due
+            else:
+                # Some other type, convert to string first
+                due_date = datetime.fromisoformat(str(due).replace('Z', '+00:00'))
+            
+            # Format the due date correctly for Google Tasks API
+            formatted_due = due_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+            # Then parse it back to match how it will be stored
+            formatted_due = str(datetime.fromisoformat(formatted_due.replace('Z', '+00:00')))
+            
         # Check if task already exists to prevent duplicates
-        if is_task_duplicate(
-            title, 
-            description or "", 
-            str(due) if due else "", 
-            "pending"
-        ):
+        logger.debug(f"Checking for duplicate task: title='{title}', description='{description}', due='{formatted_due}', status='pending'")
+        is_duplicate = is_task_duplicate(
+            task_title=title, 
+            task_description=description or "", 
+            task_due_date=formatted_due or "", 
+            task_status="pending",
+            existing_signatures=existing_signatures,  # Pass existing signatures to avoid repeated API calls
+            use_google_tasks=True
+        )
+        
+        if is_duplicate:
             logger.info(f"Task '{title}' already exists. Skipping creation.")
             return None
-
+        else:
+            logger.debug(f"Task '{title}' is not a duplicate. Proceeding with creation.")
+        
         try:
             # Prepare task data
             task_data = {
@@ -148,10 +201,9 @@ class GoogleTasksClient:
                 else:
                     # Some other type, convert to string first
                     due_date = datetime.fromisoformat(str(due).replace('Z', '+00:00'))
-                    
-                task_data['due'] = {
-                    'dateTime': due_date.isoformat() + 'Z'
-                }
+                
+                # Format the due date correctly for Google Tasks API
+                task_data['due'] = due_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             
             # Create the task in Google Tasks
             task_result = self.service.tasks().insert(
@@ -164,7 +216,7 @@ class GoogleTasksClient:
                 id=task_result['id'],
                 title=task_result['title'],
                 description=task_result.get('notes'),
-                due=datetime.fromisoformat(task_result['due']['dateTime'].replace('Z', '+00:00')) if 'due' in task_result and 'dateTime' in task_result['due'] else None,
+                due=datetime.fromisoformat(task_result['due'].replace('Z', '+00:00')) if 'due' in task_result else None,
                 priority=priority,
                 status=TaskStatus.PENDING,
                 project=project,
@@ -173,7 +225,8 @@ class GoogleTasksClient:
                 dependencies=dependencies or [],
                 recurrence_rule=recurrence_rule,
                 created_at=datetime.fromisoformat(task_result['updated'].replace('Z', '+00:00')) if 'updated' in task_result else datetime.now(),
-                modified_at=datetime.fromisoformat(task_result['updated'].replace('Z', '+00:00')) if 'updated' in task_result else datetime.now()
+                modified_at=datetime.fromisoformat(task_result['updated'].replace('Z', '+00:00')) if 'updated' in task_result else datetime.now(),
+                tasklist_id=self._default_tasklist_id or "@default"
             )
             
             logger.info(f"Created task in Google Tasks: {task.title}")
@@ -183,7 +236,7 @@ class GoogleTasksClient:
             logger.error(f"Error creating task in Google Tasks: {e}")
             return None
     
-    def list_tasks(self, tasklist_id: str = "@default", 
+    def list_tasks(self, tasklist_id: str = None, 
                   show_completed: bool = False,
                   show_hidden: bool = False,
                   show_deleted: bool = False) -> List[Task]:
@@ -200,82 +253,74 @@ class GoogleTasksClient:
             List of Task objects
         """
         if not self.service:
-            logger.error("Google Tasks client not connected")
-            return []
+            if not self.connect():
+                return []
+        
+        tasklist_id = tasklist_id or self._default_tasklist_id or "@default"
         
         try:
+            # Build parameters for the request
+            params = {
+                'tasklist': tasklist_id,
+                'showCompleted': show_completed,
+                'showHidden': show_hidden,
+                'showDeleted': show_deleted
+            }
+            
             tasks = []
             page_token = None
             
-            # Loop through all pages of results
+            # Handle pagination
             while True:
-                # Prepare the request with page token if available
-                # Set maxResults to 100 (maximum allowed) to reduce number of requests
-                request = self.service.tasks().list(
-                    tasklist=tasklist_id,
-                    pageToken=page_token,
-                    maxResults=100,  # Maximum allowed by Google Tasks API
-                    showCompleted=show_completed,
-                    showHidden=show_hidden,
-                    showDeleted=show_deleted
-                )
+                # Add page token if we have one
+                if page_token:
+                    params['pageToken'] = page_token
                 
-                result = request.execute()
-                google_tasks = result.get('items', [])
-                logger.debug(f"Retrieved {len(google_tasks)} tasks from Google Tasks (page)")
+                # Execute the request
+                result = self.service.tasks().list(**params).execute()
                 
-                # Convert Google tasks to local tasks
-                for google_task in google_tasks:
-                    task = self._convert_google_task_to_local(google_task)
-                    if task:
-                        tasks.append(task)
+                # Convert to Task objects
+                for item in result.get('items', []):
+                    task = self._convert_google_task_to_local(item)
+                    tasks.append(task)
                 
                 # Check if there are more pages
                 page_token = result.get('nextPageToken')
                 if not page_token:
                     break
             
-            logger.debug(f"Retrieved total of {len(tasks)} tasks from Google Tasks")
+            logger.info(f"Retrieved {len(tasks)} tasks from Google Tasks (tasklist: {tasklist_id})")
             return tasks
-        except HttpError as e:
-            logger.error(f"Failed to list tasks: {e}")
-            return []
         except Exception as e:
-            logger.error(f"Unexpected error listing tasks: {e}")
+            logger.error(f"Error listing tasks from Google Tasks: {e}")
             return []
     
-    def get_task(self, task_id: str, tasklist_id: str = '@default') -> Optional[Task]:
+    def get_task(self, task_id: str, tasklist_id: str = None) -> Optional[Task]:
         """
-        Get a single task by ID.
+        Get a specific task by ID.
         
         Args:
             task_id: The ID of the task to retrieve
             tasklist_id: The ID of the task list containing the task
             
         Returns:
-            Task: The task, or None if not found
+            Task object if found, None otherwise
         """
         if not self.service:
             if not self.connect():
                 return None
         
+        tasklist_id = tasklist_id or self._default_tasklist_id or "@default"
+        
         try:
             result = self.service.tasks().get(tasklist=tasklist_id, task=task_id).execute()
-            logger.debug(f"Retrieved task {task_id} from Google Tasks")
-            
             task = self._convert_google_task_to_local(result)
             return task
-        except HttpError as e:
-            if e.resp.status == 404:
-                logger.debug(f"Task {task_id} not found in Google Tasks")
-            else:
-                logger.error(f"Failed to get task {task_id}: {e}")
-            return None
         except Exception as e:
-            logger.error(f"Unexpected error getting task {task_id}: {e}")
+            logger.error(f"Error getting task from Google Tasks: {e}")
             return None
     
-    def update_task(self, task: Task, tasklist_id: str = '@default') -> Optional[Task]:
+    def update_task(self, task: Task, tasklist_id: str = None) -> Optional[Task]:
         """
         Update a task in Google Tasks.
         
@@ -284,14 +329,20 @@ class GoogleTasksClient:
             tasklist_id: The ID of the task list containing the task
             
         Returns:
-            Task: The updated task, or None if update failed
+            Updated Task object if successful, None otherwise
         """
         if not self.service:
             if not self.connect():
                 return None
         
+        tasklist_id = tasklist_id or self._default_tasklist_id or "@default"
+        
         try:
             google_task = self._convert_local_task_to_google(task)
+            # Make sure we have a tasklist_id in the google_task
+            if 'tasklist_id' not in google_task and tasklist_id:
+                google_task['tasklist_id'] = tasklist_id
+            
             result = self.service.tasks().update(
                 tasklist=tasklist_id, 
                 task=task.id, 
@@ -309,7 +360,7 @@ class GoogleTasksClient:
             logger.error(f"Unexpected error updating task: {e}")
             return None
     
-    def delete_task(self, task_id: str, tasklist_id: str = '@default') -> bool:
+    def delete_task(self, task_id: str, tasklist_id: str = None) -> bool:
         """
         Delete a task from Google Tasks.
         
@@ -324,6 +375,8 @@ class GoogleTasksClient:
             if not self.connect():
                 return False
         
+        tasklist_id = tasklist_id or self._default_tasklist_id or "@default"
+        
         try:
             self.service.tasks().delete(tasklist=tasklist_id, task=task_id).execute()
             logger.info(f"Deleted task from Google Tasks: {task_id}")
@@ -335,7 +388,7 @@ class GoogleTasksClient:
             logger.error(f"Unexpected error deleting task: {e}")
             return False
     
-    def complete_task(self, task_id: str, tasklist_id: str = '@default') -> bool:
+    def complete_task(self, task_id: str, tasklist_id: str = None) -> bool:
         """
         Mark a task as completed in Google Tasks.
         
@@ -349,6 +402,8 @@ class GoogleTasksClient:
         if not self.service:
             if not self.connect():
                 return False
+        
+        tasklist_id = tasklist_id or self._default_tasklist_id or "@default"
         
         try:
             # Get the task first
@@ -386,24 +441,31 @@ class GoogleTasksClient:
             Dict[str, Any]: The Google Tasks formatted task
         """
         google_task = {
-            'id': task.id,
             'title': task.title,
-            'status': 'completed' if task.status == TaskStatus.COMPLETED else 
-                     'needsAction' if task.status != TaskStatus.DELETED else 'needsAction',
+            'status': 'completed' if task.status == TaskStatus.COMPLETED else 'needsAction',
         }
         
-        if task.notes:
-            google_task['notes'] = task.notes
+        if task.id:
+            google_task['id'] = task.id
+            
+        if task.description:
+            google_task['notes'] = task.description
             
         if task.due:
+            # Handle due dates properly
             if isinstance(task.due, datetime):
                 google_task['due'] = task.due.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             else:
-                google_task['due'] = str(task.due)
+                # If it's a string, try to parse it
+                try:
+                    due_date = datetime.fromisoformat(str(task.due).replace('Z', '+00:00'))
+                    google_task['due'] = due_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                except ValueError:
+                    # If parsing fails, just use the string
+                    google_task['due'] = str(task.due)
         
-        # Handle deleted tasks
-        if task.status == TaskStatus.DELETED:
-            google_task['deleted'] = True
+        if task.status == TaskStatus.COMPLETED and hasattr(task, 'completed_at') and task.completed_at:
+            google_task['completed'] = task.completed_at.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             
         return google_task
     

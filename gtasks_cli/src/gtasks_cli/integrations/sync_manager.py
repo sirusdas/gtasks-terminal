@@ -247,21 +247,22 @@ class SyncManager:
     
     def _perform_sync(self, local_tasks: List[Task], google_tasks: List[Task]) -> List[Task]:
         """
-        Perform the synchronization between local and Google tasks following the specified logic.
+        Perform the actual synchronization between local and Google Tasks.
         
-        Local Task Tracking (Log): The system must maintain a local log that records every 
-        newly added task, along with the timestamp of its creation and a flag indicating 
-        its last sync status (synced/unsynced).
+        Core Synchronization Requirements:
+        Local Task Tracking (Log): The system must maintain a local log that records 
+        every newly added task, along with the timestamp of its creation and a flag 
+        indicating its last sync status (synced/unsynced).
 
         Push Logic (Local-to-Remote):
-        Filtering: Only tasks marked as newly added/unsynced in the local log should be 
-        considered for a push.
+        Filtering: Only tasks marked as newly added/unsynced in the local log should 
+        be considered for a push.
 
-        Duplicate Prevention: Before pushing a local task to the remote, the system must 
-        check the remote resource to ensure a task with the exact same content 
-        (task description/name AND details/properties) does not already exist. 
-        If it's an exact duplicate, the push must be skipped, and the local task's 
-        sync status should be updated to "synced."
+        Duplicate Prevention: Before pushing a local task to the remote, the system 
+        must check the remote resource to ensure a task with the exact same content 
+        (task description/name AND details/properties) does not already exist. If it's 
+        an exact duplicate, the push must be skipped, and the local task's sync status 
+        should be updated to "synced."
 
         Pull-First Sync Logic (Remote-to-Local): This process is triggered when a user 
         initiates a sync that starts by pulling remote data.
@@ -269,14 +270,15 @@ class SyncManager:
         Comparison: The system must fetch the complete remote task list and compare it 
         against the current local task list.
 
-        Conflict Detection: If a local task exists that is not present on the remote list 
-        (i.e., it was created locally but hasn't been pushed or was deleted remotely 
-        by another client), this is considered a local conflict.
+        Conflict Detection: If a local task exists that is not present on the remote 
+        list (i.e., it was created locally but hasn't been pushed or was deleted 
+        remotely by another client), this is considered a local conflict.
 
         User Resolution: For every detected local conflict, the user must be prompted 
         to verify the local task.
 
-        If the user confirms the task, it must be marked for an immediate push to the remote.
+        If the user confirms the task, it must be marked for an immediate push to the 
+        remote.
 
         If the user rejects the task, it must be immediately and permanently deleted 
         from the local list and log.
@@ -289,6 +291,9 @@ class SyncManager:
             List[Task]: Synchronized list of tasks
         """
         logger.info("Performing sync with pull-first logic")
+        
+        # Import the deduplication utility
+        from gtasks_cli.utils.task_deduplication import create_task_signature, get_existing_task_signatures
         
         # Create dictionaries for easier lookup
         local_task_dict = {task.id: task for task in local_tasks}
@@ -304,6 +309,9 @@ class SyncManager:
                 str(task.status.value) if hasattr(task.status, 'value') else str(task.status)
             )
             google_task_signatures[signature] = task
+        
+        # Get all existing task signatures from Google Tasks ONCE for all duplicate checking
+        existing_signatures = get_existing_task_signatures(use_google_tasks=True)
         
         # Start with all Google tasks (pull-first approach)
         synced_tasks = list(google_tasks)
@@ -328,6 +336,22 @@ class SyncManager:
             
             # Check if this is a local conflict (exists locally but not in Google)
             if local_task.id not in synced_task_ids:
+                # Before pushing to Google, check if it's a duplicate using the deduplication utility
+                from gtasks_cli.utils.task_deduplication import is_task_duplicate
+                if is_task_duplicate(
+                    task_title=local_task.title or "",
+                    task_description=local_task.description or "",
+                    task_due_date=str(local_task.due) if local_task.due else "",
+                    task_status=str(local_task.status.value) if hasattr(local_task.status, 'value') else str(local_task.status),
+                    existing_signatures=existing_signatures,  # Pass pre-computed signatures to avoid repeated API calls
+                    use_google_tasks=True
+                ):
+                    logger.info(f"Local task '{local_task.title}' is a duplicate. Skipping push to Google Tasks.")
+                    # Mark as synced and add to synced tasks
+                    synced_tasks.append(local_task)
+                    synced_task_ids.add(local_task.id)
+                    continue
+                
                 # This is a local conflict - task exists locally but not in Google
                 # In a full implementation, we would prompt the user for resolution
                 # For now, we'll push the task to Google
@@ -395,3 +419,34 @@ class SyncManager:
         except Exception as e:
             logger.error(f"Failed to save offline changes: {e}")
             return False
+    
+    def _create_task_signature(self, task: Task) -> str:
+        """
+        Create a unique signature for a task based on its key attributes.
+        
+        Args:
+            task: The task to create a signature for
+            
+        Returns:
+            str: MD5 hash of the task signature
+        """
+        import hashlib
+        
+        # Create signature based on key attributes
+        signature_parts = [
+            str(task.title or ''),
+            str(task.description or ''),
+            str(task.due.isoformat()) if task.due else '',
+            str(task.status.value) if hasattr(task.status, 'value') else str(task.status),
+            str(task.project or ''),
+            # Include tags in a consistent order
+            ','.join(sorted(task.tags)) if task.tags else '',
+            # Include task relationships
+            str(task.parent_id or ''),
+            str(task.priority or ''),
+            str(task.notes or ''),
+            str(task.location or ''),
+        ]
+        
+        signature_string = '|'.join(signature_parts)
+        return hashlib.md5(signature_string.encode('utf-8')).hexdigest()
