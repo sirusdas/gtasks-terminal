@@ -116,8 +116,21 @@ def _display_tasks_grouped_by_list(tasks, start_number=1):
                 max_chars = 200
                 desc = task.description.strip()
                 if len(desc) > max_chars:
-                    desc = desc[:max_chars].rsplit(' ', 1)[0] + "..."
-                description_info = f"\n      [italic white]{desc}[/italic white]"
+                    # Try to break at a word boundary
+                    truncated = desc[:max_chars].rsplit(' ', 1)[0] + "..."
+                    desc_lines = truncated.split('\n')
+                else:
+                    desc_lines = desc.split('\n')
+                
+                # Take only first 4 lines (which visually appear as 2 lines) and format them
+                formatted_lines = []
+                for line in desc_lines[:4]:
+                    if line.strip():  # Only add non-empty lines
+                        formatted_lines.append(f"      [italic white]{line.strip()}[/italic white]")
+                
+                # Join the lines with newlines
+                if formatted_lines:
+                    description_info = "\n" + "\n".join(formatted_lines)
             
             # Display task with number
             task_line = f"  {i:2d}. [bright_black]{task.id[:8]}[/bright_black]: [{status_color}]{status_icon}[/{status_color}] [{priority_color}]{priority_icon}[/{priority_color}] {task.title}{due_info}{project_info}{tags_info}{recurring_info}{description_info}"
