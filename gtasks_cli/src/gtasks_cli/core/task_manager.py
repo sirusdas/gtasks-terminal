@@ -213,12 +213,23 @@ class TaskManager:
                     elif not recurring and task.is_recurring:
                         continue
                 
-                # Search filter
+                # Search filter with multi-search support
                 if search:
-                    search_lower = search.lower()
-                    if (search_lower not in task.title.lower() and 
-                        (not task.description or search_lower not in task.description.lower()) and
-                        (not task.notes or search_lower not in task.notes.lower())):
+                    # Split search terms by pipe separator for multi-search
+                    search_terms = [term.strip() for term in search.split('|') if term.strip()]
+                    match_found = False
+                    
+                    # Check if any of the search terms match
+                    for term in search_terms:
+                        term_lower = term.lower()
+                        if (term_lower in task.title.lower() or 
+                            (task.description and term_lower in task.description.lower()) or
+                            (task.notes and term_lower in task.notes.lower())):
+                            match_found = True
+                            break
+                    
+                    # If no search term matches, skip this task
+                    if not match_found:
                         continue
                 
                 filtered_tasks.append(task)

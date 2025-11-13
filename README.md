@@ -54,6 +54,86 @@ Master roadmap document:
 - Success metrics
 - Team roles and communication plan
 
+## Search Functionality
+
+The Google Tasks CLI provides powerful search capabilities to help you find tasks quickly and efficiently.
+
+### Basic Search
+Search for tasks by providing a query string that will be matched against task titles, descriptions, and notes:
+```bash
+gtasks search "meeting"
+```
+
+### Multi-Search with OR Logic
+Search for tasks matching any of multiple terms using the pipe (`|`) separator:
+```bash
+gtasks search "meeting|project|review"
+```
+This will return tasks that contain either "meeting", "project", or "review".
+
+### Filtered Search
+Combine search with additional filters to narrow down results:
+
+#### Filter by Status
+```bash
+# Search for completed tasks containing "report"
+gtasks search "report" --status completed
+
+# Search for pending tasks containing "meeting"
+gtasks search "meeting" --status pending
+```
+
+#### Filter by Priority
+```bash
+# Search for high priority tasks containing "urgent"
+gtasks search "urgent" --priority high
+
+# Search for critical tasks containing "important"
+gtasks search "important" --priority critical
+```
+
+#### Filter by Project
+```bash
+# Search for tasks in a specific project
+gtasks search "task" --project "My Project"
+```
+
+#### Filter for Recurring Tasks
+```bash
+# Search for recurring tasks containing "weekly"
+gtasks search "weekly" --recurring
+```
+
+### Search in Interactive Mode
+The search functionality is also available in interactive mode:
+```bash
+gtasks interactive
+# Then within the interactive session:
+search "meeting"
+search "project|task|review"
+```
+
+### Examples
+```bash
+# Find all tasks related to meetings
+gtasks search "meeting"
+
+# Find high priority tasks related to reports
+gtasks search "report" --priority high
+
+# Find completed tasks related to projects
+gtasks search "project" --status completed
+
+# Find tasks matching any of these terms
+gtasks search "meeting|call|discussion"
+
+# Find recurring tasks related to weekly activities
+gtasks search "weekly" --recurring
+
+# Search using Google Tasks directly
+gtasks search -g "important"
+```
+
 ## Getting Started
 
 To begin implementation of the Google Tasks CLI:

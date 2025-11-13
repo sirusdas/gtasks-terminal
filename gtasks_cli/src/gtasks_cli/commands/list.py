@@ -170,13 +170,29 @@ def _apply_additional_filters(tasks, time_filter, search, recurring):
     if time_filter:
         tasks = _filter_by_time(tasks, time_filter)
     
-    # Apply search filter
+    # Apply search filter with multi-search support
     if search:
-        search_lower = search.lower()
-        tasks = [task for task in tasks 
-                if search_lower in (task.title or '').lower() 
-                or search_lower in (task.description or '').lower()
-                or search_lower in (task.notes or '').lower()]
+        # Split search terms by pipe separator for multi-search
+        search_terms = [term.strip() for term in search.split('|') if term.strip()]
+        
+        filtered_tasks = []
+        for task in tasks:
+            match_found = False
+            
+            # Check if any of the search terms match
+            for term in search_terms:
+                term_lower = term.lower()
+                if (term_lower in (task.title or '').lower() or 
+                    term_lower in (task.description or '').lower() or
+                    term_lower in (task.notes or '').lower()):
+                    match_found = True
+                    break
+            
+            # Only include tasks that match at least one search term
+            if match_found:
+                filtered_tasks.append(task)
+        
+        tasks = filtered_tasks
     
     return tasks
 

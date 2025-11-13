@@ -35,6 +35,18 @@ try:
 except ImportError:
     HAS_GOOGLE_TASKS = False
 
+# Import the help system
+from gtasks_cli.commands.interactive_help import (
+    show_general_help,
+    show_view_help,
+    show_done_help,
+    show_delete_help,
+    show_update_help,
+    show_add_help,
+    show_list_help,
+    show_quit_help
+)
+
 
 def _display_tasks_grouped_by_list(tasks, start_number=1):
     """Display tasks grouped by their list names"""
@@ -558,7 +570,8 @@ def interactive(ctx):
                     continue
                     
                 query = " ".join(command_parts[1:])
-                search_results = task_manager.search_tasks(query)
+                # Use list_tasks with search parameter instead of non-existent search_tasks method
+                search_results = task_manager.list_tasks(search=query)
                 if search_results:
                     click.echo(f"\nSearch results for '{query}':")
                     _display_tasks_grouped_by_list(search_results)
@@ -567,28 +580,65 @@ def interactive(ctx):
                     click.echo(f"No tasks found matching '{query}'.")
                     # Keep current tasks unchanged
             elif cmd == 'help':
-                click.echo("""
-Interactive Mode Commands:
-  view <number>     - View task details
-  done <number>     - Mark task as completed
-  delete <number>   - Delete a task
-  update <number>   - Update a task (not yet implemented)
-  add               - Add a new task
-  list              - List all tasks
-  list [filters]    - List tasks with filters (same as gtasks list command)
-  search <query>    - Search tasks
-  help              - Show this help
-  quit/exit         - Exit interactive mode
-  
-List Filter Options (same as gtasks list):
-  LIST_FILTER       - Filter task lists by name (e.g., "My")
-  --status STATUS   - Filter by status (pending, completed, etc.)
-  --priority LEVEL  - Filter by priority (low, medium, high, critical)
-  --project NAME    - Filter by project
-  --recurring       - Show only recurring tasks
-  --filter PERIOD   - Filter by time (today, this_week, this_month, last_3m, etc.)
-  --search QUERY    - Search in title, description, notes
-                """)
+                if len(command_parts) > 1:
+                    subcommand = command_parts[1]
+                    if subcommand == 'search':
+                        # Display detailed help for search command with colors
+                        console.print(Panel("[bold blue]Search Command Help[/bold blue]", expand=False))
+                        
+                        console.print("[bold]Description:[/bold]")
+                        console.print("Search for tasks by providing terms that will be matched against task titles,")
+                        console.print("descriptions, and notes. Use the pipe character (|) to search for multiple")
+                        console.print("terms with OR logic.\n")
+                        
+                        console.print("[bold]Usage:[/bold]")
+                        console.print("  search <query>\n")
+                        
+                        console.print("[bold]Examples:[/bold]")
+                        console.print("  [green]# Search for tasks containing \"meeting\"[/green]")
+                        console.print("  search meeting\n")
+                        
+                        console.print("  [green]# Search for tasks containing \"meeting\", \"project\", OR \"review\"[/green]")
+                        console.print("  search \"meeting|project|review\"\n")
+                        
+                        console.print("  [green]# Search in combination with other commands[/green]")
+                        console.print("  list --search \"meeting\" --status pending")
+                        console.print("  list --search \"report|presentation\" --priority high\n")
+                        
+                        console.print("[bold]Multi-Search:[/bold]")
+                        console.print("Use the pipe character (|) to search for multiple terms:")
+                        console.print("  search \"term1|term2|term3\"")
+                        console.print("This will return tasks matching [bold]any[/bold] of the provided terms.\n")
+                        
+                        console.print("[bold]Filter Options:[/bold]")
+                        console.print("You can combine search with other filters:")
+                        console.print("  [yellow]--status[/yellow]     Filter by status (pending, in_progress, completed, waiting, deleted)")
+                        console.print("  [yellow]--priority[/yellow]   Filter by priority (low, medium, high, critical)")
+                        console.print("  [yellow]--project[/yellow]    Filter by project")
+                        console.print("  [yellow]--recurring[/yellow]  Show only recurring tasks\n")
+                        
+                        console.print("[bold]Interactive Mode Usage:[/bold]")
+                        console.print("In interactive mode, simply type:")
+                        console.print("  search <query>")
+                        console.print("The results will be displayed and can be operated on using other commands.\n")
+                    elif subcommand == 'view':
+                        show_view_help()
+                    elif subcommand == 'done':
+                        show_done_help()
+                    elif subcommand == 'delete':
+                        show_delete_help()
+                    elif subcommand == 'update':
+                        show_update_help()
+                    elif subcommand == 'add':
+                        show_add_help()
+                    elif subcommand == 'list':
+                        show_list_help()
+                    elif subcommand in ['quit', 'exit']:
+                        show_quit_help()
+                    else:
+                        click.echo(f"Unknown command: {subcommand}. Type 'help' for available commands.")
+                else:
+                    show_general_help()
             else:
                 click.echo(f"Unknown command: {cmd}. Type 'help' for available commands.")
                 

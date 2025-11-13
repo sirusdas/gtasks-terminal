@@ -24,10 +24,17 @@ logger = setup_logger(__name__)
 def search(ctx, query, status, priority, project, recurring):
     """Search for tasks by query string
     
+    Search for tasks by providing terms that will be matched against 
+    task titles, descriptions, and notes. Use the pipe character (|) 
+    to search for multiple terms with OR logic.
+    
     \b
     Examples:
       # Search for tasks containing "meeting"
       gtasks search meeting
+      
+      # Search for tasks containing "meeting", "project", OR "review"
+      gtasks search "meeting|project|review"
       
       # Search for high priority tasks containing "report"
       gtasks search report --priority high
