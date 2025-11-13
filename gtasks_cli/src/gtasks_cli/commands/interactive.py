@@ -9,6 +9,13 @@ from collections import defaultdict
 from typing import List
 from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.models.task import Task, TaskStatus, Priority
+from rich.console import Console
+from rich.text import Text
+from rich.panel import Panel
+from rich import print as rich_print
+
+# Initialize Rich console for colored output
+console = Console()
 
 logger = setup_logger(__name__)
 
@@ -40,14 +47,24 @@ def _display_tasks_grouped_by_list(tasks, start_number=1):
     # Display tasks grouped by list
     task_index = start_number
     all_tasks = []
+    
     for list_title, list_tasks in tasks_by_list.items():
-        click.echo(f"\nList Name: \"{list_title}\"")
-        click.echo("Tasks:")
+        # Display list name with color in a panel
+        console.print(Panel(f"[bold blue]List Name: \"{list_title}\"[/bold blue]", expand=False))
+        
         for i, task in enumerate(list_tasks, task_index):
             # For enum values, we need to check if they are already strings or enum instances
             status_value = task.status if isinstance(task.status, str) else task.status.value
             priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
             
+            # Color coding for status
+            status_colors = {
+                'pending': 'yellow',
+                'in_progress': 'cyan',
+                'completed': 'green',
+                'waiting': 'magenta',
+                'deleted': 'red'
+            }
             status_icon = {
                 'pending': '⏳',
                 'in_progress': '🔄',
@@ -55,33 +72,42 @@ def _display_tasks_grouped_by_list(tasks, start_number=1):
                 'waiting': '⏸️',
                 'deleted': '🗑️'
             }.get(status_value, '❓')
+            status_color = status_colors.get(status_value, 'white')
             
+            # Color coding for priority
+            priority_colors = {
+                'low': 'blue',
+                'medium': 'yellow',
+                'high': 'orange_red1',  # More vibrant orange
+                'critical': 'red'
+            }
             priority_icon = {
                 'low': '🔽',
                 'medium': '🔸',
                 'high': '🔺',
                 'critical': '💥'
             }.get(priority_value, '🔹')
+            priority_color = priority_colors.get(priority_value, 'white')
             
             # Format due date if present
             due_info = ""
             if task.due:
-                due_info = f" 📅 {task.due.strftime('%Y-%m-%d')}"
+                due_info = f" [blue]📅 {task.due.strftime('%Y-%m-%d')}[/blue]"
             
             # Format project if present
             project_info = ""
             if task.project:
-                project_info = f" 📁 {task.project}"
+                project_info = f" [purple]📁 {task.project}[/purple]"
             
             # Format tags if present
             tags_info = ""
             if task.tags:
-                tags_info = f" 🏷️  {', '.join(task.tags)}"
+                tags_info = f" [cyan]🏷️  {', '.join(task.tags)}[/cyan]"
             
             # Format recurring info
             recurring_info = ""
             if task.is_recurring:
-                recurring_info = " 🔁"
+                recurring_info = " [green]🔁[/green]"
             
             # Format description with limit (max 2 lines)
             description_info = ""
@@ -91,12 +117,15 @@ def _display_tasks_grouped_by_list(tasks, start_number=1):
                 desc = task.description.strip()
                 if len(desc) > max_chars:
                     desc = desc[:max_chars].rsplit(' ', 1)[0] + "..."
-                description_info = f"\n      {desc}"
+                description_info = f"\n      [italic white]{desc}[/italic white]"
             
             # Display task with number
-            click.echo(f"  {i:2d}. {task.id[:8]}: {status_icon} {priority_icon} {task.title}{due_info}{project_info}{tags_info}{recurring_info}{description_info}")
+            task_line = f"  {i:2d}. [bright_black]{task.id[:8]}[/bright_black]: [{status_color}]{status_icon}[/{status_color}] [{priority_color}]{priority_icon}[/{priority_color}] {task.title}{due_info}{project_info}{tags_info}{recurring_info}{description_info}"
+            console.print(task_line)
+                
             all_tasks.append(task)
         task_index += len(list_tasks)
+        console.print()  # Add spacing between lists
     
     return all_tasks
 
@@ -159,6 +188,10 @@ def interactive(ctx):
                 task.list_title = tasklist_title
                 
             tasks.extend(incomplete_tasks)
+            
+        # Display tasks grouped by list names with color coding
+        _display_tasks_grouped_by_list(tasks)
+        task_state.set_tasks(tasks)
     else:
         # For local mode, just get incomplete tasks
         tasks = task_manager.list_tasks()
@@ -167,6 +200,10 @@ def interactive(ctx):
         for task in tasks:
             if not hasattr(task, 'list_title') or not task.list_title:
                 task.list_title = "Tasks"
+        
+        # Display tasks grouped by list names with color coding
+        _display_tasks_grouped_by_list(tasks)
+        task_state.set_tasks(tasks)
     
     if not tasks:
         click.echo("No incomplete tasks found.")
@@ -290,6 +327,11 @@ def interactive(ctx):
                         else:
                             # Default to incomplete tasks
                             tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
+                                            
+                        # Add list_title to each task for grouping display
+                        for task in tasks:
+                            if not hasattr(task, 'list_title') or not task.list_title:
+                                task.list_title = tasklist_title
                             
                         # Apply additional filters
                         if priority_enum:
@@ -343,7 +385,7 @@ def interactive(ctx):
                         if not hasattr(task, 'list_title') or not task.list_title:
                             task.list_title = "Tasks"
                     
-                    # Display tasks grouped by list names
+                    # Display tasks grouped by list names with color coding
                     displayed_tasks = _display_tasks_grouped_by_list(all_tasks)
                     task_state.set_tasks(displayed_tasks)
             elif cmd == 'view':
@@ -374,12 +416,10 @@ def interactive(ctx):
                             # Refresh task list - only show incomplete tasks
                             tasks = task_manager.list_tasks()
                             incomplete_tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
-
                             # Add list_title to each task for grouping display (default to "Tasks" for local mode)
                             for task in incomplete_tasks:
                                 if not hasattr(task, 'list_title') or not task.list_title:
                                     task.list_title = "Tasks"
-
                             _display_tasks_grouped_by_list(incomplete_tasks)
                             task_state.set_tasks(incomplete_tasks)
                         else:
@@ -633,17 +673,59 @@ def _normalize_datetime(dt):
 
 def _display_tasks(tasks, start_number=1):
     """Display tasks with numbering"""
-    click.echo("\nTasks:")
+    tasks_header = Text("\nTasks:", style="bold green")
+    console.print(tasks_header)
     for i, task in enumerate(tasks, start_number):
         _display_single_task(i, task)
 
 
-def _display_single_task(number, task):
-    """Display a single task with its number"""
-    # For enum values, we need to check if they are already strings or enum instances
-    status_value = task.status if isinstance(task.status, str) else task.status.value
-    priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
+# Remove _display_single_task as it's no longer needed
+# The functionality is now handled by _display_tasks_grouped_by_list
+
+
+# Remove _display_numbered_tasks as it's no longer needed
+# The functionality is now handled by _display_tasks_grouped_by_list
+
+
+def _view_task_details(task):
+    """Display detailed information about a task with color formatting"""
+    # Create a panel for the task details
+    panel_content = []
     
+    # Add basic task info
+    panel_content.append(f"[bold]{task.title}[/bold]")
+    panel_content.append(f"ID: {task.id}")
+    
+    # Add description
+    if task.description:
+        # Format description with proper alignment and limit
+        max_chars = 500  # Increased limit for view details
+        desc = task.description.strip()
+        if len(desc) > max_chars:
+            desc = desc[:max_chars].rsplit(' ', 1)[0] + "..."
+        
+        # Split description into lines for proper alignment
+        desc_lines = desc.split('\n')
+        formatted_desc = "\n".join([f"    {line}" for line in desc_lines])
+        panel_content.append(f"[italic white]📝 {formatted_desc}[/italic white]")
+    
+    # Add notes
+    if task.notes:
+        panel_content.append(f"📌 Notes: {task.notes}")
+    
+    # Add due date
+    if task.due:
+        panel_content.append(f"[blue]📅 Due: {task.due.strftime('%Y-%m-%d')}[/blue]")
+    
+    # Add status and priority on the same line
+    status_value = task.status if isinstance(task.status, str) else task.status.value
+    status_colors = {
+        'pending': 'yellow',
+        'in_progress': 'cyan',
+        'completed': 'green',
+        'waiting': 'magenta',
+        'deleted': 'red'
+    }
     status_icon = {
         'pending': '⏳',
         'in_progress': '🔄',
@@ -651,87 +733,56 @@ def _display_single_task(number, task):
         'waiting': '⏸️',
         'deleted': '🗑️'
     }.get(status_value, '❓')
+    status_color = status_colors.get(status_value, 'white')
     
+    priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
+    priority_colors = {
+        'low': 'blue',
+        'medium': 'yellow',
+        'high': 'orange_red1',
+        'critical': 'red'
+    }
     priority_icon = {
         'low': '🔽',
         'medium': '🔸',
         'high': '🔺',
         'critical': '💥'
     }.get(priority_value, '🔹')
+    priority_color = priority_colors.get(priority_value, 'white')
     
-    # Format due date if present
-    due_info = ""
-    if task.due:
-        due_info = f" 📅 {task.due.strftime('%Y-%m-%d')}"
+    status_priority_line = f"[{status_color}]{status_icon} {status_value.upper()}[/{status_color}] | [{priority_color}]{priority_icon} {priority_value.upper()}[/{priority_color}]"
+    panel_content.append(status_priority_line)
     
-    # Format project if present
-    project_info = ""
+    # Add project and tags
+    project_tags_line = ""
     if task.project:
-        project_info = f" 📁 {task.project}"
-    
-    # Format tags if present
-    tags_info = ""
+        project_tags_line += f"📁 {task.project}  "
     if task.tags:
-        tags_info = f" 🏷️  {', '.join(task.tags)}"
+        project_tags_line += f"🏷️  {', '.join(task.tags)}"
     
-    # Format recurring info
-    recurring_info = ""
+    if project_tags_line:
+        panel_content.append(project_tags_line)
+    
+    # Add recurrence info
     if task.is_recurring:
-        recurring_info = " 🔁"
+        panel_content.append("🔁 Recurring Task")
     
-    # Format list title for Google Tasks
-    list_info = ""
-    if hasattr(task, 'list_title') and task.list_title:
-        list_info = f" [{task.list_title}]"
-    
-    # Display task with number
-    click.echo(f"  {number:2d}. {task.id[:8]}: {status_icon} {priority_icon} {task.title}{list_info}{due_info}{project_info}{tags_info}{recurring_info}")
-
-
-def _display_numbered_tasks(tasks, start_number=1):
-    """Display tasks with numbers (original display method)"""
-    click.echo("\nTasks:")
-    for i, task in enumerate(tasks, start_number):
-        _display_single_task(i, task)
-
-
-def _view_task_details(task):
-    """Display detailed information about a task"""
-    click.echo(f"\nTask Details:")
-    click.echo(f"  ID: {task.id}")
-    click.echo(f"  Title: {task.title}")
-    
-    if task.description:
-        click.echo(f"  Description: {task.description}")
-        
-    if task.notes:
-        click.echo(f"  Notes: {task.notes}")
-        
-    if task.due:
-        click.echo(f"  Due Date: {task.due}")
-        
-    # Display status
-    status_value = task.status if isinstance(task.status, str) else task.status.value
-    click.echo(f"  Status: {status_value}")
-    
-    # Display priority
-    priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
-    click.echo(f"  Priority: {priority_value}")
-    
-    if task.project:
-        click.echo(f"  Project: {task.project}")
-        
-    if task.tags:
-        click.echo(f"  Tags: {', '.join(task.tags)}")
-        
+    # Add dependencies
     if task.dependencies:
-        click.echo(f"  Dependencies: {', '.join(task.dependencies)}")
-        
-    if task.is_recurring:
-        click.echo(f"  Recurrence Rule: {task.recurrence_rule}")
-        
-    click.echo(f"  Created: {task.created_at}")
+        deps_formatted = ", ".join(task.dependencies)
+        panel_content.append(f"🔗 Dependencies: {deps_formatted}")
+    
+    # Add timestamps
+    timestamp_lines = []
+    timestamp_lines.append(f"⏱️ Created: {task.created_at}")
     if task.modified_at:
-        click.echo(f"  Modified: {task.modified_at}")
+        timestamp_lines.append(f"🔄 Modified: {task.modified_at}")
     if hasattr(task, 'completed_at') and task.completed_at:
-        click.echo(f"  Completed: {task.completed_at}")
+        timestamp_lines.append(f"✅ Completed: {task.completed_at}")
+    
+    if timestamp_lines:
+        panel_content.extend(timestamp_lines)
+    
+    # Create and print the panel
+    panel = Panel("\n".join(panel_content), title="Task Details", expand=False, border_style="bright_black")
+    console.print(panel)
