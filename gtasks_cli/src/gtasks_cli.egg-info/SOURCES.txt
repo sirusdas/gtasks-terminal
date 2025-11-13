@@ -11,6 +11,7 @@ src/gtasks_cli.egg-info/top_level.txt
 src/gtasks_cli/analytics/__init__.py
 src/gtasks_cli/cli/__init__.py
 src/gtasks_cli/commands/__init__.py
+src/gtasks_cli/commands/account.py
 src/gtasks_cli/commands/add.py
 src/gtasks_cli/commands/auth.py
 src/gtasks_cli/commands/deduplicate.py
@@ -32,6 +33,7 @@ src/gtasks_cli/integrations/google_tasks_client.py
 src/gtasks_cli/integrations/sync_manager.py
 src/gtasks_cli/models/__init__.py
 src/gtasks_cli/models/task.py
+src/gtasks_cli/models/task_list.py
 src/gtasks_cli/reports/__init__.py
 src/gtasks_cli/storage/__init__.py
 src/gtasks_cli/storage/config_manager.py
@@ -39,6 +41,7 @@ src/gtasks_cli/storage/local_storage.py
 src/gtasks_cli/storage/sqlite_storage.py
 src/gtasks_cli/ui/__init__.py
 src/gtasks_cli/utils/__init__.py
+src/gtasks_cli/utils/display.py
 src/gtasks_cli/utils/exceptions.py
 src/gtasks_cli/utils/logger.py
 src/gtasks_cli/utils/task_deduplication.py

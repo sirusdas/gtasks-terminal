@@ -7,6 +7,7 @@ import click
 import shlex
 from collections import defaultdict
 from typing import List
+import os
 from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.models.task import Task, TaskStatus, Priority
 from rich.console import Console
@@ -48,111 +49,21 @@ from gtasks_cli.commands.interactive_help import (
 )
 
 
-def _display_tasks_grouped_by_list(tasks, start_number=1):
-    """Display tasks grouped by their list names"""
-    # Group tasks by list title
-    tasks_by_list = defaultdict(list)
-    for task in tasks:
-        list_title = getattr(task, 'list_title', 'Unknown List')
-        tasks_by_list[list_title].append(task)
+def _display_tasks_grouped_by_list(tasks: List[Task], start_number: int = 1) -> int:
+    """
+    Display tasks grouped by list names with color coding.
+    Returns the next task number to be used for numbering continuity.
     
-    # Display tasks grouped by list
-    task_index = start_number
-    all_tasks = []
-    
-    for list_title, list_tasks in tasks_by_list.items():
-        # Display list name with color in a panel
-        console.print(Panel(f"[bold blue]List Name: \"{list_title}\"[/bold blue]", expand=False))
+    Args:
+        tasks: List of Task objects to display
+        start_number: Starting number for task numbering
         
-        for i, task in enumerate(list_tasks, task_index):
-            # For enum values, we need to check if they are already strings or enum instances
-            status_value = task.status if isinstance(task.status, str) else task.status.value
-            priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
-            
-            # Color coding for status
-            status_colors = {
-                'pending': 'yellow',
-                'in_progress': 'cyan',
-                'completed': 'green',
-                'waiting': 'magenta',
-                'deleted': 'red'
-            }
-            status_icon = {
-                'pending': '⏳',
-                'in_progress': '🔄',
-                'completed': '✅',
-                'waiting': '⏸️',
-                'deleted': '🗑️'
-            }.get(status_value, '❓')
-            status_color = status_colors.get(status_value, 'white')
-            
-            # Color coding for priority
-            priority_colors = {
-                'low': 'blue',
-                'medium': 'yellow',
-                'high': 'orange_red1',  # More vibrant orange
-                'critical': 'red'
-            }
-            priority_icon = {
-                'low': '🔽',
-                'medium': '🔸',
-                'high': '🔺',
-                'critical': '💥'
-            }.get(priority_value, '🔹')
-            priority_color = priority_colors.get(priority_value, 'white')
-            
-            # Format due date if present
-            due_info = ""
-            if task.due:
-                due_info = f" [blue]📅 {task.due.strftime('%Y-%m-%d')}[/blue]"
-            
-            # Format project if present
-            project_info = ""
-            if task.project:
-                project_info = f" [purple]📁 {task.project}[/purple]"
-            
-            # Format tags if present
-            tags_info = ""
-            if task.tags:
-                tags_info = f" [cyan]🏷️  {', '.join(task.tags)}[/cyan]"
-            
-            # Format recurring info
-            recurring_info = ""
-            if task.is_recurring:
-                recurring_info = " [green]🔁[/green]"
-            
-            # Format description with limit (max 2 lines)
-            description_info = ""
-            if task.description:
-                # Limit description to 2 lines (approximately 100 characters per line)
-                max_chars = 200
-                desc = task.description.strip()
-                if len(desc) > max_chars:
-                    # Try to break at a word boundary
-                    truncated = desc[:max_chars].rsplit(' ', 1)[0] + "..."
-                    desc_lines = truncated.split('\n')
-                else:
-                    desc_lines = desc.split('\n')
-                
-                # Take only first 4 lines (which visually appear as 2 lines) and format them
-                formatted_lines = []
-                for line in desc_lines[:4]:
-                    if line.strip():  # Only add non-empty lines
-                        formatted_lines.append(f"      [italic white]{line.strip()}[/italic white]")
-                
-                # Join the lines with newlines
-                if formatted_lines:
-                    description_info = "\n" + "\n".join(formatted_lines)
-            
-            # Display task with number
-            task_line = f"  {i:2d}. [bright_black]{task.id[:8]}[/bright_black]: [{status_color}]{status_icon}[/{status_color}] [{priority_color}]{priority_icon}[/{priority_color}] {task.title}{due_info}{project_info}{tags_info}{recurring_info}{description_info}"
-            console.print(task_line)
-                
-            all_tasks.append(task)
-        task_index += len(list_tasks)
-        console.print()  # Add spacing between lists
-    
-    return all_tasks
+    Returns:
+        int: Next task number to use
+    """
+    from gtasks_cli.utils.display import display_tasks_grouped_by_list
+    display_tasks_grouped_by_list(tasks)
+    return start_number + len(tasks)
 
 
 @click.command()
@@ -178,6 +89,7 @@ def interactive(ctx):
     """
     use_google_tasks = ctx.obj.get('use_google_tasks', False)
     storage_backend = ctx.obj.get('storage_backend', 'sqlite')
+    account_name = ctx.obj.get('account_name')
     logger.info(f"Starting interactive mode {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
     # Import here to avoid issues with module loading
@@ -187,7 +99,8 @@ def interactive(ctx):
     # Create task manager
     task_manager = TaskManager(
         use_google_tasks=use_google_tasks,
-        storage_backend=storage_backend
+        storage_backend=storage_backend,
+        account_name=account_name
     )
     
     # Get only pending/incomplete tasks by default
@@ -214,8 +127,7 @@ def interactive(ctx):
                 
             tasks.extend(incomplete_tasks)
             
-        # Display tasks grouped by list names with color coding
-        _display_tasks_grouped_by_list(tasks)
+        # Store tasks for interactive use
         task_state.set_tasks(tasks)
     else:
         # For local mode, just get incomplete tasks
@@ -226,8 +138,7 @@ def interactive(ctx):
             if not hasattr(task, 'list_title') or not task.list_title:
                 task.list_title = "Tasks"
         
-        # Display tasks grouped by list names with color coding
-        _display_tasks_grouped_by_list(tasks)
+        # Store tasks for interactive use
         task_state.set_tasks(tasks)
     
     if not tasks:
@@ -420,13 +331,22 @@ def interactive(ctx):
                     
                 try:
                     task_num = int(command_parts[1])
-                    task = task_state.get_task_by_index(task_num)
+                    task = task_state.get_task_by_number(task_num)
                     if task:
                         _view_task_details(task)
                     else:
-                        click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.get_tasks())}.")
+                        click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.tasks)}.")
                 except ValueError:
                     click.echo("Invalid task number. Please enter a valid integer.")
+                except Exception as e:
+                    click.echo(f"An error occurred: {str(e)}")
+                    logger.error(f"Error in update command: {e}")
+                except Exception as e:
+                    click.echo(f"An error occurred: {str(e)}")
+                    logger.error(f"Error in delete command: {e}")
+                except Exception as e:
+                    click.echo(f"An error occurred: {str(e)}")
+                    logger.error(f"Error in done command: {e}")
             elif cmd == 'done':
                 if len(command_parts) < 2:
                     click.echo("Usage: done <number>")
@@ -434,7 +354,7 @@ def interactive(ctx):
                     
                 try:
                     task_num = int(command_parts[1])
-                    task = task_state.get_task_by_index(task_num)
+                    task = task_state.get_task_by_number(task_num)
                     if task:
                         if task_manager.complete_task(task.id):
                             click.echo(f"Task '{task.title}' marked as completed.")
@@ -450,7 +370,7 @@ def interactive(ctx):
                         else:
                             click.echo("Failed to mark task as completed.")
                     else:
-                        click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.get_tasks())}.")
+                        click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.tasks)}.")
                 except ValueError:
                     click.echo("Invalid task number. Please enter a valid integer.")
             elif cmd == 'delete':
@@ -460,7 +380,7 @@ def interactive(ctx):
                     
                 try:
                     task_num = int(command_parts[1])
-                    task = task_state.get_task_by_index(task_num)
+                    task = task_state.get_task_by_number(task_num)
                     if task:
                         confirm = click.confirm(f"Are you sure you want to delete task '{task.title}'?")
                         if confirm:
@@ -500,7 +420,7 @@ def interactive(ctx):
                             else:
                                 click.echo("Failed to delete task.")
                     else:
-                        click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.get_tasks())}.")
+                        click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.tasks)}.")
                 except ValueError:
                     click.echo("Invalid task number. Please enter a valid integer.")
             elif cmd == 'add':
@@ -535,7 +455,7 @@ def interactive(ctx):
                     
                 try:
                     task_num = int(command_parts[1])
-                    task = task_state.get_task_by_index(task_num)
+                    task = task_state.get_task_by_number(task_num)
                     if task:
                         # Collect updated details
                         title = click.prompt("Task title", default=task.title)
@@ -561,7 +481,7 @@ def interactive(ctx):
                         else:
                             click.echo("Failed to update task.")
                     else:
-                        click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.get_tasks())}.")
+                        click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.tasks)}.")
                 except ValueError:
                     click.echo("Invalid task number. Please enter a valid integer.")
             elif cmd == 'search':
@@ -654,6 +574,75 @@ def interactive(ctx):
                         click.echo(f"Unknown command: {subcommand}. Type 'help' for available commands.")
                 else:
                     show_general_help()
+            elif cmd == 'account':
+                if len(command_parts) > 1:
+                    # Switch to a different account
+                    new_account = command_parts[1]
+                    
+                    # Update environment variable
+                    os.environ['GTASKS_DEFAULT_ACCOUNT'] = new_account
+                    
+                    # Create new task manager with the new account
+                    new_task_manager = TaskManager(
+                        use_google_tasks=use_google_tasks,
+                        storage_backend=storage_backend,
+                        account_name=new_account
+                    )
+                    
+                    try:
+                        # Try to get tasks from the new account
+                        if use_google_tasks:
+                            from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
+                            client = GoogleTasksClient(account_name=new_account)
+                            tasklists = client.list_tasklists()
+                            
+                            tasks = []
+                            for tasklist in tasklists:
+                                tasklist_id = tasklist['id']
+                                tasklist_title = tasklist.get('title', 'Untitled List')
+                                # Get all tasks and filter for this specific tasklist
+                                all_tasks = new_task_manager.list_tasks()
+                                list_tasks = [t for t in all_tasks if getattr(t, 'tasklist_id', None) == tasklist_id]
+                                
+                                # Filter for incomplete tasks
+                                incomplete_tasks = [t for t in list_tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
+                                
+                                # Add list_title to each task for grouping display
+                                for task in incomplete_tasks:
+                                    task.list_title = tasklist_title
+                                    
+                                tasks.extend(incomplete_tasks)
+                        else:
+                            # For local mode, get incomplete tasks
+                            tasks = new_task_manager.list_tasks()
+                            tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
+                            # Add list_title to each task for grouping display (default to "Tasks" for local mode)
+                            for task in tasks:
+                                if not hasattr(task, 'list_title') or not task.list_title:
+                                    task.list_title = "Tasks"
+                        
+                        # If we get here, account switch was successful
+                        task_manager = new_task_manager
+                        ctx.obj['account_name'] = new_account
+                        
+                        # Update display
+                        if tasks:
+                            _display_tasks_grouped_by_list(tasks)
+                            task_state.set_tasks(tasks)
+                            click.echo(f"Switched to account: {new_account}. Found {len(tasks)} incomplete tasks.")
+                        else:
+                            _display_tasks_grouped_by_list([])
+                            task_state.set_tasks([])
+                            click.echo(f"Switched to account: {new_account}. No incomplete tasks found.")
+                            
+                    except Exception as e:
+                        click.echo(f"Failed to switch to account {new_account}: {str(e)}")
+                        logger.error(f"Error switching accounts: {e}")
+                else:
+                    # Show current account
+                    current = os.environ.get('GTASKS_DEFAULT_ACCOUNT', 'default')
+                    click.echo(f"Current account: {current}")
+
             else:
                 click.echo(f"Unknown command: {cmd}. Type 'help' for available commands.")
                 

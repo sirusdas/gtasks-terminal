@@ -1,11 +1,9 @@
 """
-Task Manager for the Google Tasks CLI application.
+Task management for the Google Tasks CLI application.
 """
 
-import uuid
-from datetime import datetime, timedelta
-from typing import List, Optional, Dict
-from gtasks_cli.models.task import Task, TaskStatus, Priority
+from typing import List, Optional
+from gtasks_cli.models.task import Task, Priority, TaskStatus
 from gtasks_cli.storage.local_storage import LocalStorage
 from gtasks_cli.storage.sqlite_storage import SQLiteStorage
 from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
@@ -16,31 +14,33 @@ logger = setup_logger(__name__)
 
 
 class TaskManager:
-    """Manages tasks and provides CRUD operations."""
+    """Manages tasks and provides high-level task operations."""
     
-    def __init__(self, use_google_tasks: bool = False, storage_backend: str = 'json'):
+    def __init__(self, use_google_tasks: bool = False, storage_backend: str = 'json', account_name: str = None):
         """
         Initialize the TaskManager.
         
         Args:
             use_google_tasks: Whether to use Google Tasks API
             storage_backend: Storage backend to use ('json' or 'sqlite')
+            account_name: Name of the account for multi-account support
         """
         self.use_google_tasks = use_google_tasks
+        self.account_name = account_name
         
-        # Initialize storage based on backend
+        # Initialize storage based on backend and account
         if storage_backend == 'sqlite':
-            self.storage = SQLiteStorage()
-            logger.info("Using SQLite storage backend")
+            self.storage = SQLiteStorage(account_name=account_name)
+            logger.info(f"Using SQLite storage backend for account: {account_name or 'default'}")
         else:
-            self.storage = LocalStorage()
-            logger.info("Using JSON file storage backend")
+            self.storage = LocalStorage(account_name=account_name)
+            logger.info(f"Using JSON file storage backend for account: {account_name or 'default'}")
         
         # Initialize Google Tasks client if needed
         if use_google_tasks:
-            self.google_client = GoogleTasksClient()
+            self.google_client = GoogleTasksClient(account_name=account_name)
             self.sync_manager = SyncManager(self.storage, self.google_client)
-            logger.info("Google Tasks client initialized")
+            logger.info(f"Google Tasks client initialized for account: {account_name or 'default'}")
     
     def create_task(self, title: str, description: Optional[str] = None, 
                    due: Optional[str] = None, priority: Priority = Priority.MEDIUM,
@@ -87,7 +87,7 @@ class TaskManager:
                 
                 # Save to local storage for offline access
                 task_dicts = self.storage.load_tasks()
-                task_dicts.append(task.dict())
+                task_dicts.append(task.model_dump())
                 self.storage.save_tasks(task_dicts)
                 
                 # Update list mapping if needed

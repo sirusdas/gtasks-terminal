@@ -1,352 +1,310 @@
+from typing import List
+from gtasks_cli.models.task import Task
+from gtasks_cli.models.task_list import TaskList
+from datetime import datetime  # Needed for date formatting
+import click
+
+def display_tasks_grouped_by_list(tasks: List[Task]):
+    """Display tasks grouped by their task lists with color coding."""
+    if not tasks:
+        click.echo("No tasks found.")
+        return
+    
+    # Group tasks by list
+    tasks_by_list = {}
+    for task in tasks:
+        list_id = getattr(task, 'tasklist_id', 'default')  # Handle both Google and local tasks
+        if list_id not in tasks_by_list:
+            tasks_by_list[list_id] = {
+                'title': getattr(task, 'list_title', 'Untitled List'),
+                'tasks': []
+            }
+        tasks_by_list[list_id]['tasks'].append(task)
+    
+    # Display tasks grouped by list
+    for list_info in tasks_by_list.values():
+        list_title = list_info['title']
+        tasks = list_info['tasks']
+        
+        # Use different colors for different lists
+        list_title_color = _get_list_color(list_title)
+        click.secho(f"\n{list_title}", fg=list_title_color, bold=True)
+        
+        for i, task in enumerate(tasks, 1):
+            # Format the task line with priority indicator
+            priority_icon = _get_priority_icon(task.priority)
+            
+            # Format due date
+            due_str = _format_due_date(task.due)
+            
+            # Build the task line
+            task_line = f"{i:2d}. {priority_icon} {task.title}{due_str}"
+            
+            # Color code task status
+            task_color = _get_status_color(task.status)
+            click.secho(task_line, fg=task_color)
+            
+            # Display description if available
+            if task.description:
+                click.echo(f"     📝 {task.description[:60]}{'...' if len(task.description) > 60 else ''}")
+    
+    # Summary
+    click.echo(f"\nTotal: {len(tasks)} task(s) across {len(tasks_by_list)} list(s)")
+
+def _get_list_color(list_title: str) -> str:
+    """Get color for list title based on its name"""
+    # Use a consistent color for each list based on its title
+    color_map = {
+        'Inbox': 'blue',
+        'Work': 'cyan',
+        'Personal': 'green',
+        'Shopping': 'yellow',
+        'Projects': 'magenta'
+    }
+    
+    # Try to find a matching color based on list title
+    for keyword, color in color_map.items():
+        if keyword.lower() in list_title.lower():
+            return color
+    
+    # Default color for other lists
+    return 'white'
+
+def _get_priority_icon(priority) -> str:
+    """Get appropriate icon for priority level"""
+    if isinstance(priority, str):
+        priority_value = priority.lower()
+    else:
+        priority_value = priority.value.lower() if hasattr(priority, 'value') else str(priority).lower()
+    
+    priority_indicators = {
+        'low': '🔽',
+        'medium': '🔸', 
+        'high': '🔺',
+        'critical': '💥'
+    }
+    
+    return priority_indicators.get(priority_value, '🔸')
+
+def _format_due_date(due) -> str:
+    """Format due date for display"""
+    if not due:
+        return ""
+    
+    try:
+        # Convert to datetime if we have a string
+        if isinstance(due, str):
+            due = datetime.fromisoformat(due)
+        
+        # Convert to date if we have a datetime
+        if hasattr(due, 'date'):
+            due_date = due.date()
+        else:
+            due_date = due
+            
+        days_diff = (due_date - datetime.now().date()).days
+        
+        if days_diff == 0:
+            return " (Today)"
+        elif days_diff == 1:
+            return " (Tomorrow)"
+        elif days_diff < 0:
+            return f" ({abs(days_diff)} days overdue)"
+        else:
+            return f" (in {days_diff} days)"
+    except Exception as e:
+        return ""
+
+def _get_status_color(status) -> str:
+    """Get color for task status"""
+    if isinstance(status, str):
+        status_value = status.lower()
+    else:
+        status_value = status.value.lower() if hasattr(status, 'value') else str(status).lower()
+    
+    color_map = {
+        'pending': 'white',
+        'in_progress': 'cyan',
+        'completed': 'green',
+        'waiting': 'yellow',
+        'deleted': 'red'
+    }
+    
+    return color_map.get(status_value, 'white')
 #!/usr/bin/env python3
 """
-List command for Google Tasks CLI
+List command for the Google Tasks CLI application.
 """
 
 import click
 from datetime import datetime, timedelta
+from typing import List
+from gtasks_cli.models.task import Task, TaskStatus, Priority
+from gtasks_cli.core.task_manager import TaskManager
 from gtasks_cli.utils.logger import setup_logger
-from gtasks_cli.models.task import Priority
+from gtasks_cli.utils.display import display_tasks_grouped_by_list
 
-class TaskStateManager:
-    """Manage task state for interactive mode"""
-    def __init__(self):
-        self.numbered_tasks = []
-    
-    def set_tasks(self, tasks):
-        """Set the current list of tasks"""
-        self.numbered_tasks[:] = tasks
-    
-    def get_tasks(self):
-        """Get the current list of tasks"""
-        return self.numbered_tasks[:]
-    
-    def get_task_by_index(self, index):
-        """Get a task by its 1-based index"""
-        if 1 <= index <= len(self.numbered_tasks):
-            return self.numbered_tasks[index - 1]
-        return None
-
-# Set up logger
 logger = setup_logger(__name__)
 
-# Global task state manager
-task_state = TaskStateManager()
+# State for interactive mode
+class TaskState:
+    """Hold state for interactive mode"""
+    def __init__(self):
+        self.tasks = []
+        self.task_number_to_id = {}
+        self.task_id_to_number = {}
+    
+    def set_tasks(self, tasks: List[Task]):
+        """Set tasks and create mappings"""
+        self.tasks = tasks
+        self.task_number_to_id = {}
+        self.task_id_to_number = {}
+        
+        for i, task in enumerate(tasks, 1):
+            self.task_number_to_id[i] = task.id
+            self.task_id_to_number[task.id] = i
+    
+    def get_task_by_number(self, number: int) -> Task:
+        """Get task by its display number"""
+        if number in self.task_number_to_id:
+            task_id = self.task_number_to_id[number]
+            for task in self.tasks:
+                if task.id == task_id:
+                    return task
+        return None
+    
+    def get_number_by_task_id(self, task_id: str) -> int:
+        """Get display number by task ID"""
+        return self.task_id_to_number.get(task_id)
+
+# Global state for interactive mode
+task_state = TaskState()
 
 
 @click.command()
-@click.argument('list_filter', required=False, type=str)
-@click.option('--status', type=click.Choice(['pending', 'in_progress', 'completed', 'waiting', 'deleted']), 
-              help='Filter by status')
-@click.option('--priority', type=click.Choice(['low', 'medium', 'high', 'critical']), 
-              help='Filter by priority')
-@click.option('--project', help='Filter by project')
+@click.argument('list_filter', required=False)
+@click.option('--status', '-s', type=click.Choice(['pending', 'in_progress', 'completed', 'waiting', 'deleted']), 
+              help='Filter tasks by status')
+@click.option('--priority', '-p', type=click.Choice(['low', 'medium', 'high', 'critical']), 
+              help='Filter tasks by priority')
+@click.option('--project', '-P', help='Filter tasks by project')
 @click.option('--recurring', '-r', is_flag=True, help='Show only recurring tasks')
-@click.option('--filter', 'time_filter', type=click.Choice([
-    'today', 'this_week', 'this_month', 'last_month', 'last_3m', 'last_6m', 'last_year'
-]), help='Filter by time period')
-@click.option('--search', help='Search in task title and description')
+@click.option('--filter', '-f', 'time_filter', 
+              type=click.Choice(['today', 'this_week', 'this_month', 'last_month', 'last_3m', 'last_6m', 'last_year']),
+              help='Filter tasks by time period')
+@click.option('--search', '-S', help='Search tasks by title, description, or notes')
+@click.option('--account', '-a', help='Account name for multi-account support')
 @click.pass_context
-def list(ctx, list_filter, status, priority, project, recurring, time_filter, search):
-    """List all tasks, optionally filtered by task list name
+def list(ctx, list_filter, status, priority, project, recurring, time_filter, search, account):
+    """List tasks with optional filtering.
     
-    \b
-    Examples:
-      # List all tasks
-      gtasks list
-      
-      # List tasks from lists containing "My" in the name
-      gtasks list "My"
-      
-      # List only pending tasks
-      gtasks list --status pending
-      
-      # List high priority tasks from lists containing "Work"
-      gtasks list "Work" --priority high
-      
-      # List tasks for a specific project
-      gtasks list --project "Project X"
-      
-      # List only recurring tasks
-      gtasks list --recurring
-      
-      # List tasks from the last 3 months with "meeting" in title or description
-      gtasks list --filter last_3m --search "meeting"
-      
-      # List pending tasks from lists with "Work" in name, from this month
-      gtasks list "Work" --status pending --filter this_month
-      
-      # List using Google Tasks directly
-      gtasks list -g
+    LIST_FILTER: Filter tasks by list name (partial match, case insensitive)
     """
-    use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
+    use_google_tasks = ctx.obj.get('use_google_tasks', False)
     storage_backend = ctx.obj.get('storage_backend', 'json')
-    logger.info(f"Listing tasks {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
-    # Import here to avoid issues with module loading
-    from gtasks_cli.core.task_manager import TaskManager
-    from gtasks_cli.models.task import TaskStatus
-    
-    # Create task manager
-    task_manager = TaskManager(use_google_tasks=use_google_tasks, storage_backend=storage_backend)
-    
-    # Convert string parameters to enums where needed
-    status_enum = TaskStatus(status) if status else None
-    priority_enum = Priority(priority) if priority else None
-    
-    if use_google_tasks:
-        # For Google Tasks, we can filter by list name
-        from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
-        client = GoogleTasksClient()
-        tasklists = client.list_tasklists()
-        
-        # Filter tasklists by name if filter provided
-        if list_filter:
-            tasklists = [tl for tl in tasklists if list_filter.lower() in tl.get('title', '').lower()]
-        
-        if not tasklists:
-            click.echo("No matching task lists found.")
-            return
-        
-        total_tasks = 0
-        all_tasks = []
-        for tasklist in tasklists:
-            tasklist_id = tasklist['id']
-            tasklist_title = tasklist.get('title', 'Untitled List')
-            
-            tasks = task_manager.list_tasks_by_list(
-                tasklist_id=tasklist_id,
-                status=status_enum,
-                priority=priority_enum,
-                project=project
-            )
-            
-            # Apply additional filters
-            tasks = _apply_additional_filters(tasks, time_filter, search, recurring)
-            
-            if tasks:
-                click.echo(f"\n{tasklist_title}")
-                _display_tasks(tasks, start_number=total_tasks + 1)
-                all_tasks.extend(tasks)
-                total_tasks += len(tasks)
-            else:
-                click.echo(f"\n{tasklist_title}")
-                click.echo("  (No tasks)")
-        
-        # Store tasks for interactive mode
-        task_state.set_tasks(all_tasks)
-        
-        # Summary
-        click.echo(f"\nSummary: {len(tasklists)} list(s) with {total_tasks} total task(s)")
+    # Determine the account to use
+    if account:
+        # Explicitly specified account
+        account_name = account
     else:
-        # For local tasks, list_filter is not applicable
+        # Check context object for account
+        account_name = ctx.obj.get('account_name')
+    
+    logger.info(f"Listing tasks {'(Google Tasks)' if use_google_tasks else '(Local)'} for account: {account_name or 'default'}")
+    
+    # Create task manager with account support
+    task_manager = TaskManager(
+        use_google_tasks=use_google_tasks,
+        storage_backend=storage_backend,
+        account_name=account_name
+    )
+    
+    # Convert string parameters to enums
+    status_enum = None
+    if status:
+        status_enum = TaskStatus[status.upper()]
+    
+    priority_enum = None
+    if priority:
+        priority_enum = Priority[priority.upper()]
+    
+    # Get tasks with all filters
+    try:
         tasks = task_manager.list_tasks(
+            list_filter=list_filter,
             status=status_enum,
             priority=priority_enum,
-            project=project
+            project=project,
+            recurring=recurring if recurring else None,
+            search=search
         )
-        
-        # Apply additional filters
-        tasks = _apply_additional_filters(tasks, time_filter, search, recurring)
-        
-        if not tasks:
-            click.echo("No tasks found.")
-            return
-        
-        click.echo("Tasks")
-        _display_tasks(tasks)
-        
-        # Store tasks for interactive mode
-        task_state.set_tasks(tasks)
-
-
-def _apply_additional_filters(tasks, time_filter, search, recurring):
-    """Apply additional filters to tasks"""
-    # Filter for recurring tasks if requested
-    if recurring:
-        tasks = [task for task in tasks if task.is_recurring]
+    except Exception as e:
+        logger.error(f"Error retrieving tasks: {e}")
+        click.echo(f"❌ Error retrieving tasks: {e}")
+        return
     
     # Apply time filter
     if time_filter:
-        tasks = _filter_by_time(tasks, time_filter)
+        tasks = _filter_tasks_by_time(tasks, time_filter)
     
-    # Apply search filter with multi-search support
-    if search:
-        # Split search terms by pipe separator for multi-search
-        search_terms = [term.strip() for term in search.split('|') if term.strip()]
-        
-        filtered_tasks = []
-        for task in tasks:
-            match_found = False
-            
-            # Check if any of the search terms match
-            for term in search_terms:
-                term_lower = term.lower()
-                if (term_lower in (task.title or '').lower() or 
-                    term_lower in (task.description or '').lower() or
-                    term_lower in (task.notes or '').lower()):
-                    match_found = True
-                    break
-            
-            # Only include tasks that match at least one search term
-            if match_found:
-                filtered_tasks.append(task)
-        
-        tasks = filtered_tasks
+    # For Google Tasks, we need to filter for incomplete tasks by default
+    if use_google_tasks:
+        tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
     
-    return tasks
+    # Display tasks grouped by list names with color coding
+    display_tasks_grouped_by_list(tasks)
+    
+    # Store current tasks in task_state for interactive mode
+    task_state.set_tasks(tasks)
 
 
-def _filter_by_time(tasks, time_filter):
+
+
+def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
     """Filter tasks by time period"""
-    # Use timezone-naive datetimes for comparison to avoid timezone issues
-    now = datetime.now().replace(tzinfo=None)
+    now = datetime.now()
     
-    if time_filter == 'today':
+    if filter_type == 'today':
         start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = start_of_day + timedelta(days=1)
-        tasks = [t for t in tasks if t.due and start_of_day <= _normalize_datetime(t.due) < end_of_day]
+        return [t for t in tasks if t.due and start_of_day <= t.due < end_of_day]
     
-    elif time_filter == 'this_week':
-        # Start of week (Monday)
+    elif filter_type == 'this_week':
         start_of_week = now - timedelta(days=now.weekday())
         start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_week = start_of_week + timedelta(days=7)
-        tasks = [t for t in tasks if t.due and start_of_week <= _normalize_datetime(t.due) < end_of_week]
+        end_of_week = start_of_week + timedelta(weeks=1)
+        return [t for t in tasks if t.due and start_of_week <= t.due < end_of_week]
     
-    elif time_filter == 'this_month':
-        # Start of month
+    elif filter_type == 'this_month':
         start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        # End of month
         if now.month == 12:
             end_of_month = now.replace(year=now.year + 1, month=1, day=1)
         else:
             end_of_month = now.replace(month=now.month + 1, day=1)
-        tasks = [t for t in tasks if t.due and start_of_month <= _normalize_datetime(t.due) < end_of_month]
+        return [t for t in tasks if t.due and start_of_month <= t.due < end_of_month]
     
-    elif time_filter == 'last_month':
-        # Start of last month
+    elif filter_type == 'last_month':
         if now.month == 1:
             start_of_month = now.replace(year=now.year - 1, month=12, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_of_month = now.replace(year=now.year, month=1, day=1)
         else:
             start_of_month = now.replace(month=now.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        
-        # End of last month
-        end_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        tasks = [t for t in tasks if t.due and start_of_month <= _normalize_datetime(t.due) < end_of_month]
+            end_of_month = now.replace(day=1)
+        return [t for t in tasks if t.due and start_of_month <= t.due < end_of_month]
     
-    elif time_filter == 'last_3m':
-        # Start of 3 months ago
-        months_ago = now.month - 3
-        years_ago = now.year
-        while months_ago <= 0:
-            months_ago += 12
-            years_ago -= 1
-        start_of_period = now.replace(year=years_ago, month=months_ago, day=1, hour=0, minute=0, second=0, microsecond=0)
-        # End is today
-        end_of_period = now
-        tasks = [t for t in tasks if t.due and start_of_period <= _normalize_datetime(t.due) <= end_of_period]
+    elif filter_type == 'last_3m':
+        start_date = now - timedelta(days=90)
+        return [t for t in tasks if t.due and start_date <= t.due <= now]
     
-    elif time_filter == 'last_6m':
-        # Start of 6 months ago
-        months_ago = now.month - 6
-        years_ago = now.year
-        while months_ago <= 0:
-            months_ago += 12
-            years_ago -= 1
-        start_of_period = now.replace(year=years_ago, month=months_ago, day=1, hour=0, minute=0, second=0, microsecond=0)
-        # End is today
-        end_of_period = now
-        tasks = [t for t in tasks if t.due and start_of_period <= _normalize_datetime(t.due) <= end_of_period]
+    elif filter_type == 'last_6m':
+        start_date = now - timedelta(days=180)
+        return [t for t in tasks if t.due and start_date <= t.due <= now]
     
-    elif time_filter == 'last_year':
-        # Start of last year
-        start_of_year = now.replace(year=now.year - 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        # End of last year
-        end_of_year = now.replace(year=now.year, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        tasks = [t for t in tasks if t.due and start_of_year <= _normalize_datetime(t.due) < end_of_year]
+    elif filter_type == 'last_year':
+        start_date = now - timedelta(days=365)
+        return [t for t in tasks if t.due and start_date <= t.due <= now]
     
     return tasks
 
 
-def _normalize_datetime(dt):
-    """Normalize datetime to timezone-naive for comparison"""
-    if dt is None:
-        return None
-    if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
-        # Convert to naive datetime by removing timezone info
-        return dt.replace(tzinfo=None)
-    return dt
-
-
-def _display_tasks(tasks, start_number=1, show_list_title=False):
-    """Helper function to display tasks with consistent formatting
-    
-    Args:
-        tasks: List of tasks to display
-        start_number: Starting number for task enumeration
-        show_list_title: Whether to show list titles (for Google Tasks mode)
-    """
-    for i, task in enumerate(tasks, start_number):
-        # For enum values, we need to check if they are already strings or enum instances
-        status_value = task.status if isinstance(task.status, str) else task.status.value
-        priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
-        
-        # Format the task line with priority indicator
-        priority_indicators = {
-            'low': '🔽',
-            'medium': '🔸', 
-            'high': '🔺',
-            'critical': '💥'
-        }
-        priority_icon = priority_indicators.get(priority_value, '🔸')
-        
-        # Format due date
-        due_str = ""
-        if task.due:
-            days_diff = (task.due.date() - datetime.now().date()).days
-            if days_diff == 0:
-                due_str = " (Today)"
-            elif days_diff == 1:
-                due_str = " (Tomorrow)"
-            elif days_diff < 0:
-                due_str = f" ({abs(days_diff)} days overdue)"
-            else:
-                due_str = f" (in {days_diff} days)"
-        
-        # Build the task line
-        task_line = f"{i:2d}. {priority_icon} {task.title}{due_str}"
-        
-        # Add list title if in Google Tasks mode and available
-        if show_list_title and hasattr(task, 'list_title') and task.list_title:
-            task_line += f" [{task.list_title}]"
-        
-        click.echo(task_line)
-        
-        # Display description if available (with word wrapping)
-        if task.description:
-            # Simple word wrapping
-            words = task.description.split()
-            line = ""
-            for word in words:
-                if len(line + word) <= 60:
-                    line += word + " "
-                else:
-                    click.echo(f"     📝 {line.strip()}")
-                    line = word + " "
-            if line:
-                click.echo(f"     📝 {line.strip()}")
-        
-        # Display notes if available (with word wrapping)
-        if task.notes:
-            # Simple word wrapping
-            words = task.notes.split()
-            line = ""
-            for word in words:
-                if len(line + word) <= 60:
-                    line += word + " "
-                else:
-                    click.echo(f"     📝 {line.strip()}")
-                    line = word + " "
-            if line:
-                click.echo(f"     📝 {line.strip()}")

@@ -4,6 +4,7 @@ Sync command for the Google Tasks CLI application.
 """
 
 import click
+import os
 from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.core.task_manager import TaskManager
 
@@ -11,23 +12,38 @@ logger = setup_logger(__name__)
 
 
 @click.command()
+@click.option('--account', '-a', help='Account name for multi-account support')
 @click.pass_context
-def sync(ctx):
+def sync(ctx, account):
     """Synchronize tasks between local storage and Google Tasks."""
     storage_backend = ctx.obj.get('storage_backend', 'json')
     
-    logger.info(f"Synchronizing with Google Tasks using {storage_backend} storage backend")
+    # Determine the account to use
+    if account:
+        # Explicitly specified account
+        account_name = account
+    else:
+        # Check context object for account
+        account_name = ctx.obj.get('account_name')
     
-    # Create task manager with Google Tasks enabled and the selected storage backend
-    task_manager = TaskManager(use_google_tasks=True, storage_backend=storage_backend)
+    logger.info(f"Synchronizing with Google Tasks using {storage_backend} storage backend for account: {account_name or 'default'}")
+    
+    # Create task manager with Google Tasks enabled, the selected storage backend, and account
+    task_manager = TaskManager(use_google_tasks=True, storage_backend=storage_backend, account_name=account_name)
     
     # Perform synchronization
     success = task_manager.sync_with_google_tasks()
     
     if success:
-        click.echo("✅ Synchronization with Google Tasks completed successfully!")
+        if account_name:
+            click.echo(f"✅ Synchronization with Google Tasks completed successfully for account '{account_name}'!")
+        else:
+            click.echo("✅ Synchronization with Google Tasks completed successfully!")
         logger.info("Synchronization completed successfully")
     else:
-        click.echo("❌ Failed to synchronize with Google Tasks!")
+        if account_name:
+            click.echo(f"❌ Failed to synchronize with Google Tasks for account '{account_name}'!")
+        else:
+            click.echo("❌ Failed to synchronize with Google Tasks!")
         logger.error("Synchronization failed")
         exit(1)

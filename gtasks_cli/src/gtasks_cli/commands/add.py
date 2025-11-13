@@ -13,27 +13,43 @@ logger = setup_logger(__name__)
 
 
 @click.command()
-@click.option('--title', '-t', required=True, help='Task title')
+@click.argument('title')
 @click.option('--description', '-d', help='Task description')
-@click.option('--due', '-u', help='Due date/time (ISO format)')
-@click.option('--priority', '-p', type=click.Choice([p.value for p in Priority]), 
-              default=Priority.MEDIUM.value, help='Task priority')
-@click.option('--project', '-j', help='Project name')
-@click.option('--tags', '-g', multiple=True, help='Task tags')
-@click.option('--list-name', '-l', help='Task list name (for local mode)')
+@click.option('--due', '-D', help='Due date (ISO format or natural language)')
+@click.option('--priority', '-p', type=click.Choice(['low', 'medium', 'high', 'critical']), 
+              default='medium', help='Task priority')
+@click.option('--project', '-P', help='Project name')
+@click.option('--tags', '-t', multiple=True, help='Task tags')
 @click.option('--notes', '-n', help='Additional notes')
-@click.option('--recurring', '-r', help='Recurrence rule (e.g., "RRULE:FREQ=DAILY")')
+@click.option('--recurrence', '-r', help='Recurrence rule (e.g., "daily", "weekly", "monthly")')
+@click.option('--list-name', '-l', help='Task list name')
+@click.option('--estimated-duration', '-e', type=int, help='Estimated duration in minutes')
+@click.option('--account', '-a', help='Account name for multi-account support')
 @click.pass_context
-def add(ctx, title, description, due, priority, project, tags, list_name, notes, recurring):
+def add(ctx, title, description, due, priority, project, tags, notes, recurrence, list_name, estimated_duration, account):
     """Add a new task."""
     use_google_tasks = ctx.obj.get('use_google_tasks', False)
     storage_backend = ctx.obj.get('storage_backend', 'json')
     
-    # Create task manager with the selected storage backend
-    task_manager = TaskManager(use_google_tasks=use_google_tasks, storage_backend=storage_backend)
+    # Determine the account to use
+    if account:
+        # Explicitly specified account
+        account_name = account
+    else:
+        # Check context object for account
+        account_name = ctx.obj.get('account_name')
     
-    # Convert priority string back to enum
-    priority_enum = Priority(priority)
+    logger.info(f"Adding task {'(Google Tasks)' if use_google_tasks else '(Local)'} for account: {account_name or 'default'}")
+    
+    # Create task manager with account support
+    task_manager = TaskManager(
+        use_google_tasks=use_google_tasks,
+        storage_backend=storage_backend,
+        account_name=account_name
+    )
+    
+    # Convert priority string to enum
+    priority_enum = Priority[priority.upper()]
     
     # Create the task
     task = task_manager.create_task(
@@ -49,8 +65,9 @@ def add(ctx, title, description, due, priority, project, tags, list_name, notes,
     )
     
     if task:
-        click.echo(f"Task created successfully: {task.title} (ID: {task.id})")
-        logger.info(f"Created task: {task.title}")
+        click.echo(f"✅ Task added successfully: {task.title}")
+        logger.info(f"Task added successfully: {task.title}")
     else:
-        click.echo("Failed to create task")
-        logger.error("Failed to create task")
+        click.echo("❌ Failed to add task")
+        logger.error("Failed to add task")
+        exit(1)

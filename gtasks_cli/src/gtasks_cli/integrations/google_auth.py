@@ -20,39 +20,76 @@ SCOPES = ['https://www.googleapis.com/auth/tasks']
 class GoogleAuthManager:
     """Manages Google OAuth2 authentication for Google Tasks API."""
     
-    def __init__(self, credentials_file: str = None, token_file: str = None):
+    def __init__(self, credentials_file: str = None, token_file: str = None, account_name: str = None):
         """
         Initialize the GoogleAuthManager.
         
         Args:
             credentials_file: Path to the client credentials JSON file
             token_file: Path to the token pickle file
+            account_name: Name of the account for multi-account support
         """
-        self.credentials_file = credentials_file or self._get_default_credentials_file()
-        self.token_file = token_file or self._get_default_token_file()
+        self.account_name = account_name
+        
+        if account_name:
+            # For multi-account support, use account-specific paths
+            config_dir_env = os.environ.get('GTASKS_CONFIG_DIR')
+            if config_dir_env:
+                config_dir = config_dir_env
+            else:
+                config_dir = os.path.join(os.path.expanduser("~"), ".gtasks", account_name)
+            
+            # Ensure the directory exists
+            os.makedirs(config_dir, exist_ok=True)
+            
+            self.credentials_file = credentials_file or os.path.join(config_dir, "credentials.json")
+            self.token_file = token_file or os.path.join(config_dir, "token.pickle")
+        else:
+            # Default behavior
+            self.credentials_file = credentials_file or self._get_default_credentials_file()
+            self.token_file = token_file or self._get_default_token_file()
+            
         self.credentials = None
         
     def _get_default_credentials_file(self) -> str:
         """Get the default credentials file path."""
         # Check if credentials file is in the config directory
-        config_dir = os.path.join(os.path.expanduser("~"), ".gtasks")
+        config_dir_env = os.environ.get('GTASKS_CONFIG_DIR')
+        if config_dir_env:
+            config_dir = config_dir_env
+        else:
+            config_dir = os.path.join(os.path.expanduser("~"), ".gtasks")
+            
+        # Ensure the directory exists
+        os.makedirs(config_dir, exist_ok=True)
         credentials_file = os.path.join(config_dir, "credentials.json")
         return credentials_file
     
     def _get_default_token_file(self) -> str:
         """Get the default token file path."""
-        config_dir = os.path.join(os.path.expanduser("~"), ".gtasks")
+        config_dir_env = os.environ.get('GTASKS_CONFIG_DIR')
+        if config_dir_env:
+            config_dir = config_dir_env
+        else:
+            config_dir = os.path.join(os.path.expanduser("~"), ".gtasks")
+            
+        # Ensure the directory exists
+        os.makedirs(config_dir, exist_ok=True)
         token_file = os.path.join(config_dir, "token.pickle")
         return token_file
     
     def _save_credentials(self):
         """Save credentials to file."""
         try:
+            # Ensure the directory exists before saving
+            os.makedirs(os.path.dirname(self.token_file), exist_ok=True)
             with open(self.token_file, 'wb') as token:
                 pickle.dump(self.credentials, token)
             logger.debug(f"Saved credentials to {self.token_file}")
+            logger.info(f"Credentials saved successfully at {self.token_file}")
         except Exception as e:
             logger.error(f"Error saving credentials: {e}")
+            raise  # Re-raise the exception for better traceability
     
     def authenticate(self):
         """Authenticate with Google and return credentials."""

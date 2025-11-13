@@ -16,25 +16,47 @@ logger = setup_logger(__name__)
 class SQLiteStorage:
     """SQLite-based storage for tasks."""
     
-    def __init__(self, storage_path: str = None):
+    def __init__(self, storage_path: str = None, account_name: str = None):
         """
         Initialize the SQLiteStorage.
         
         Args:
             storage_path: Path to SQLite database file. If None, uses default location.
+            account_name: Name of the account for multi-account support
         """
-        if storage_path is None:
+        # Check for GTASKS_CONFIG_DIR environment variable for multi-account support
+        config_dir_env = os.environ.get('GTASKS_CONFIG_DIR')
+        
+        if account_name:
+            # For multi-account support, use account-specific paths
+            if config_dir_env:
+                storage_dir = Path(config_dir_env)
+            else:
+                storage_dir = Path.home() / '.gtasks' / account_name
+            
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            self.storage_path = storage_dir / 'tasks.db'
+            logger.info(f"Using SQLite storage at: {self.storage_path} for account: {account_name}")
+        elif config_dir_env:
+            # Use custom config directory but default database name
+            storage_dir = Path(config_dir_env)
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            self.storage_path = storage_dir / 'tasks.db'
+            logger.info(f"Using SQLite storage at: {self.storage_path} (custom config directory)")
+        elif storage_path is None:
             # Default storage location
             storage_dir = Path.home() / '.gtasks'
             storage_dir.mkdir(parents=True, exist_ok=True)
             self.storage_path = storage_dir / 'tasks.db'
+            logger.info(f"Using SQLite storage at: {self.storage_path} (default location)")
         else:
             self.storage_path = Path(storage_path)
+            logger.info(f"Using SQLite storage at: {self.storage_path} (custom path)")
             
-        logger.debug(f"SQLiteStorage initialized with file: {self.storage_path}")
-        self._initialize_database()
+        # Initialize database
+        self._init_db()
     
-    def _initialize_database(self) -> None:
+    def _init_db(self) -> None:
         """Initialize the database with required tables."""
         try:
             with sqlite3.connect(self.storage_path) as conn:
@@ -100,7 +122,7 @@ class SQLiteStorage:
                     # Log the task being saved
                     logger.debug(f"Saving task: {task.get('id')} - {task.get('title')} - {task.get('status')}")
                     
-                    # Serialize list fields as JSON
+                    # Serialize lists to JSON strings
                     tags_json = json.dumps(task.get('tags', []))
                     dependencies_json = json.dumps(task.get('dependencies', []))
                     
@@ -115,71 +137,96 @@ class SQLiteStorage:
                         task.get('id'),
                         task.get('title'),
                         task.get('description'),
-                        task.get('due').isoformat() if task.get('due') else None,
-                        task.get('priority'),
-                        task.get('status'),
+                        task.get('due'),
+                        task.get('priority', 'medium'),
+                        task.get('status', 'pending'),
                         task.get('project'),
                         tags_json,
                         task.get('notes'),
                         dependencies_json,
                         task.get('recurrence_rule'),
-                        task.get('created_at').isoformat() if task.get('created_at') else None,
-                        task.get('modified_at').isoformat() if task.get('modified_at') else None,
-                        task.get('completed_at').isoformat() if task.get('completed_at') else None,
+                        task.get('created_at'),
+                        task.get('modified_at'),
+                        task.get('completed_at'),
                         task.get('estimated_duration'),
                         task.get('actual_duration'),
-                        task.get('is_recurring'),
+                        task.get('is_recurring', False),
                         task.get('recurring_task_id'),
                         task.get('tasklist_id')
                     ))
+                    
+                    # Save list mapping if available
+                    if 'list_name' in task:
+                        cursor.execute('''
+                            INSERT OR REPLACE INTO task_lists (task_id, list_name)
+                            VALUES (?, ?)
+                        ''', (task.get('id'), task.get('list_name')))
                 
                 conn.commit()
-                logger.debug(f"Saved {len(tasks)} tasks to database")
+                logger.debug(f"Successfully saved {len(tasks)} tasks to database")
         except sqlite3.Error as e:
             logger.error(f"Error saving tasks to database: {e}")
+            raise
     
     def load_tasks(self) -> List[Dict[str, Any]]:
         """
         Load tasks from SQLite database.
         
         Returns:
-            List[Dict[str, Any]]: List of task dictionaries
+            List of task dictionaries
         """
         try:
             with sqlite3.connect(self.storage_path) as conn:
-                conn.row_factory = sqlite3.Row  # Enable column access by name
                 cursor = conn.cursor()
                 
-                cursor.execute('SELECT * FROM tasks')
-                rows = cursor.fetchall()
+                cursor.execute('''
+                    SELECT 
+                        id, title, description, due, priority, status, project,
+                        tags, notes, dependencies, recurrence_rule, created_at,
+                        modified_at, completed_at, estimated_duration, actual_duration,
+                        is_recurring, recurring_task_id, tasklist_id
+                    FROM tasks
+                ''')
                 
+                rows = cursor.fetchall()
                 tasks = []
+                
                 for row in rows:
-                    # Convert row to dictionary
-                    task = dict(row)
+                    # Parse JSON strings back to lists
+                    tags = json.loads(row[7]) if row[7] else []
+                    dependencies = json.loads(row[9]) if row[9] else []
                     
-                    # Deserialize JSON fields
-                    if task['tags']:
-                        try:
-                            task['tags'] = json.loads(task['tags'])
-                        except (json.JSONDecodeError, TypeError):
-                            task['tags'] = []
-                    
-                    if task['dependencies']:
-                        try:
-                            task['dependencies'] = json.loads(task['dependencies'])
-                        except (json.JSONDecodeError, TypeError):
-                            task['dependencies'] = []
-                    
-                    # Convert datetime strings back to datetime objects
-                    for date_field in ['due', 'created_at', 'modified_at', 'completed_at']:
-                        if task[date_field]:
-                            try:
-                                task[date_field] = datetime.fromisoformat(task[date_field])
-                            except ValueError:
-                                task[date_field] = None
-                    
+                    task = {
+                        'id': row[0],
+                        'title': row[1],
+                        'description': row[2],
+                        'due': row[3],
+                        'priority': row[4],
+                        'status': row[5],
+                        'project': row[6],
+                        'tags': tags,
+                        'notes': row[8],
+                        'dependencies': dependencies,
+                        'recurrence_rule': row[10],
+                        'created_at': row[11],
+                        'modified_at': row[12],
+                        'completed_at': row[13],
+                        'estimated_duration': row[14],
+                        'actual_duration': row[15],
+                        'is_recurring': row[16],
+                        'recurring_task_id': row[17],
+                        'tasklist_id': row[18]
+                    }
                     tasks.append(task)
+                
+                # Load list mappings
+                cursor.execute('SELECT task_id, list_name FROM task_lists')
+                list_mappings = {row[0]: row[1] for row in cursor.fetchall()}
+                
+                # Add list names to tasks
+                for task in tasks:
+                    if task['id'] in list_mappings:
+                        task['list_name'] = list_mappings[task['id']]
                 
                 logger.debug(f"Loaded {len(tasks)} tasks from database")
                 return tasks
@@ -187,128 +234,56 @@ class SQLiteStorage:
             logger.error(f"Error loading tasks from database: {e}")
             return []
     
-    def save_list_mapping(self, list_mapping: Dict[str, str]) -> None:
+    def load_list_mapping(self) -> Dict[str, str]:
         """
-        Save task list mapping to SQLite database.
+        Load task list mappings from database.
+        
+        Returns:
+            Dictionary mapping task IDs to list names
+        """
+        try:
+            with sqlite3.connect(self.storage_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT task_id, list_name FROM task_lists')
+                mappings = {row[0]: row[1] for row in cursor.fetchall()}
+                logger.debug(f"Loaded {len(mappings)} list mappings from database")
+                return mappings
+        except sqlite3.Error as e:
+            logger.error(f"Error loading list mappings from database: {e}")
+            return {}
+    
+    def save_list_mapping(self, mapping: Dict[str, str]) -> None:
+        """
+        Save task list mappings to database.
         
         Args:
-            list_mapping: Dictionary mapping task IDs to list names
+            mapping: Dictionary mapping task IDs to list names
         """
         try:
             with sqlite3.connect(self.storage_path) as conn:
                 cursor = conn.cursor()
                 
-                for task_id, list_name in list_mapping.items():
+                for task_id, list_name in mapping.items():
                     cursor.execute('''
                         INSERT OR REPLACE INTO task_lists (task_id, list_name)
                         VALUES (?, ?)
                     ''', (task_id, list_name))
                 
                 conn.commit()
-                logger.debug(f"Saved {len(list_mapping)} list mappings to database")
+                logger.debug(f"Saved {len(mapping)} list mappings to database")
         except sqlite3.Error as e:
-            logger.error(f"Error saving list mapping to database: {e}")
+            logger.error(f"Error saving list mappings to database: {e}")
+            raise
     
-    def load_list_mapping(self) -> Dict[str, str]:
-        """
-        Load task list mapping from SQLite database.
-        
-        Returns:
-            Dict[str, str]: Dictionary mapping task IDs to list names
-        """
+    def clear_tasks(self) -> None:
+        """Clear all tasks from the database."""
         try:
             with sqlite3.connect(self.storage_path) as conn:
-                conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
-                
-                cursor.execute('SELECT task_id, list_name FROM task_lists')
-                rows = cursor.fetchall()
-                
-                list_mapping = {row['task_id']: row['list_name'] for row in rows}
-                logger.debug(f"Loaded {len(list_mapping)} list mappings from database")
-                return list_mapping
+                cursor.execute('DELETE FROM tasks')
+                cursor.execute('DELETE FROM task_lists')
+                conn.commit()
+                logger.debug("Cleared all tasks from database")
         except sqlite3.Error as e:
-            logger.error(f"Error loading list mapping from database: {e}")
-            return {}
-    
-    def query_tasks(self, list_name: Optional[str] = None, status: Optional[str] = None, 
-                   search: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Query tasks with filters - demonstrates SQLite's querying capabilities.
-        
-        Args:
-            list_name: Filter by list name
-            status: Filter by task status
-            search: Search in title or description
-            
-        Returns:
-            List[Dict[str, Any]]: List of matching task dictionaries
-        """
-        try:
-            with sqlite3.connect(self.storage_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                
-                # Build query dynamically
-                query = "SELECT t.* FROM tasks t"
-                conditions = []
-                params = []
-                
-                # Join with task_lists if filtering by list name
-                if list_name:
-                    query += " LEFT JOIN task_lists tl ON t.id = tl.task_id"
-                    conditions.append("tl.list_name LIKE ?")
-                    params.append(f"%{list_name}%")
-                
-                # Add status filter
-                if status:
-                    conditions.append("t.status = ?")
-                    params.append(status)
-                
-                # Add search filter
-                if search:
-                    conditions.append("(t.title LIKE ? OR t.description LIKE ?)")
-                    params.extend([f"%{search}%", f"%{search}%"])
-                
-                # Complete query
-                if conditions:
-                    query += " WHERE " + " AND ".join(conditions)
-                
-                query += " ORDER BY t.due ASC, t.created_at DESC"
-                
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
-                
-                tasks = []
-                for row in rows:
-                    # Convert row to dictionary
-                    task = dict(row)
-                    
-                    # Deserialize JSON fields
-                    if task['tags']:
-                        try:
-                            task['tags'] = json.loads(task['tags'])
-                        except (json.JSONDecodeError, TypeError):
-                            task['tags'] = []
-                    
-                    if task['dependencies']:
-                        try:
-                            task['dependencies'] = json.loads(task['dependencies'])
-                        except (json.JSONDecodeError, TypeError):
-                            task['dependencies'] = []
-                    
-                    # Convert datetime strings back to datetime objects
-                    for date_field in ['due', 'created_at', 'modified_at', 'completed_at']:
-                        if task[date_field]:
-                            try:
-                                task[date_field] = datetime.fromisoformat(task[date_field])
-                            except ValueError:
-                                task[date_field] = None
-                    
-                    tasks.append(task)
-                
-                logger.debug(f"Queried {len(tasks)} tasks from database")
-                return tasks
-        except sqlite3.Error as e:
-            logger.error(f"Error querying tasks from database: {e}")
-            return []
+            logger.error(f"Error clearing tasks from database: {e}")
+            raise

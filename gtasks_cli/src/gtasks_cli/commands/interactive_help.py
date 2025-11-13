@@ -275,3 +275,95 @@ def show_quit_help():
     console.print("  - Either [yellow]quit[/yellow] or [yellow]exit[/yellow] can be used")
     console.print("  - No confirmation is required")
     console.print("  - All changes are automatically saved")
+
+
+def show_help(cmd=None):
+    """Display help for a specific command or general help"""
+    if cmd is None:
+        # Display general help
+        console.print("[bold blue]Interactive Mode Commands:[/bold blue]")
+        console.print("  [green]view <number>[/green]          View details of a task by its number")
+        console.print("  [green]done <number>[/green]          Mark a task as completed")
+        console.print("  [green]delete <number>[/green]        Delete a task")
+        console.print("  [green]update <number>[/green]        Update a task")
+        console.print("  [green]add[/green]                    Add a new task")
+        console.print("  [green]list [filter][/green]          List tasks with optional filters")
+        console.print("  [green]search <query>[/green]         Search for tasks")
+        console.print("  [green]account [name][/green]         Show current account or switch to another")
+        console.print("  [green]help <command>[/green]         Show detailed help for a command")
+        console.print("  [green]quit[/green] or [green]exit[/green]        Exit interactive mode")
+        
+        console.print("\n[bold blue]Account Management:[/bold blue]")
+        console.print("You can switch between different Google accounts:")
+        console.print("  [green]account[/green]                Show the current account")
+        console.print("  [green]account <name>[/green]         Switch to a different account")
+        console.print("Accounts are isolated - each has its own credentials, tokens, and database.")
+
+    elif cmd == 'view':
+        # Display detailed help for view command
+        show_view_help()
+
+    elif cmd == 'done':
+        # Display detailed help for done command
+        show_done_help()
+
+    elif cmd == 'delete':
+        # Display detailed help for delete command
+        show_delete_help()
+
+    elif cmd == 'update':
+        # Display detailed help for update command
+        show_update_help()
+
+    elif cmd == 'add':
+        # Display detailed help for add command
+        show_add_help()
+
+    elif cmd == 'list':
+        # Display detailed help for list command
+        show_list_help()
+
+    elif cmd == 'search':
+        # Display detailed help for search command
+        show_search_help()
+
+    elif cmd == 'account':
+        # Display detailed help for account command
+        console.print(Panel("[bold blue]Account Command Help[/bold blue]", expand=False))
+        
+        console.print("[bold]Description:[/bold]")
+        console.print("Manage Google Tasks accounts in interactive mode. You can check the current")
+        console.print("account or switch to a different one without exiting interactive mode.\n")
+        
+        console.print("[bold]Usage:[/bold]")
+        console.print("  account")
+        console.print("  account <account_name>\n")
+        
+        console.print("[bold]Examples:[/bold]")
+        console.print("  [green]# Show current account[/green]")
+        console.print("  account\n")
+        
+        console.print("  [green]# Switch to 'work' account[/green]")
+        console.print("  account work\n")
+        
+        console.print("  [green]# Switch to 'personal' account[/green]")
+        console.print("  account personal\n")
+        
+        console.print("[bold]Notes:[/bold]")
+        console.print("• Account switching is session-specific")
+        console.print("• Each account has isolated data (credentials, tokens, database)")
+        console.print("• You need to authenticate each account separately")
+        console.print("• Use 'gtasks account use <name>' to set default accounts")
+
+    elif cmd == 'quit':
+        # Display detailed help for quit command
+        show_quit_help()
+
+    elif cmd == 'exit':
+        # Display detailed help for exit command
+        show_quit_help()
+
+    else:
+        # Display error message for unknown command
+        console.print(f"[bold red]Unknown command: {cmd}[/bold red]")
+        console.print("Type 'help' to see a list of available commands.")

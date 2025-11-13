@@ -17,23 +17,41 @@ logger = setup_logger(__name__)
 class GoogleTasksClient:
     """Client for interacting with the Google Tasks API."""
     
-    def __init__(self, credentials_file: str = None, token_file: str = None):
+    def __init__(self, credentials_file: str = None, token_file: str = None, account_name: str = None):
         """
         Initialize the GoogleTasksClient.
         
         Args:
             credentials_file: Path to the client credentials JSON file
             token_file: Path to the token pickle file
+            account_name: Name of the account for multi-account support
         """
         # Set default paths if not provided
-        if credentials_file is None:
-            credentials_file = os.path.join(os.path.expanduser("~"), ".gtasks", "credentials.json")
-        if token_file is None:
-            token_file = os.path.join(os.path.expanduser("~"), ".gtasks", "token.pickle")
+        if account_name:
+            # For multi-account support, use account-specific paths
+            config_dir_env = os.environ.get('GTASKS_CONFIG_DIR')
+            if config_dir_env:
+                config_dir = os.path.join(config_dir_env)
+            else:
+                config_dir = os.path.join(os.path.expanduser("~"), ".gtasks", account_name)
+                
+            os.makedirs(config_dir, exist_ok=True)
+            
+            if credentials_file is None:
+                credentials_file = os.path.join(config_dir, "credentials.json")
+            if token_file is None:
+                token_file = os.path.join(config_dir, "token.pickle")
+        else:
+            # Default behavior
+            if credentials_file is None:
+                credentials_file = os.path.join(os.path.expanduser("~"), ".gtasks", "credentials.json")
+            if token_file is None:
+                token_file = os.path.join(os.path.expanduser("~"), ".gtasks", "token.pickle")
             
         self.credentials_file = credentials_file
         self.token_file = token_file
-        self.auth_manager = GoogleAuthManager(credentials_file, token_file)
+        self.account_name = account_name
+        self.auth_manager = GoogleAuthManager(credentials_file, token_file, account_name)
         self.service = None
         self._default_tasklist_id = None
         logger.debug(f"GoogleTasksClient initialized with credentials: {credentials_file}, token: {token_file}")
@@ -105,19 +123,13 @@ class GoogleTasksClient:
         Returns:
             The title of the tasklist or None if not found
         """
-        # Connect if not already connected
-        if not self.service:
-            if not self.connect():
-                logger.error("Failed to connect to Google Tasks API")
-                return None
-            
         try:
-            tasklist = self.service.tasklists().get(tasklistId=tasklist_id).execute()
-            return tasklist.get('title', 'Unknown List')
-        except HttpError as error:
-            logger.error(f"Error getting tasklist {tasklist_id}: {error}")
+            tasklist = self.service.tasklists().get(tasklist=tasklist_id).execute()
+            return tasklist.get('title')
+        except Exception as e:
+            logger.error(f"Error getting tasklist title: {e}")
             return None
-    
+
     def create_task(self, task_data, existing_signatures: Optional[Set[str]] = None):
         """
         Create a new task in Google Tasks.

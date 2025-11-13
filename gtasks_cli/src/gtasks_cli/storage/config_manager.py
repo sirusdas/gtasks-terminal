@@ -14,17 +14,29 @@ logger = setup_logger(__name__)
 class ConfigManager:
     """Manages application configuration."""
     
-    def __init__(self, config_path: str = None):
+    def __init__(self, config_path: str = None, account_name: str = None):
         """
         Initialize the ConfigManager.
         
         Args:
             config_path: Path to config file. If None, uses default location.
+            account_name: Name of the account for multi-account support.
         """
-        if config_path is None:
+        # Check for GTASKS_CONFIG_DIR environment variable for multi-account support
+        config_dir_env = os.environ.get('GTASKS_CONFIG_DIR')
+        if config_dir_env:
+            config_dir = Path(config_dir_env)
+        else:
             # Default config location
             config_dir = Path.home() / '.gtasks'
-            config_dir.mkdir(parents=True, exist_ok=True)
+            
+            # For account-specific configs, use the account directory
+            if account_name:
+                config_dir = config_dir / account_name
+        
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+        if config_path is None:
             self.config_path = config_dir / 'config.yaml'
         else:
             self.config_path = Path(config_path)
@@ -48,7 +60,8 @@ class ConfigManager:
                 'colors': True,
                 'table_style': 'simple',
                 'max_width': 100
-            }
+            },
+            'accounts': {}  # For multi-account support
         }
         
         # If config file doesn't exist, create it with default values
@@ -125,3 +138,39 @@ class ConfigManager:
         # Save the updated configuration
         self._save_config(self.config)
         logger.debug(f"Set config key '{key}' to '{value}'")
+    
+    def get_account_config(self, account_name: str) -> Dict[str, Any]:
+        """
+        Get configuration for a specific account.
+        
+        Args:
+            account_name: Name of the account
+            
+        Returns:
+            Account configuration dictionary
+        """
+        accounts = self.get('accounts', {})
+        return accounts.get(account_name, {})
+    
+    def set_account_config(self, account_name: str, config: Dict[str, Any]) -> None:
+        """
+        Set configuration for a specific account.
+        
+        Args:
+            account_name: Name of the account
+            config: Account configuration
+        """
+        accounts = self.get('accounts', {})
+        accounts[account_name] = config
+        self.set('accounts', accounts)
+    
+    @staticmethod
+    def get_global_config() -> 'ConfigManager':
+        """
+        Get the global configuration manager.
+        
+        Returns:
+            ConfigManager: Global configuration manager
+        """
+        global_config_path = Path.home() / '.gtasks' / 'config.yaml'
+        return ConfigManager(config_path=str(global_config_path))
