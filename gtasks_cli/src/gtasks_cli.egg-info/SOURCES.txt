@@ -35,6 +35,7 @@ src/gtasks_cli/reports/__init__.py
 src/gtasks_cli/storage/__init__.py
 src/gtasks_cli/storage/config_manager.py
 src/gtasks_cli/storage/local_storage.py
+src/gtasks_cli/storage/sqlite_storage.py
 src/gtasks_cli/ui/__init__.py
 src/gtasks_cli/utils/__init__.py
 src/gtasks_cli/utils/exceptions.py

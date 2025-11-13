@@ -39,6 +39,7 @@ def search(ctx, query, status, priority, project, recurring):
       gtasks search -g "important"
     """
     use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
+    storage_backend = ctx.obj.get('storage_backend', 'json')
     logger.info(f"Searching tasks {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
     # Import here to avoid issues with module loading
@@ -46,15 +47,15 @@ def search(ctx, query, status, priority, project, recurring):
     from gtasks_cli.models.task import TaskStatus
     from gtasks_cli.commands.list import task_state
     
-    # Create task manager
-    task_manager = TaskManager(use_google_tasks=use_google_tasks)
+    # Create task manager with the selected storage backend
+    task_manager = TaskManager(use_google_tasks=use_google_tasks, storage_backend=storage_backend)
     
     # Convert string parameters to enums where needed
     status_enum = TaskStatus(status) if status else None
     priority_enum = Priority(priority) if priority else None
     
-    # Search tasks
-    tasks = task_manager.search_tasks(query)
+    # Search tasks using list_tasks with search parameter
+    tasks = task_manager.list_tasks(search=query)
     
     # Apply additional filters
     if status_enum:

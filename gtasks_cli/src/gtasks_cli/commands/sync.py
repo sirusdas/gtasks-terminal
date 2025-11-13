@@ -1,41 +1,33 @@
 #!/usr/bin/env python3
 """
-Sync command for Google Tasks CLI
+Sync command for the Google Tasks CLI application.
 """
 
 import click
 from gtasks_cli.utils.logger import setup_logger
+from gtasks_cli.core.task_manager import TaskManager
 
-# Set up logger
 logger = setup_logger(__name__)
 
 
 @click.command()
 @click.pass_context
 def sync(ctx):
-    """Synchronize tasks with Google Tasks"""
-    use_offline = ctx.obj.get('OFFLINE_MODE', False)
+    """Synchronize tasks between local storage and Google Tasks."""
+    storage_backend = ctx.obj.get('storage_backend', 'json')
     
-    if use_offline:
-        logger.info("Synchronization skipped - Offline mode enabled")
-        click.echo("🚫 Cannot synchronize: Offline mode is active")
-        return
+    logger.info(f"Synchronizing with Google Tasks using {storage_backend} storage backend")
     
-    logger.info("Synchronizing with Google Tasks")
+    # Create task manager with Google Tasks enabled and the selected storage backend
+    task_manager = TaskManager(use_google_tasks=True, storage_backend=storage_backend)
     
-    # Import here to avoid issues with module loading
-    from gtasks_cli.core.task_manager import TaskManager
+    # Perform synchronization
+    success = task_manager.sync_with_google_tasks()
     
-    # Create task manager with Google Tasks enabled
-    task_manager = TaskManager(use_google_tasks=True)
-    
-    try:
-        if task_manager.sync_with_google_tasks():
-            click.echo("✅ Synchronization with Google Tasks completed successfully!")
-        else:
-            click.echo("❌ Failed to synchronize with Google Tasks!")
-            exit(1)
-    except Exception as e:
-        logger.error(f"Synchronization error: {e}")
-        click.echo(f"❌ Synchronization error: {str(e)}")
+    if success:
+        click.echo("✅ Synchronization with Google Tasks completed successfully!")
+        logger.info("Synchronization completed successfully")
+    else:
+        click.echo("❌ Failed to synchronize with Google Tasks!")
+        logger.error("Synchronization failed")
         exit(1)

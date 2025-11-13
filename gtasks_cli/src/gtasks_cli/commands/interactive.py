@@ -5,6 +5,7 @@ Interactive mode for Google Tasks CLI
 
 import click
 import shlex
+from collections import defaultdict
 from typing import List
 from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.models.task import Task, TaskStatus, Priority
@@ -19,6 +20,27 @@ try:
     HAS_PROMPT_TOOLKIT = True
 except ImportError:
     HAS_PROMPT_TOOLKIT = False
+
+
+def _display_tasks_grouped_by_list(tasks, start_number=1):
+    """Display tasks grouped by their list names"""
+    # Group tasks by list title
+    tasks_by_list = defaultdict(list)
+    for task in tasks:
+        list_title = getattr(task, 'list_title', 'Unknown List')
+        tasks_by_list[list_title].append(task)
+    
+    # Display tasks grouped by list
+    task_index = start_number
+    all_tasks = []
+    for list_title, list_tasks in tasks_by_list.items():
+        click.echo(f"\nList Name: \"{list_title}\"")
+        for i, task in enumerate(list_tasks, task_index):
+            _display_single_task(i, task)
+            all_tasks.append(task)
+        task_index += len(list_tasks)
+    
+    return all_tasks
 
 
 @click.command()
@@ -42,7 +64,8 @@ def interactive(ctx):
       help              - Show this help
       quit/exit         - Exit interactive mode
     """
-    use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
+    use_google_tasks = ctx.obj.get('use_google_tasks', False)
+    storage_backend = ctx.obj.get('storage_backend', 'sqlite')
     logger.info(f"Starting interactive mode {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
     # Import here to avoid issues with module loading
@@ -50,7 +73,10 @@ def interactive(ctx):
     from gtasks_cli.commands.list import task_state
     
     # Create task manager
-    task_manager = TaskManager(use_google_tasks=use_google_tasks)
+    task_manager = TaskManager(
+        use_google_tasks=use_google_tasks,
+        storage_backend=storage_backend
+    )
     
     # Get all tasks
     tasks = task_manager.list_tasks()
@@ -60,7 +86,7 @@ def interactive(ctx):
         return
     
     # Display tasks with numbers
-    _display_numbered_tasks(tasks)
+    _display_tasks_grouped_by_list(tasks)
     
     # Store current tasks in task_state
     task_state.set_tasks(tasks)
@@ -101,91 +127,122 @@ def interactive(ctx):
                 click.echo("Exiting interactive mode.")
                 break
             elif cmd == 'list':
-                # Handle list command with all its options
-                if len(command_parts) > 1:
-                    # Parse list command arguments manually
-                    list_filter = None
-                    status = None
-                    priority = None
-                    project = None
-                    recurring = False
-                    time_filter = None
-                    search_query = None
-                    
-                    # Parse arguments
-                    i = 1
-                    while i < len(command_parts):
-                        arg = command_parts[i]
-                        if arg.startswith('--'):
-                            option = arg[2:]  # Remove --
-                            if option == 'status' and i + 1 < len(command_parts):
-                                status = command_parts[i + 1]
-                                i += 2
-                            elif option == 'priority' and i + 1 < len(command_parts):
-                                priority = command_parts[i + 1]
-                                i += 2
-                            elif option == 'project' and i + 1 < len(command_parts):
-                                project = command_parts[i + 1]
-                                i += 2
-                            elif option == 'recurring':
-                                recurring = True
-                                i += 1
-                            elif option == 'filter' and i + 1 < len(command_parts):
-                                time_filter = command_parts[i + 1]
-                                i += 2
-                            elif option == 'search' and i + 1 < len(command_parts):
-                                search_query = command_parts[i + 1]
-                                i += 2
-                            else:
-                                # Unknown option, skip
-                                i += 1
-                        else:
-                            # Positional argument (list filter)
-                            if list_filter is None:
-                                list_filter = arg
+                # Parse list command with filters
+                list_filter = None
+                status_filter = None
+                priority_filter = None
+                project_filter = None
+                recurring_filter = False
+                time_filter = None
+                search_filter = None
+
+                # Parse arguments
+                i = 1
+                while i < len(command_parts):
+                    part = command_parts[i]
+                    if part.startswith('--'):
+                        if part == '--status' and i + 1 < len(command_parts):
+                            status_filter = command_parts[i + 1]
+                            i += 2
+                        elif part == '--priority' and i + 1 < len(command_parts):
+                            priority_filter = command_parts[i + 1]
+                            i += 2
+                        elif part == '--project' and i + 1 < len(command_parts):
+                            project_filter = command_parts[i + 1]
+                            i += 2
+                        elif part in ['--recurring', '-r']:
+                            recurring_filter = True
                             i += 1
-                    
-                    # Apply filters using task manager
-                    try:
-                        # Convert string parameters to enums where needed
-                        status_enum = TaskStatus(status) if status else None
-                        priority_enum = Priority(priority) if priority else None
+                        elif part == '--filter' and i + 1 < len(command_parts):
+                            time_filter = command_parts[i + 1]
+                            i += 2
+                        elif part == '--search' and i + 1 < len(command_parts):
+                            search_filter = command_parts[i + 1]
+                            i += 2
+                        else:
+                            i += 1
+                    else:
+                        # Positional argument (list filter)
+                        list_filter = part
+                        i += 1
+
+                # Convert string filters to enum where needed
+                status_enum = TaskStatus(status_filter) if status_filter else None
+                priority_enum = Priority(priority_filter) if priority_filter else None
+
+                if use_google_tasks:
+                    from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
+                    client = GoogleTasksClient()
+                    tasklists = client.list_tasklists()
+
+                    if list_filter:
+                        tasklists = [tl for tl in tasklists if list_filter.lower() in tl.get('title', '').lower()]
+
+                    if not tasklists:
+                        click.echo("No matching task lists found.")
+                        continue
+
+                    # Display tasks grouped by list names
+                    all_tasks = []
+                    for tasklist in tasklists:
+                        tasklist_id = tasklist['id']
+                        tasklist_title = tasklist.get('title', 'Untitled List')
+                        # Get tasks for this specific tasklist
+                        tasks = task_manager.list_tasks()  # Get all tasks first
+                        # Filter tasks by tasklist_id
+                        tasks = [t for t in tasks if getattr(t, 'tasklist_id', None) == tasklist_id]
                         
-                        # Get filtered tasks
-                        filtered_tasks = task_manager.list_tasks(
-                            status=status_enum,
-                            priority=priority_enum,
-                            project=project
-                        )
-                        
-                        # Apply additional filters manually
-                        if recurring:
-                            filtered_tasks = [task for task in filtered_tasks if task.is_recurring]
+                        # Apply additional filters
+                        if status_enum:
+                            tasks = [t for t in tasks if t.status == status_enum]
                             
-                        # Apply time filter
+                        if priority_enum:
+                            tasks = [t for t in tasks if t.priority == priority_enum]
+                            
+                        if project_filter:
+                            tasks = [t for t in tasks if t.project == project_filter]
+
+                        if recurring_filter:
+                            tasks = [t for t in tasks if t.is_recurring]
+
                         if time_filter:
-                            filtered_tasks = _filter_by_time(filtered_tasks, time_filter)
-                            
-                        # Apply search filter
-                        if search_query:
-                            search_lower = search_query.lower()
-                            filtered_tasks = [
-                                task for task in filtered_tasks 
-                                if search_lower in (task.title or '').lower() 
-                                or search_lower in (task.description or '').lower()
-                                or search_lower in (task.notes or '').lower()
-                            ]
+                            tasks = task_manager.filter_tasks_by_time(tasks, time_filter)
+
+                        if search_filter:
+                            tasks = [t for t in tasks if search_filter.lower() in t.title.lower() or 
+                                    (t.description and search_filter.lower() in t.description.lower())]
+
+                        # Add list_title to each task for grouping display
+                        for task in tasks:
+                            task.list_title = tasklist_title
                         
-                        # Display filtered tasks
-                        _display_numbered_tasks(filtered_tasks)
-                        task_state.set_tasks(filtered_tasks)
-                    except Exception as e:
-                        click.echo(f"Error applying filters: {e}")
+                        all_tasks.extend(tasks)
+                    
+                    # Display tasks grouped by list names
+                    displayed_tasks = _display_tasks_grouped_by_list(all_tasks)
+                    task_state.tasks = displayed_tasks
                 else:
-                    # Simple list all
-                    tasks = task_manager.list_tasks()
-                    _display_numbered_tasks(tasks)
-                    task_state.set_tasks(tasks)
+                    # Local mode with list filtering support
+                    all_tasks = task_manager.list_tasks(
+                        list_filter=list_filter,
+                        status=status_enum,
+                        priority=priority_enum,
+                        project=project_filter,
+                        recurring=recurring_filter
+                    )
+
+                    # Apply additional filters
+                    if time_filter:
+                        all_tasks = task_manager.filter_tasks_by_time(all_tasks, time_filter)
+
+                    if search_filter:
+                        all_tasks = [t for t in all_tasks if search_filter.lower() in t.title.lower() or 
+                                    (t.description and search_filter.lower() in t.description.lower())]
+
+                    # For local mode, we'll group by a default list name
+                    
+                    displayed_tasks = _display_tasks_grouped_by_list(all_tasks)
+                    task_state.tasks = displayed_tasks
             elif cmd == 'view':
                 if len(command_parts) < 2:
                     click.echo("Usage: view <number>")
@@ -213,7 +270,7 @@ def interactive(ctx):
                             click.echo(f"Task '{task.title}' marked as completed.")
                             # Refresh task list
                             tasks = task_manager.list_tasks()
-                            _display_numbered_tasks(tasks)
+                            _display_tasks_grouped_by_list(tasks)
                             task_state.set_tasks(tasks)
                         else:
                             click.echo("Failed to mark task as completed.")
@@ -236,7 +293,7 @@ def interactive(ctx):
                                 click.echo(f"Task '{task.title}' deleted.")
                                 # Refresh task list
                                 tasks = task_manager.list_tasks()
-                                _display_numbered_tasks(tasks)
+                                _display_tasks_grouped_by_list(tasks)
                                 task_state.set_tasks(tasks)
                             else:
                                 click.echo("Failed to delete task.")
@@ -254,7 +311,7 @@ def interactive(ctx):
                     click.echo("Task created successfully.")
                     # Refresh task list
                     tasks = task_manager.list_tasks()
-                    _display_numbered_tasks(tasks)
+                    _display_tasks_grouped_by_list(tasks)
                     task_state.set_tasks(tasks)
                 else:
                     click.echo("Failed to create task.")
@@ -267,7 +324,7 @@ def interactive(ctx):
                 search_results = task_manager.search_tasks(query)
                 if search_results:
                     click.echo(f"\nSearch results for '{query}':")
-                    _display_numbered_tasks(search_results)
+                    _display_tasks_grouped_by_list(search_results)
                     task_state.set_tasks(search_results)
                 else:
                     click.echo(f"No tasks found matching '{query}'.")
@@ -390,54 +447,66 @@ def _normalize_datetime(dt):
     return dt
 
 
-def _display_numbered_tasks(tasks: List[Task]):
-    """Display tasks with sequential numbers"""
+def _display_tasks(tasks, start_number=1):
+    """Display tasks with numbering"""
     click.echo("\nTasks:")
-    for i, task in enumerate(tasks, 1):
-        # For enum values, we need to check if they are already strings or enum instances
-        status_value = task.status if isinstance(task.status, str) else task.status.value
-        priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
-        
-        status_icon = {
-            'pending': '⏳',
-            'in_progress': '🔄',
-            'completed': '✅',
-            'waiting': '⏸️',
-            'deleted': '🗑️'
-        }.get(status_value, '❓')
-        
-        priority_icon = {
-            'low': '🔽',
-            'medium': '🔸',
-            'high': '🔺',
-            'critical': '💥'
-        }.get(priority_value, '🔹')
-        
-        # Format due date if present
-        due_info = ""
-        if task.due:
-            due_info = f" 📅 {task.due.strftime('%Y-%m-%d')}"
-        
-        # Format project if present
-        project_info = ""
-        if task.project:
-            project_info = f" 📁 {task.project}"
-        
-        # Format tags if present
-        tags_info = ""
-        if task.tags:
-            tags_info = f" 🏷️  {', '.join(task.tags)}"
-        
-        # Format recurring info
-        recurring_info = ""
-        if task.is_recurring:
-            recurring_info = " 🔁"
-        
-        # Display task with number
-        click.echo(f"  {i:2d}. {task.id[:8]}: {status_icon} {priority_icon} {task.title}{due_info}{project_info}{tags_info}{recurring_info}")
+    for i, task in enumerate(tasks, start_number):
+        _display_single_task(i, task)
 
 
-def _view_task_details(task: Task):
+def _display_single_task(number, task):
+    """Display a single task with its number"""
+    # For enum values, we need to check if they are already strings or enum instances
+    status_value = task.status if isinstance(task.status, str) else task.status.value
+    priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
+    
+    status_icon = {
+        'pending': '⏳',
+        'in_progress': '🔄',
+        'completed': '✅',
+        'waiting': '⏸️',
+        'deleted': '🗑️'
+    }.get(status_value, '❓')
+    
+    priority_icon = {
+        'low': '🔽',
+        'medium': '🔸',
+        'high': '🔺',
+        'critical': '💥'
+    }.get(priority_value, '🔹')
+    
+    # Format due date if present
+    due_info = ""
+    if task.due:
+        due_info = f" 📅 {task.due.strftime('%Y-%m-%d')}"
+    
+    # Format project if present
+    project_info = ""
+    if task.project:
+        project_info = f" 📁 {task.project}"
+    
+    # Format tags if present
+    tags_info = ""
+    if task.tags:
+        tags_info = f" 🏷️  {', '.join(task.tags)}"
+    
+    # Format recurring info
+    recurring_info = ""
+    if task.is_recurring:
+        recurring_info = " 🔁"
+    
+    # Display task with number
+    click.echo(f"  {number:2d}. {task.id[:8]}: {status_icon} {priority_icon} {task.title}{due_info}{project_info}{tags_info}{recurring_info}")
+
+
+def _display_numbered_tasks(tasks, start_number=1):
+    """Display tasks with numbers (original display method)"""
+    click.echo("\nTasks:")
+    for i, task in enumerate(tasks, start_number):
+        _display_single_task(i, task)
+
+
+def _view_task_details(task):
     """Display detailed information about a task"""
     click.echo(f"\nTask Details:")
     click.echo(f"  ID: {task.id}")

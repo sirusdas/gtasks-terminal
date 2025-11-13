@@ -1,13 +1,15 @@
-"""
-Google Tasks API client for the Google Tasks CLI application.
-"""
-
-from typing import List, Dict, Optional, Set, Any
+import os
+import pickle
+from typing import List, Dict, Any, Optional, Set
 from datetime import datetime
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from gtasks_cli.models.task import Task, TaskStatus, Priority
-from gtasks_cli.integrations.google_auth import GoogleAuthManager
 from gtasks_cli.utils.logger import setup_logger
+from gtasks_cli.models.task import Task, TaskStatus, Priority
+from gtasks_cli.utils.task_deduplication import is_task_duplicate, create_task_signature
+from gtasks_cli.integrations.google_auth import GoogleAuthManager
 
 logger = setup_logger(__name__)
 
@@ -20,54 +22,55 @@ class GoogleTasksClient:
         Initialize the GoogleTasksClient.
         
         Args:
-            credentials_file: Path to credentials file
-            token_file: Path to token file
+            credentials_file: Path to the client credentials JSON file
+            token_file: Path to the token pickle file
         """
+        # Set default paths if not provided
+        if credentials_file is None:
+            credentials_file = os.path.join(os.path.expanduser("~"), ".gtasks", "credentials.json")
+        if token_file is None:
+            token_file = os.path.join(os.path.expanduser("~"), ".gtasks", "token.pickle")
+            
         self.credentials_file = credentials_file
         self.token_file = token_file
         self.auth_manager = GoogleAuthManager(credentials_file, token_file)
         self.service = None
-        self.connected = False
         self._default_tasklist_id = None
-        logger.debug("GoogleTasksClient initialized")
+        logger.debug(f"GoogleTasksClient initialized with credentials: {credentials_file}, token: {token_file}")
     
     def connect(self) -> bool:
         """
         Connect to the Google Tasks API.
         
         Returns:
-            True if connection successful, False otherwise
+            bool: True if connection was successful, False otherwise
         """
         try:
-            credentials = self.auth_manager.authenticate()
-            if not credentials:
-                logger.error("Failed to authenticate with Google")
+            self.service = self.auth_manager.get_service()
+            
+            if not self.service:
+                logger.error("Failed to get Google Tasks API service")
                 return False
-                
-            from googleapiclient.discovery import build
-            self.service = build('tasks', 'v1', credentials=credentials, cache_discovery=False)
-            self.connected = True
             
             # Get the default task list ID
             tasklists = self.service.tasklists().list().execute()
             for tasklist in tasklists.get('items', []):
                 if tasklist.get('kind') == 'tasks#taskList' and tasklist.get('title') == 'My Tasks':
                     self._default_tasklist_id = tasklist['id']
-                    break
             
-            # If we didn't find "My Tasks", use the first task list
+            # If "My Tasks" list not found, use the first available list
             if not self._default_tasklist_id and tasklists.get('items'):
                 self._default_tasklist_id = tasklists['items'][0]['id']
             
-            # Fallback to "@default" if nothing else works
+            # If no lists found, use a default ID
             if not self._default_tasklist_id:
                 self._default_tasklist_id = "@default"
-                
-            logger.info("Successfully connected to Google Tasks API")
+            
             logger.debug(f"Using tasklist ID: {self._default_tasklist_id}")
             return True
+            
         except Exception as e:
-            logger.error(f"Error connecting to Google Tasks API: {e}")
+            logger.error(f"Failed to connect to Google Tasks API: {e}")
             return False
     
     def list_tasklists(self) -> List[Dict[str, Any]]:
@@ -91,6 +94,29 @@ class GoogleTasksClient:
         except HttpError as error:
             logger.error(f"Error listing task lists: {error}")
             return []
+    
+    def get_tasklist_title(self, tasklist_id: str) -> Optional[str]:
+        """
+        Get the title of a tasklist by its ID.
+        
+        Args:
+            tasklist_id: The ID of the tasklist
+            
+        Returns:
+            The title of the tasklist or None if not found
+        """
+        # Connect if not already connected
+        if not self.service:
+            if not self.connect():
+                logger.error("Failed to connect to Google Tasks API")
+                return None
+            
+        try:
+            tasklist = self.service.tasklists().get(tasklistId=tasklist_id).execute()
+            return tasklist.get('title', 'Unknown List')
+        except HttpError as error:
+            logger.error(f"Error getting tasklist {tasklist_id}: {error}")
+            return None
     
     def create_task(self, task_data, existing_signatures: Optional[Set[str]] = None):
         """
@@ -137,8 +163,8 @@ class GoogleTasksClient:
         logger.debug(f"Default tasklist ID: {self._default_tasklist_id}")
         logger.debug(f"Final tasklist ID: {tasklist_id}")
         
-        # Import the deduplication utility here to avoid circular imports
-        from gtasks_cli.utils.task_deduplication import is_task_duplicate
+        # Use create_task_signature to precompute signatures for better performance
+        from gtasks_cli.utils.task_deduplication import is_task_duplicate, create_task_signature
             
         # Format the due date the same way it will be stored in Google Tasks
         formatted_due = None
@@ -164,14 +190,26 @@ class GoogleTasksClient:
             
         # Check if task already exists to prevent duplicates
         logger.debug(f"Checking for duplicate task: title='{title}', description='{description}', due='{formatted_due}', status='pending'")
-        is_duplicate = is_task_duplicate(
-            task_title=title, 
-            task_description=description or "", 
-            task_due_date=formatted_due or "", 
-            task_status="pending",
-            existing_signatures=existing_signatures,  # Pass existing signatures to avoid repeated API calls
-            use_google_tasks=True
+        
+        # Create a signature for this task
+        task_signature = create_task_signature(
+            title=title,
+            description=description or "",
+            due_date=formatted_due or ""
         )
+        
+        # If we have existing signatures, check against them
+        if existing_signatures:
+            is_duplicate = task_signature in existing_signatures
+        else:
+            # Fall back to checking against Google Tasks if no existing signatures provided
+            is_duplicate = is_task_duplicate(
+                task_title=title, 
+                task_description=description or "", 
+                task_due_date=formatted_due or "", 
+                task_status="pending",
+                use_google_tasks=True
+            )
         
         if is_duplicate:
             logger.info(f"Task '{title}' already exists. Skipping creation.")
@@ -284,6 +322,7 @@ class GoogleTasksClient:
                 # Convert to Task objects
                 for item in result.get('items', []):
                     task = self._convert_google_task_to_local(item)
+                    task.tasklist_id = tasklist_id  # Set the tasklist_id
                     tasks.append(task)
                 
                 # Check if there are more pages
@@ -306,7 +345,7 @@ class GoogleTasksClient:
             tasklist_id: The ID of the task list containing the task
             
         Returns:
-            Task object if found, None otherwise
+            Task object or None if not found
         """
         if not self.service:
             if not self.connect():
@@ -315,8 +354,13 @@ class GoogleTasksClient:
         tasklist_id = tasklist_id or self._default_tasklist_id or "@default"
         
         try:
-            result = self.service.tasks().get(tasklist=tasklist_id, task=task_id).execute()
-            task = self._convert_google_task_to_local(result)
+            task_result = self.service.tasks().get(
+                tasklist=tasklist_id,
+                task=task_id
+            ).execute()
+            
+            task = self._convert_google_task_to_local(task_result)
+            task.tasklist_id = tasklist_id  # Set the tasklist_id
             return task
         except Exception as e:
             logger.error(f"Error getting task from Google Tasks: {e}")
@@ -331,29 +375,29 @@ class GoogleTasksClient:
             tasklist_id: The ID of the task list containing the task
             
         Returns:
-            Updated Task object if successful, None otherwise
+            Updated Task object or None if update failed
         """
         if not self.service:
             if not self.connect():
                 return None
         
-        tasklist_id = tasklist_id or self._default_tasklist_id or "@default"
+        tasklist_id = tasklist_id or task.tasklist_id or self._default_tasklist_id or "@default"
         
         try:
+            # Convert local task to Google Tasks format
             google_task = self._convert_local_task_to_google(task)
-            # Make sure we have a tasklist_id in the google_task
-            if 'tasklist_id' not in google_task and tasklist_id:
-                google_task['tasklist_id'] = tasklist_id
             
+            # Update the task in Google Tasks
             result = self.service.tasks().update(
-                tasklist=tasklist_id, 
-                task=task.id, 
+                tasklist=tasklist_id,
+                task=task.id,
                 body=google_task
             ).execute()
             logger.info(f"Updated task in Google Tasks: {task.id}")
             
             # Convert back to local task format
             updated_task = self._convert_google_task_to_local(result)
+            updated_task.tasklist_id = tasklist_id  # Set the tasklist_id
             return updated_task
         except HttpError as e:
             logger.error(f"Failed to update task: {e}")

@@ -34,6 +34,7 @@ class Task(BaseModel):
     tags: List[str] = Field(default_factory=list)
     parent_id: Optional[str] = None
     tasklist_id: str
+    list_title: Optional[str] = None
     position: int = 0
     notes: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

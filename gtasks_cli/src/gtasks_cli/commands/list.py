@@ -80,6 +80,7 @@ def list(ctx, list_filter, status, priority, project, recurring, time_filter, se
       gtasks list -g
     """
     use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
+    storage_backend = ctx.obj.get('storage_backend', 'json')
     logger.info(f"Listing tasks {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
     # Import here to avoid issues with module loading
@@ -87,7 +88,7 @@ def list(ctx, list_filter, status, priority, project, recurring, time_filter, se
     from gtasks_cli.models.task import TaskStatus
     
     # Create task manager
-    task_manager = TaskManager(use_google_tasks=use_google_tasks)
+    task_manager = TaskManager(use_google_tasks=use_google_tasks, storage_backend=storage_backend)
     
     # Convert string parameters to enums where needed
     status_enum = TaskStatus(status) if status else None
@@ -262,84 +263,74 @@ def _normalize_datetime(dt):
     return dt
 
 
-def _display_tasks(tasks, start_number=1):
-    """Helper function to display tasks with consistent formatting"""
+def _display_tasks(tasks, start_number=1, show_list_title=False):
+    """Helper function to display tasks with consistent formatting
+    
+    Args:
+        tasks: List of tasks to display
+        start_number: Starting number for task enumeration
+        show_list_title: Whether to show list titles (for Google Tasks mode)
+    """
     for i, task in enumerate(tasks, start_number):
         # For enum values, we need to check if they are already strings or enum instances
         status_value = task.status if isinstance(task.status, str) else task.status.value
         priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
         
-        status_icon = {
-            'pending': '⏳',
-            'in_progress': '🔄',
-            'completed': '✅',
-            'waiting': '⏸️',
-            'deleted': '🗑️'
-        }.get(status_value, '❓')
-        
-        priority_icon = {
+        # Format the task line with priority indicator
+        priority_indicators = {
             'low': '🔽',
-            'medium': '🔸',
+            'medium': '🔸', 
             'high': '🔺',
             'critical': '💥'
-        }.get(priority_value, '🔹')
+        }
+        priority_icon = priority_indicators.get(priority_value, '🔸')
         
-        # Format due date if present
-        due_info = ""
+        # Format due date
+        due_str = ""
         if task.due:
-            due_info = f" 📅 {task.due.strftime('%Y-%m-%d')}"
+            days_diff = (task.due.date() - datetime.now().date()).days
+            if days_diff == 0:
+                due_str = " (Today)"
+            elif days_diff == 1:
+                due_str = " (Tomorrow)"
+            elif days_diff < 0:
+                due_str = f" ({abs(days_diff)} days overdue)"
+            else:
+                due_str = f" (in {days_diff} days)"
         
-        # Format project if present
-        project_info = ""
-        if task.project:
-            project_info = f" 📁 {task.project}"
+        # Build the task line
+        task_line = f"{i:2d}. {priority_icon} {task.title}{due_str}"
         
-        # Format tags if present
-        tags_info = ""
-        if task.tags:
-            tags_info = f" 🏷️  {', '.join(task.tags)}"
+        # Add list title if in Google Tasks mode and available
+        if show_list_title and hasattr(task, 'list_title') and task.list_title:
+            task_line += f" [{task.list_title}]"
         
-        # Format recurring info
-        recurring_info = ""
-        if task.is_recurring:
-            recurring_info = " 🔁"
+        click.echo(task_line)
         
-        # Display task with number and ID for reference
-        click.echo(f"  {i:2d}. {task.id[:8]}: {status_icon} {priority_icon} {task.title}{due_info}{project_info}{tags_info}{recurring_info}")
-        
-        # Show description if present
+        # Display description if available (with word wrapping)
         if task.description:
-            # Wrap description to fit nicely
-            desc_lines = []
+            # Simple word wrapping
             words = task.description.split()
             line = ""
             for word in words:
                 if len(line + word) <= 60:
                     line += word + " "
                 else:
-                    desc_lines.append(line.strip())
+                    click.echo(f"     📝 {line.strip()}")
                     line = word + " "
             if line:
-                desc_lines.append(line.strip())
-            
-            for j, line in enumerate(desc_lines):
-                prefix = "  │    " if j == 0 else "  │      "
-                click.echo(f"{prefix}{line}")
+                click.echo(f"     📝 {line.strip()}")
         
-        # Show notes if present and different from description
-        if task.notes and task.notes != task.description:
-            notes_lines = []
+        # Display notes if available (with word wrapping)
+        if task.notes:
+            # Simple word wrapping
             words = task.notes.split()
             line = ""
             for word in words:
                 if len(line + word) <= 60:
                     line += word + " "
                 else:
-                    notes_lines.append(line.strip())
+                    click.echo(f"     📝 {line.strip()}")
                     line = word + " "
             if line:
-                notes_lines.append(line.strip())
-            
-            for j, line in enumerate(notes_lines):
-                prefix = "  │    📝 " if j == 0 else "  │       "
-                click.echo(f"{prefix}{line}")
+                click.echo(f"     📝 {line.strip()}")

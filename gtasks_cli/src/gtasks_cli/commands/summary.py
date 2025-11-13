@@ -18,13 +18,17 @@ logger = setup_logger(__name__)
 def summary(ctx, list_id, detailed):
     """Generate a summary of tasks across all lists or a specific list"""
     use_google_tasks = ctx.obj.get('USE_GOOGLE_TASKS', False)
+    storage_backend = ctx.obj.get('storage_backend', 'json')
     logger.info(f"Generating task summary {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
     # Import here to avoid issues with module loading
     from gtasks_cli.core.task_manager import TaskManager
     
     # Create task manager
-    task_manager = TaskManager(use_google_tasks=use_google_tasks)
+    task_manager = TaskManager(
+        use_google_tasks=use_google_tasks,
+        storage_backend=storage_backend
+    )
     
     if use_google_tasks:
         # For Google Tasks, we need to use the Google client directly to get task lists
@@ -206,4 +210,6 @@ def summary(ctx, list_id, detailed):
         if total_tasks_all_lists > 0:
             completion_rate = total_completed_all_lists / total_tasks_all_lists * 100
             click.echo(f"   Completion rate: {completion_rate:.1f}%")
+
+
 

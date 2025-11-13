@@ -153,7 +153,12 @@ def is_task_duplicate(task_title: str,
         True if task is duplicate, False otherwise
     """
     # Create signature for the task to check
-    task_signature = create_task_signature(task_title, task_description, task_due_date, task_status)
+    task_signature = create_task_signature(
+        title=task_title, 
+        description=task_description, 
+        due_date=task_due_date, 
+        status=task_status
+    )
     logger.debug(f"Checking for duplicate with signature: {task_signature}")
     
     # Use provided signatures or get fresh ones

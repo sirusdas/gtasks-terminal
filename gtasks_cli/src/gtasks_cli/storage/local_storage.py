@@ -26,8 +26,10 @@ class LocalStorage:
             storage_dir = Path.home() / '.gtasks'
             storage_dir.mkdir(parents=True, exist_ok=True)
             self.storage_path = storage_dir / 'tasks.json'
+            self.lists_path = storage_dir / 'lists.json'  # New file for list mappings
         else:
             self.storage_path = Path(storage_path)
+            self.lists_path = Path(storage_path).with_name('lists.json')
             
         logger.debug(f"LocalStorage initialized with file: {self.storage_path}")
     
@@ -87,3 +89,38 @@ class LocalStorage:
         except Exception as e:
             logger.error(f"Error loading tasks from {self.storage_path}: {e}")
             return []
+    
+    def save_list_mapping(self, list_mapping: Dict[str, str]) -> None:
+        """
+        Save task list mapping to storage.
+        
+        Args:
+            list_mapping: Dictionary mapping task IDs to list names
+        """
+        try:
+            logger.debug(f"Saving list mapping for {len(list_mapping)} tasks to {self.lists_path}")
+            with open(self.lists_path, 'w') as f:
+                json.dump(list_mapping, f, indent=2)
+            logger.debug(f"Saved list mapping to {self.lists_path}")
+        except Exception as e:
+            logger.error(f"Error saving list mapping to {self.lists_path}: {e}")
+    
+    def load_list_mapping(self) -> Dict[str, str]:
+        """
+        Load task list mapping from storage.
+        
+        Returns:
+            Dict[str, str]: Dictionary mapping task IDs to list names
+        """
+        if not self.lists_path.exists():
+            logger.debug(f"List mapping file {self.lists_path} does not exist, returning empty dict")
+            return {}
+            
+        try:
+            with open(self.lists_path, 'r') as f:
+                list_mapping = json.load(f)
+            logger.debug(f"Loaded list mapping with {len(list_mapping)} entries from {self.lists_path}")
+            return list_mapping
+        except Exception as e:
+            logger.error(f"Error loading list mapping from {self.lists_path}: {e}")
+            return {}
