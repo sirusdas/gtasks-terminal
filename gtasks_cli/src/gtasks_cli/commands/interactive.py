@@ -566,18 +566,33 @@ def interactive(ctx):
                     click.echo("Invalid task number. Please enter a valid integer.")
             elif cmd == 'search':
                 if len(command_parts) < 2:
-                    click.echo("Usage: search <query>")
+                    click.echo("Usage: search <query> [filters]")
                     continue
-                    
-                query = " ".join(command_parts[1:])
-                # Use list_tasks with search parameter instead of non-existent search_tasks method
+                
+                # Parse extended search command
+                query, time_filter, upcoming_filter, list_name, last_n_days, upcoming_n_days = _parse_search_command(command_parts)
+                
+                # Use list_tasks with search parameter
                 search_results = task_manager.list_tasks(search=query)
+                
+                # Apply list filter if provided
+                if list_name:
+                    search_results = [t for t in search_results if hasattr(t, 'list_title') and list_name.lower() in t.list_title.lower()]
+                
+                # Apply time filter
+                if time_filter:
+                    search_results = _filter_by_time_extended(search_results, time_filter, last_n_days)
+                
+                # Apply upcoming filter
+                if upcoming_filter:
+                    search_results = _filter_upcoming_tasks(search_results, upcoming_filter, upcoming_n_days)
+                
                 if search_results:
-                    click.echo(f"\nSearch results for '{query}':")
+                    click.echo(f"\nSearch results for '{query or '*'}':")
                     _display_tasks_grouped_by_list(search_results)
                     task_state.set_tasks(search_results)
                 else:
-                    click.echo(f"No tasks found matching '{query}'.")
+                    click.echo(f"No tasks found matching your criteria.")
                     # Keep current tasks unchanged
             elif cmd == 'help':
                 if len(command_parts) > 1:
@@ -648,6 +663,65 @@ def interactive(ctx):
         except Exception as e:
             logger.error(f"Error in interactive mode: {e}")
             click.echo(f"An error occurred: {e}")
+
+
+def _parse_search_command(command_parts):
+    """Parse search command with extended time filters"""
+    query_parts = []
+    time_filter = None
+    upcoming_filter = None
+    list_name = None
+    last_n_days = None
+    upcoming_n_days = None
+    
+    i = 1
+    while i < len(command_parts):
+        part = command_parts[i]
+        if part.startswith('--'):
+            if part == '--filter' and i + 1 < len(command_parts):
+                time_filter = command_parts[i + 1]
+                i += 2
+            elif part == '--list' and i + 1 < len(command_parts):
+                list_name = command_parts[i + 1]
+                i += 2
+            else:
+                # Collect unrecognized options as part of query
+                query_parts.append(part)
+                i += 1
+        else:
+            # Check for special time keywords
+            if part == 'today':
+                time_filter = 'today'
+            elif part == 'yesterday':
+                time_filter = 'yesterday'
+            elif part == 'this_week':
+                time_filter = 'this_week'
+            elif part.startswith('last_') and part.endswith('_days'):
+                try:
+                    n = int(part.split('_')[1])
+                    last_n_days = n
+                    time_filter = f'last_{n}_days'
+                except (ValueError, IndexError):
+                    query_parts.append(part)
+            elif part == 'upcoming':
+                upcoming_filter = 'upcoming'
+            elif part == 'upcoming_this_week':
+                upcoming_filter = 'upcoming_this_week'
+            elif part == 'upcoming_this_month':
+                upcoming_filter = 'upcoming_this_month'
+            elif part.startswith('upcoming_next_') and part.endswith('_days'):
+                try:
+                    n = int(part.split('_')[2])
+                    upcoming_n_days = n
+                    upcoming_filter = f'upcoming_next_{n}_days'
+                except (ValueError, IndexError):
+                    query_parts.append(part)
+            else:
+                query_parts.append(part)
+            i += 1
+    
+    query = ' '.join(query_parts) if query_parts else None
+    return query, time_filter, upcoming_filter, list_name, last_n_days, upcoming_n_days
 
 
 def _filter_by_time(tasks, time_filter):
@@ -849,3 +923,73 @@ def _view_task_details(task):
     # Create and print the panel
     panel = Panel("\n".join(panel_content), title="Task Details", expand=False, border_style="bright_black")
     console.print(panel)
+
+
+def _filter_by_time_extended(tasks, time_filter, last_n_days=None):
+    """Extended time filter supporting additional time periods"""
+    from datetime import datetime, timedelta
+    
+    # Use timezone-naive datetimes for comparison to avoid timezone issues
+    now = datetime.now().replace(tzinfo=None)
+    
+    if time_filter == 'today':
+        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = start_of_day + timedelta(days=1)
+        tasks = [t for t in tasks if t.due and start_of_day <= _normalize_datetime(t.due) < end_of_day]
+    
+    elif time_filter == 'yesterday':
+        start_of_yesterday = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_yesterday = start_of_yesterday + timedelta(days=1)
+        tasks = [t for t in tasks if t.due and start_of_yesterday <= _normalize_datetime(t.due) < end_of_yesterday]
+    
+    elif time_filter == 'this_week':
+        # Start of week (Monday)
+        start_of_week = now - timedelta(days=now.weekday())
+        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_week = start_of_week + timedelta(days=7)
+        tasks = [t for t in tasks if t.due and start_of_week <= _normalize_datetime(t.due) < end_of_week]
+    
+    elif time_filter.startswith('last_') and time_filter.endswith('_days') and last_n_days:
+        start_of_period = now - timedelta(days=last_n_days)
+        start_of_period = start_of_period.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_period = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        tasks = [t for t in tasks if t.due and start_of_period <= _normalize_datetime(t.due) <= end_of_period]
+    
+    return tasks
+
+
+def _filter_upcoming_tasks(tasks, upcoming_filter, upcoming_n_days=None):
+    """Filter for upcoming tasks"""
+    from datetime import datetime, timedelta
+    
+    # Use timezone-naive datetimes for comparison to avoid timezone issues
+    now = datetime.now().replace(tzinfo=None)
+    
+    if upcoming_filter == 'upcoming':
+        # All future tasks
+        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= now]
+    
+    elif upcoming_filter == 'upcoming_this_week':
+        # Future tasks this week
+        start_of_week = now - timedelta(days=now.weekday())
+        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_week = start_of_week + timedelta(days=7)
+        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= now and _normalize_datetime(t.due) < end_of_week]
+    
+    elif upcoming_filter == 'upcoming_this_month':
+        # Future tasks this month
+        start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # End of month
+        if now.month == 12:
+            end_of_month = now.replace(year=now.year + 1, month=1, day=1)
+        else:
+            end_of_month = now.replace(month=now.month + 1, day=1)
+        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= now and _normalize_datetime(t.due) < end_of_month]
+    
+    elif upcoming_filter.startswith('upcoming_next_') and upcoming_filter.endswith('_days') and upcoming_n_days:
+        # Future tasks in next N days
+        end_of_period = now + timedelta(days=upcoming_n_days)
+        end_of_period = end_of_period.replace(hour=23, minute=59, second=59, microsecond=999999)
+        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= now and _normalize_datetime(t.due) <= end_of_period]
+    
+    return tasks

@@ -203,6 +203,57 @@ def show_list_help():
     console.print("  - Combine multiple filters for more specific results")
 
 
+def show_search_help():
+    """Display detailed help for the search command"""
+    console.print(Panel("[bold blue]Search Command Help[/bold blue]", expand=False))
+    
+    console.print("[bold]Description:[/bold]")
+    console.print("Search for tasks by providing terms that will be matched against task titles,")
+    console.print("descriptions, and notes. Use the pipe character (|) to search for multiple")
+    console.print("terms with OR logic. You can also filter by date ranges and list names.\n")
+    
+    console.print("[bold]Usage:[/bold]")
+    console.print("  search <query> [filters]\n")
+    
+    console.print("[bold]Date Filters:[/bold]")
+    console.print("  [green]today[/green]                     Today's tasks")
+    console.print("  [green]yesterday[/green]                 Yesterday's tasks")
+    console.print("  [green]this_week[/green]                 This week's tasks")
+    console.print("  [green]last_N_days[/green]               Last N days (e.g., last_3_days, last_5_days)")
+    console.print("  [green]upcoming[/green]                  All upcoming tasks")
+    console.print("  [green]upcoming_this_week[/green]        Upcoming tasks this week")
+    console.print("  [green]upcoming_this_month[/green]       Upcoming tasks this month")
+    console.print("  [green]upcoming_next_N_days[/green]      Upcoming tasks in next N days (e.g., upcoming_next_3_days)\n")
+    
+    console.print("[bold]Other Filters:[/bold]")
+    console.print("  [green]--list LIST_NAME[/green]          Filter by list name\n")
+    
+    console.print("[bold]Examples:[/bold]")
+    console.print("  [green]# Search for tasks containing \"meeting\"[/green]")
+    console.print("  search meeting\n")
+    
+    console.print("  [green]# Search for tasks containing \"meeting\", \"project\", OR \"review\"[/green]")
+    console.print("  search \"meeting|project|review\"\n")
+    
+    console.print("  [green]# Search for tasks due today[/green]")
+    console.print("  search today\n")
+    
+    console.print("  [green]# Search for tasks due in the last 3 days[/green]")
+    console.print("  search last_3_days\n")
+    
+    console.print("  [green]# Search for upcoming tasks in the next 5 days[/green]")
+    console.print("  search upcoming_next_5_days\n")
+    
+    console.print("  [green]# Search for tasks in a specific list[/green]")
+    console.print("  search --list \"My Tasks\"\n")
+    
+    console.print("  [green]# Combined search with text and date filter[/green]")
+    console.print("  search report today\n")
+    
+    console.print("  [green]# Combined search with text and list filter[/green]")
+    console.print("  search meeting --list \"Work Projects\"\n")
+
+
 def show_quit_help():
     """Display detailed help for the quit/exit command"""
     console.print(Panel("[bold blue]Quit/Exit Command Help[/bold blue]", expand=False))

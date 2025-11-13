@@ -17,6 +17,7 @@ src/gtasks_cli/commands/deduplicate.py
 src/gtasks_cli/commands/delete.py
 src/gtasks_cli/commands/done.py
 src/gtasks_cli/commands/interactive.py
+src/gtasks_cli/commands/interactive_help.py
 src/gtasks_cli/commands/list.py
 src/gtasks_cli/commands/search.py
 src/gtasks_cli/commands/summary.py
