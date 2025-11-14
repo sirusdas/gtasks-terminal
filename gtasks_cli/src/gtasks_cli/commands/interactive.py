@@ -6,9 +6,11 @@ Interactive mode for Google Tasks CLI
 import click
 import shlex
 from collections import defaultdict
+from datetime import datetime, timedelta
 from typing import List
 from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.models.task import Task, TaskStatus, Priority
+from gtasks_cli.utils.datetime_utils import _normalize_datetime
 from rich.console import Console
 from rich.text import Text
 from rich.panel import Panel
@@ -46,6 +48,9 @@ from gtasks_cli.commands.interactive_help import (
     show_list_help,
     show_quit_help
 )
+
+# Import the time filter function
+from gtasks_cli.commands.list import _filter_tasks_by_time
 
 
 def _display_tasks_grouped_by_list(tasks, start_number=1):
@@ -370,12 +375,11 @@ def interactive(ctx):
                             tasks = [t for t in tasks if t.is_recurring]
 
                         if time_filter:
-                            tasks = task_manager.filter_tasks_by_time(tasks, time_filter)
+                            tasks = _filter_tasks_by_time(tasks, time_filter)
 
                         if search_filter:
                             tasks = [t for t in tasks if search_filter.lower() in t.title.lower() or 
                                     (t.description and search_filter.lower() in t.description.lower())]
-
                         # Add list_title to each task for grouping display
                         for task in tasks:
                             if not hasattr(task, 'list_title') or not task.list_title:
@@ -398,7 +402,7 @@ def interactive(ctx):
                     
                     # Apply time filter if provided
                     if time_filter:
-                        all_tasks = task_manager.filter_tasks_by_time(all_tasks, time_filter)
+                        all_tasks = _filter_tasks_by_time(all_tasks, time_filter)
                     
                     # Apply search filter if provided
                     if search_filter:
@@ -653,7 +657,6 @@ def interactive(ctx):
 
 def _filter_by_time(tasks, time_filter):
     """Filter tasks by time period"""
-    from datetime import datetime, timedelta
     
     # Use timezone-naive datetimes for comparison to avoid timezone issues
     now = datetime.now().replace(tzinfo=None)
@@ -725,14 +728,6 @@ def _filter_by_time(tasks, time_filter):
     return tasks
 
 
-def _normalize_datetime(dt):
-    """Normalize datetime to timezone-naive for comparison"""
-    if dt is None:
-        return None
-    if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
-        # Convert to naive datetime by removing timezone info
-        return dt.replace(tzinfo=None)
-    return dt
 
 
 def _display_tasks(tasks, start_number=1):

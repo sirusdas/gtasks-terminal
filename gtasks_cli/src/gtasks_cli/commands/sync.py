@@ -5,6 +5,7 @@ Sync command for the Google Tasks CLI application.
 
 import click
 import os
+import traceback
 from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.core.task_manager import TaskManager
 
@@ -46,4 +47,6 @@ def sync(ctx, account):
         else:
             click.echo("❌ Failed to synchronize with Google Tasks!")
         logger.error("Synchronization failed")
+        # Print more detailed error information
+        click.echo("For more details, check the logs or run with increased verbosity.")
         exit(1)

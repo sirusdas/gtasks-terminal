@@ -1,5 +1,6 @@
 import os
 import pickle
+import traceback
 from typing import List, Dict, Any, Optional, Set
 from datetime import datetime
 from google.auth.transport.requests import Request
@@ -89,6 +90,7 @@ class GoogleTasksClient:
             
         except Exception as e:
             logger.error(f"Failed to connect to Google Tasks API: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return False
     
     def list_tasklists(self) -> List[Dict[str, Any]]:

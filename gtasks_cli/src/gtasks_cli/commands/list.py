@@ -1,8 +1,10 @@
 from typing import List
 from gtasks_cli.models.task import Task
 from gtasks_cli.models.task_list import TaskList
-from datetime import datetime  # Needed for date formatting
+from datetime import datetime, timedelta  # Needed for date formatting
+from gtasks_cli.utils.datetime_utils import _normalize_datetime
 import click
+
 
 def display_tasks_grouped_by_list(tasks: List[Task]):
     """Display tasks grouped by their task lists with color coding."""
@@ -87,7 +89,7 @@ def _get_priority_icon(priority) -> str:
     return priority_indicators.get(priority_value, '🔸')
 
 def _format_due_date(due) -> str:
-    """Format due date for display"""
+    """Format due date for display with proper timezone handling"""
     if not due:
         return ""
     
@@ -96,13 +98,19 @@ def _format_due_date(due) -> str:
         if isinstance(due, str):
             due = datetime.fromisoformat(due)
         
+        # Normalize datetime to timezone-naive for comparison
+        due = _normalize_datetime(due)
+        
         # Convert to date if we have a datetime
         if hasattr(due, 'date'):
             due_date = due.date()
         else:
             due_date = due
             
-        days_diff = (due_date - datetime.now().date()).days
+        # Get current date using the same timezone-naive approach
+        current_date = _normalize_datetime(datetime.now()).date()
+        
+        days_diff = (due_date - current_date).days
         
         if days_diff == 0:
             return " (Today)"
@@ -131,6 +139,56 @@ def _get_status_color(status) -> str:
     }
     
     return color_map.get(status_value, 'white')
+
+
+
+def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
+    """Filter tasks by time period"""
+    # Use timezone-naive datetimes for comparison to avoid timezone issues
+    now = datetime.now().replace(tzinfo=None)
+    
+    if filter_type == 'today':
+        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = start_of_day + timedelta(days=1)
+        return [t for t in tasks if t.due and start_of_day <= _normalize_datetime(t.due) < end_of_day]
+    
+    elif filter_type == 'this_week':
+        start_of_week = now - timedelta(days=now.weekday())
+        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_week = start_of_week + timedelta(weeks=1)
+        return [t for t in tasks if t.due and start_of_week <= _normalize_datetime(t.due) < end_of_week]
+    
+    elif filter_type == 'this_month':
+        start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            end_of_month = now.replace(year=now.year + 1, month=1, day=1)
+        else:
+            end_of_month = now.replace(month=now.month + 1, day=1)
+        return [t for t in tasks if t.due and start_of_month <= _normalize_datetime(t.due) < end_of_month]
+    
+    elif filter_type == 'last_month':
+        if now.month == 1:
+            start_of_month = now.replace(year=now.year - 1, month=12, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_of_month = now.replace(year=now.year, month=1, day=1)
+        else:
+            start_of_month = now.replace(month=now.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_of_month = now.replace(day=1)
+        return [t for t in tasks if t.due and start_of_month <= _normalize_datetime(t.due) < end_of_month]
+    
+    elif filter_type == 'last_3m':
+        start_date = now - timedelta(days=90)
+        return [t for t in tasks if t.due and start_date <= _normalize_datetime(t.due) <= now]
+    
+    elif filter_type == 'last_6m':
+        start_date = now - timedelta(days=180)
+        return [t for t in tasks if t.due and start_date <= _normalize_datetime(t.due) <= now]
+    
+    elif filter_type == 'last_year':
+        start_date = now - timedelta(days=365)
+        return [t for t in tasks if t.due and start_date <= _normalize_datetime(t.due) <= now]
+    
+    return tasks
+
 #!/usr/bin/env python3
 """
 List command for the Google Tasks CLI application.
@@ -257,54 +315,4 @@ def list(ctx, list_filter, status, priority, project, recurring, time_filter, se
     
     # Store current tasks in task_state for interactive mode
     task_state.set_tasks(tasks)
-
-
-
-
-def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
-    """Filter tasks by time period"""
-    now = datetime.now()
-    
-    if filter_type == 'today':
-        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_day = start_of_day + timedelta(days=1)
-        return [t for t in tasks if t.due and start_of_day <= t.due < end_of_day]
-    
-    elif filter_type == 'this_week':
-        start_of_week = now - timedelta(days=now.weekday())
-        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_week = start_of_week + timedelta(weeks=1)
-        return [t for t in tasks if t.due and start_of_week <= t.due < end_of_week]
-    
-    elif filter_type == 'this_month':
-        start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        if now.month == 12:
-            end_of_month = now.replace(year=now.year + 1, month=1, day=1)
-        else:
-            end_of_month = now.replace(month=now.month + 1, day=1)
-        return [t for t in tasks if t.due and start_of_month <= t.due < end_of_month]
-    
-    elif filter_type == 'last_month':
-        if now.month == 1:
-            start_of_month = now.replace(year=now.year - 1, month=12, day=1, hour=0, minute=0, second=0, microsecond=0)
-            end_of_month = now.replace(year=now.year, month=1, day=1)
-        else:
-            start_of_month = now.replace(month=now.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0)
-            end_of_month = now.replace(day=1)
-        return [t for t in tasks if t.due and start_of_month <= t.due < end_of_month]
-    
-    elif filter_type == 'last_3m':
-        start_date = now - timedelta(days=90)
-        return [t for t in tasks if t.due and start_date <= t.due <= now]
-    
-    elif filter_type == 'last_6m':
-        start_date = now - timedelta(days=180)
-        return [t for t in tasks if t.due and start_date <= t.due <= now]
-    
-    elif filter_type == 'last_year':
-        start_date = now - timedelta(days=365)
-        return [t for t in tasks if t.due and start_date <= t.due <= now]
-    
-    return tasks
-
 

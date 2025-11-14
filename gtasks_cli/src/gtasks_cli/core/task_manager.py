@@ -3,6 +3,8 @@ Task management for the Google Tasks CLI application.
 """
 
 from typing import List, Optional
+from datetime import datetime
+import traceback
 from gtasks_cli.models.task import Task, Priority, TaskStatus
 from gtasks_cli.storage.local_storage import LocalStorage
 from gtasks_cli.storage.sqlite_storage import SQLiteStorage
@@ -391,4 +393,5 @@ class TaskManager:
             return success
         except Exception as e:
             logger.error(f"Sync failed with error: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return False

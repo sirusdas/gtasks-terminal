@@ -5,6 +5,7 @@ Sync Manager - Handles synchronization between local tasks and Google Tasks
 
 import json
 import os
+import traceback
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from gtasks_cli.utils.logger import setup_logger
@@ -12,6 +13,7 @@ from gtasks_cli.models.task import Task
 from gtasks_cli.storage.local_storage import LocalStorage
 from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
 from gtasks_cli.utils.task_deduplication import create_task_signature, get_existing_task_signatures
+from gtasks_cli.utils.datetime_utils import _normalize_datetime
 
 logger = setup_logger(__name__)
 
@@ -205,6 +207,7 @@ class SyncManager:
             
         except Exception as e:
             logger.error(f"Synchronization failed: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return False
     
     def _remove_google_duplicates(self, google_tasks: List[Task], tasklists: List[Dict]):
@@ -236,7 +239,7 @@ class SyncManager:
         for signature, tasks in tasks_by_signature.items():
             if len(tasks) > 1:
                 # Sort tasks by modification time, keep the most recently modified one
-                tasks.sort(key=lambda x: x.modified_at or datetime.min, reverse=True)
+                tasks.sort(key=lambda x: _normalize_datetime(x.modified_at) or _normalize_datetime(datetime.min), reverse=True)
                 
                 # Remove all but the most recent task
                 for task in tasks[1:]:
@@ -318,7 +321,10 @@ class SyncManager:
                 google_task = google_task_dict[local_task.id]
                 
                 # Update the task in Google if it has changed
-                if (local_task.modified_at or datetime.min) > (google_task.modified_at or datetime.min):
+                local_modified = _normalize_datetime(local_task.modified_at) or _normalize_datetime(datetime.min)
+                google_modified = _normalize_datetime(google_task.modified_at) or _normalize_datetime(datetime.min)
+                
+                if local_modified > google_modified:
                     # Update task in Google
                     updated_task = self.google_client.update_task(local_task, tasklist_id)
                     if updated_task:
@@ -327,7 +333,7 @@ class SyncManager:
                     else:
                         synced_tasks.append(google_task)  # Keep the Google version if update failed
                 else:
-                    # Google version is newer or same, keep it
+                    # Keep the Google version
                     synced_tasks.append(google_task)
             else:
                 # Task doesn't exist in Google, check by signature
