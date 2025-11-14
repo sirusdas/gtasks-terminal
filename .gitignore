@@ -1,2 +1,3 @@
 sirus-gtask-auth-client_secret_1083428062171-3q0nhncaicrq0o8ff6ktr35bpi9v11tv.apps.googleusercontent.com.json
 *.pyc
+*/__pycache__/*

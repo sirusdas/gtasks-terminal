@@ -8,6 +8,7 @@ from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
+from rich.panel import Panel
 from gtasks_cli.models.task import Task
 
 console = Console()
@@ -108,4 +109,231 @@ def display_tasks_grouped_by_list(tasks: List[Task]) -> None:
             )
         
         console.print(table)
+        console.print()  # Add spacing between lists
+
+
+def display_tasks_compact(tasks: List[Task]) -> None:
+    """
+    Display tasks in a compact format with essential details.
+    
+    Args:
+        tasks: List of Task objects to display
+    """
+    if not tasks:
+        console.print("No tasks found.")
+        return
+    
+    # Group tasks by list title
+    tasks_by_list = defaultdict(list)
+    for task in tasks:
+        list_title = getattr(task, 'list_title', 'Tasks')
+        tasks_by_list[list_title].append(task)
+    
+    # Display tasks for each list
+    task_count = 1
+    for list_title, list_tasks in tasks_by_list.items():
+        console.print(f"\n[bold blue]{list_title}[/bold blue]")
+        
+        for task in list_tasks:
+            # Format task number
+            task_number = str(task_count)
+            task_count += 1
+            
+            # Create content for the task
+            task_content = []
+            
+            # Task title with notes indicator
+            task_title = task.title
+            if task.notes:
+                task_title = f"{task_title} [italic](+)[/italic]"
+            task_content.append(f"[bold]{task_title}[/bold]")
+            
+            # Add description/notes if available (max 3 lines)
+            description_lines = []
+            if task.description:
+                # Limit to 3 lines
+                desc_lines = task.description.strip().split('\n')[:3]
+                for line in desc_lines:
+                    if len(line) > 70:  # Limit line length
+                        line = line[:67] + "..."
+                    description_lines.append(f"  {line}")
+            
+            if task.notes:
+                notes_lines = task.notes.strip().split('\n')[:3]
+                for line in notes_lines:
+                    if len(line) > 70:  # Limit line length
+                        line = line[:67] + "..."
+                    description_lines.append(f"  📌 {line}")
+            
+            # Add up to 3 lines of description/notes
+            if description_lines:
+                task_content.extend(description_lines[:3])
+            
+            # Add metadata line
+            metadata_parts = []
+            
+            # Due date
+            if task.due:
+                due_date = task.due.date() if isinstance(task.due, datetime) else task.due
+                today = datetime.now().date()
+                diff = (due_date - today).days
+                
+                if diff < 0:
+                    metadata_parts.append(f"[red]{due_date}[/red]")
+                elif diff == 0:
+                    metadata_parts.append(f"[yellow]{due_date}[/yellow]")
+                elif diff <= 3:
+                    metadata_parts.append(f"[orange1]{due_date}[/orange1]")
+                else:
+                    metadata_parts.append(f"[green]{due_date}[/green]")
+            
+            # Priority
+            priority_value = task.priority
+            if hasattr(task.priority, 'value'):
+                priority_value = task.priority.value
+            
+            priority_colors = {
+                'critical': 'red',
+                'high': 'orange1',
+                'medium': 'yellow',
+                'low': 'green'
+            }
+            metadata_parts.append(f"[{priority_colors.get(priority_value, 'white')}]{priority_value.title()}[/{priority_colors.get(priority_value, 'white')}]")
+            
+            # Status
+            status_value = task.status
+            if hasattr(task.status, 'value'):
+                status_value = task.status.value
+                
+            status_colors = {
+                'pending': 'yellow',
+                'in_progress': 'blue',
+                'completed': 'green',
+                'waiting': 'magenta',
+                'deleted': 'red'
+            }
+            metadata_parts.append(f"[{status_colors.get(status_value, 'white')}]{status_value.replace('_', ' ').title()}[/{status_colors.get(status_value, 'white')}]")
+            
+            # Combine metadata
+            metadata_line = " | ".join(metadata_parts)
+            task_content.append(metadata_line)
+            
+            # Print task content with minimal spacing
+            console.print(f"[dim]{task_number}.[/dim] {' | '.join(task_content)}")
+        
+        console.print()  # Add spacing between lists
+
+
+def display_tasks_with_details(tasks: List[Task]) -> None:
+    """
+    Display tasks with additional details in a formatted way.
+    
+    Args:
+        tasks: List of Task objects to display
+    """
+    if not tasks:
+        console.print("No tasks found.")
+        return
+    
+    # Group tasks by list title
+    tasks_by_list = defaultdict(list)
+    for task in tasks:
+        list_title = getattr(task, 'list_title', 'Tasks')
+        tasks_by_list[list_title].append(task)
+    
+    # Display tasks for each list
+    task_count = 1
+    for list_title, list_tasks in tasks_by_list.items():
+        console.print(f"\n[bold blue]{list_title}[/bold blue]")
+        console.print("=" * len(list_title))
+        
+        for task in list_tasks:
+            # Format task number
+            task_number = str(task_count)
+            task_count += 1
+            
+            # Create panel content for the task
+            panel_content = []
+            
+            # Task title with notes indicator
+            task_title = task.title
+            if task.notes:
+                task_title = f"{task_title} [italic](+)[/italic]"
+            panel_content.append(f"[bold]{task_title}[/bold]")
+            
+            # Add description/notes if available (max 3 lines)
+            description_lines = []
+            if task.description:
+                # Limit to 3 lines
+                desc_lines = task.description.strip().split('\n')[:3]
+                for line in desc_lines:
+                    if len(line) > 80:  # Limit line length
+                        line = line[:77] + "..."
+                    description_lines.append(f"  {line}")
+            
+            if task.notes:
+                notes_lines = task.notes.strip().split('\n')[:3]
+                for line in notes_lines:
+                    if len(line) > 80:  # Limit line length
+                        line = line[:77] + "..."
+                    description_lines.append(f"  📌 {line}")
+            
+            # Add up to 3 lines of description/notes
+            if description_lines:
+                panel_content.extend(description_lines[:3])
+            
+            # Add metadata line
+            metadata_parts = []
+            
+            # Due date
+            if task.due:
+                due_date = task.due.date() if isinstance(task.due, datetime) else task.due
+                today = datetime.now().date()
+                diff = (due_date - today).days
+                
+                if diff < 0:
+                    metadata_parts.append(f"[red]Due: {due_date} (Overdue)[/red]")
+                elif diff == 0:
+                    metadata_parts.append(f"[yellow]Due: {due_date} (Today)[/yellow]")
+                elif diff <= 3:
+                    metadata_parts.append(f"[orange1]Due: {due_date} ({diff} days)[/orange1]")
+                else:
+                    metadata_parts.append(f"[green]Due: {due_date}[/green]")
+            
+            # Priority
+            priority_value = task.priority
+            if hasattr(task.priority, 'value'):
+                priority_value = task.priority.value
+            
+            priority_colors = {
+                'critical': 'red',
+                'high': 'orange1',
+                'medium': 'yellow',
+                'low': 'green'
+            }
+            metadata_parts.append(f"[{priority_colors.get(priority_value, 'white')}]{priority_value.title()}[/{priority_colors.get(priority_value, 'white')}]")
+            
+            # Status
+            status_value = task.status
+            if hasattr(task.status, 'value'):
+                status_value = task.status.value
+                
+            status_colors = {
+                'pending': 'yellow',
+                'in_progress': 'blue',
+                'completed': 'green',
+                'waiting': 'magenta',
+                'deleted': 'red'
+            }
+            metadata_parts.append(f"[{status_colors.get(status_value, 'white')}]{status_value.replace('_', ' ').title()}[/{status_colors.get(status_value, 'white')}]")
+            
+            # Combine metadata
+            metadata_line = " | ".join(metadata_parts)
+            panel_content.append(metadata_line)
+            
+            # Create and print panel for this task
+            panel = Panel("\n".join(panel_content), title=f"[dim]#{task_number}[/dim]", 
+                         border_style="bright_black", expand=False)
+            console.print(panel)
+        
         console.print()  # Add spacing between lists

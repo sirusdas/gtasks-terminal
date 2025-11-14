@@ -7,7 +7,6 @@ import click
 import shlex
 from collections import defaultdict
 from typing import List
-import os
 from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.models.task import Task, TaskStatus, Priority
 from rich.console import Console
@@ -49,21 +48,112 @@ from gtasks_cli.commands.interactive_help import (
 )
 
 
-def _display_tasks_grouped_by_list(tasks: List[Task], start_number: int = 1) -> int:
-    """
-    Display tasks grouped by list names with color coding.
-    Returns the next task number to be used for numbering continuity.
+def _display_tasks_grouped_by_list(tasks, start_number=1):
+    """Display tasks grouped by their list names"""
+    # Group tasks by list title
+    tasks_by_list = defaultdict(list)
+    for task in tasks:
+        list_title = getattr(task, 'list_title', 'Unknown List')
+        tasks_by_list[list_title].append(task)
     
-    Args:
-        tasks: List of Task objects to display
-        start_number: Starting number for task numbering
+    # Display tasks grouped by list
+    task_index = start_number
+    all_tasks = []
+    
+    for list_title, list_tasks in tasks_by_list.items():
+        # Display list name with color in a panel
+        console.print(Panel(f"[bold blue]List Name: \"{list_title}\"[/bold blue]", expand=False))
         
-    Returns:
-        int: Next task number to use
-    """
-    from gtasks_cli.utils.display import display_tasks_grouped_by_list
-    display_tasks_grouped_by_list(tasks)
-    return start_number + len(tasks)
+        for i, task in enumerate(list_tasks, task_index):
+            # For enum values, we need to check if they are already strings or enum instances
+            status_value = task.status if isinstance(task.status, str) else task.status.value
+            priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
+            
+            # Color coding for status
+            status_colors = {
+                'pending': 'yellow',
+                'in_progress': 'cyan',
+                'completed': 'green',
+                'waiting': 'magenta',
+                'deleted': 'red'
+            }
+            status_icon = {
+                'pending': '⏳',
+                'in_progress': '🔄',
+                'completed': '✅',
+                'waiting': '⏸️',
+                'deleted': '🗑️'
+            }.get(status_value, '❓')
+            status_color = status_colors.get(status_value, 'white')
+            
+            # Color coding for priority
+            priority_colors = {
+                'low': 'blue',
+                'medium': 'yellow',
+                'high': 'orange_red1',  # More vibrant orange
+                'critical': 'red'
+            }
+            priority_icon = {
+                'low': '🔽',
+                'medium': '🔸',
+                'high': '🔺',
+                'critical': '💥'
+            }.get(priority_value, '🔹')
+            priority_color = priority_colors.get(priority_value, 'white')
+            
+            # Format due date if present
+            due_info = ""
+            if task.due:
+                due_info = f" [blue]📅 {task.due.strftime('%Y-%m-%d')}[/blue]"
+            
+            # Format project if present
+            project_info = ""
+            if task.project:
+                project_info = f" [purple]📁 {task.project}[/purple]"
+            
+            # Format tags if present
+            tags_info = ""
+            if task.tags:
+                tags_info = f" [cyan]🏷️  {', '.join(task.tags)}[/cyan]"
+            
+            # Format recurring info
+            recurring_info = ""
+            if task.is_recurring:
+                recurring_info = " [green]🔁[/green]"
+            
+            # Format description/notes with limit (max 3 lines)
+            description_info = ""
+            content = task.description or task.notes
+            if content:
+                # Limit content to 3 lines
+                max_chars = 300
+                desc = content.strip()
+                if len(desc) > max_chars:
+                    # Try to break at a word boundary
+                    truncated = desc[:max_chars].rsplit(' ', 1)[0] + "..."
+                    desc_lines = truncated.split('\n')
+                else:
+                    desc_lines = desc.split('\n')
+                
+                # Take only first 3 lines and format them
+                formatted_lines = []
+                for line in desc_lines[:3]:
+                    if line.strip():  # Only add non-empty lines
+                        formatted_lines.append(f"      [italic white]{line.strip()}[/italic white]")
+                
+                # Join the lines with newlines
+                if formatted_lines:
+                    description_info = "\n" + "\n".join(formatted_lines)
+            
+            # Display task with number
+            task_line = f"  {i:2d}. [bright_black]{task.id[:8]}[/bright_black]: [{status_color}]{status_icon}[/{status_color}] [{priority_color}]{priority_icon}[/{priority_color}] {task.title}{due_info}{project_info}{tags_info}{recurring_info}{description_info}"
+            console.print(task_line)
+                
+            all_tasks.append(task)
+        task_index += len(list_tasks)
+        console.print()  # Add spacing between lists
+    
+    return all_tasks
 
 
 @click.command()
@@ -89,7 +179,6 @@ def interactive(ctx):
     """
     use_google_tasks = ctx.obj.get('use_google_tasks', False)
     storage_backend = ctx.obj.get('storage_backend', 'sqlite')
-    account_name = ctx.obj.get('account_name')
     logger.info(f"Starting interactive mode {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
     # Import here to avoid issues with module loading
@@ -99,8 +188,7 @@ def interactive(ctx):
     # Create task manager
     task_manager = TaskManager(
         use_google_tasks=use_google_tasks,
-        storage_backend=storage_backend,
-        account_name=account_name
+        storage_backend=storage_backend
     )
     
     # Get only pending/incomplete tasks by default
@@ -127,7 +215,8 @@ def interactive(ctx):
                 
             tasks.extend(incomplete_tasks)
             
-        # Store tasks for interactive use
+        # Display tasks grouped by list names with color coding
+        _display_tasks_grouped_by_list(tasks)
         task_state.set_tasks(tasks)
     else:
         # For local mode, just get incomplete tasks
@@ -138,7 +227,8 @@ def interactive(ctx):
             if not hasattr(task, 'list_title') or not task.list_title:
                 task.list_title = "Tasks"
         
-        # Store tasks for interactive use
+        # Display tasks grouped by list names with color coding
+        _display_tasks_grouped_by_list(tasks)
         task_state.set_tasks(tasks)
     
     if not tasks:
@@ -338,15 +428,6 @@ def interactive(ctx):
                         click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.tasks)}.")
                 except ValueError:
                     click.echo("Invalid task number. Please enter a valid integer.")
-                except Exception as e:
-                    click.echo(f"An error occurred: {str(e)}")
-                    logger.error(f"Error in update command: {e}")
-                except Exception as e:
-                    click.echo(f"An error occurred: {str(e)}")
-                    logger.error(f"Error in delete command: {e}")
-                except Exception as e:
-                    click.echo(f"An error occurred: {str(e)}")
-                    logger.error(f"Error in done command: {e}")
             elif cmd == 'done':
                 if len(command_parts) < 2:
                     click.echo("Usage: done <number>")
@@ -486,33 +567,18 @@ def interactive(ctx):
                     click.echo("Invalid task number. Please enter a valid integer.")
             elif cmd == 'search':
                 if len(command_parts) < 2:
-                    click.echo("Usage: search <query> [filters]")
+                    click.echo("Usage: search <query>")
                     continue
-                
-                # Parse extended search command
-                query, time_filter, upcoming_filter, list_name, last_n_days, upcoming_n_days = _parse_search_command(command_parts)
-                
-                # Use list_tasks with search parameter
+                    
+                query = " ".join(command_parts[1:])
+                # Use list_tasks with search parameter instead of non-existent search_tasks method
                 search_results = task_manager.list_tasks(search=query)
-                
-                # Apply list filter if provided
-                if list_name:
-                    search_results = [t for t in search_results if hasattr(t, 'list_title') and list_name.lower() in t.list_title.lower()]
-                
-                # Apply time filter
-                if time_filter:
-                    search_results = _filter_by_time_extended(search_results, time_filter, last_n_days)
-                
-                # Apply upcoming filter
-                if upcoming_filter:
-                    search_results = _filter_upcoming_tasks(search_results, upcoming_filter, upcoming_n_days)
-                
                 if search_results:
-                    click.echo(f"\nSearch results for '{query or '*'}':")
+                    click.echo(f"\nSearch results for '{query}':")
                     _display_tasks_grouped_by_list(search_results)
                     task_state.set_tasks(search_results)
                 else:
-                    click.echo(f"No tasks found matching your criteria.")
+                    click.echo(f"No tasks found matching '{query}'.")
                     # Keep current tasks unchanged
             elif cmd == 'help':
                 if len(command_parts) > 1:
@@ -574,75 +640,6 @@ def interactive(ctx):
                         click.echo(f"Unknown command: {subcommand}. Type 'help' for available commands.")
                 else:
                     show_general_help()
-            elif cmd == 'account':
-                if len(command_parts) > 1:
-                    # Switch to a different account
-                    new_account = command_parts[1]
-                    
-                    # Update environment variable
-                    os.environ['GTASKS_DEFAULT_ACCOUNT'] = new_account
-                    
-                    # Create new task manager with the new account
-                    new_task_manager = TaskManager(
-                        use_google_tasks=use_google_tasks,
-                        storage_backend=storage_backend,
-                        account_name=new_account
-                    )
-                    
-                    try:
-                        # Try to get tasks from the new account
-                        if use_google_tasks:
-                            from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
-                            client = GoogleTasksClient(account_name=new_account)
-                            tasklists = client.list_tasklists()
-                            
-                            tasks = []
-                            for tasklist in tasklists:
-                                tasklist_id = tasklist['id']
-                                tasklist_title = tasklist.get('title', 'Untitled List')
-                                # Get all tasks and filter for this specific tasklist
-                                all_tasks = new_task_manager.list_tasks()
-                                list_tasks = [t for t in all_tasks if getattr(t, 'tasklist_id', None) == tasklist_id]
-                                
-                                # Filter for incomplete tasks
-                                incomplete_tasks = [t for t in list_tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
-                                
-                                # Add list_title to each task for grouping display
-                                for task in incomplete_tasks:
-                                    task.list_title = tasklist_title
-                                    
-                                tasks.extend(incomplete_tasks)
-                        else:
-                            # For local mode, get incomplete tasks
-                            tasks = new_task_manager.list_tasks()
-                            tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
-                            # Add list_title to each task for grouping display (default to "Tasks" for local mode)
-                            for task in tasks:
-                                if not hasattr(task, 'list_title') or not task.list_title:
-                                    task.list_title = "Tasks"
-                        
-                        # If we get here, account switch was successful
-                        task_manager = new_task_manager
-                        ctx.obj['account_name'] = new_account
-                        
-                        # Update display
-                        if tasks:
-                            _display_tasks_grouped_by_list(tasks)
-                            task_state.set_tasks(tasks)
-                            click.echo(f"Switched to account: {new_account}. Found {len(tasks)} incomplete tasks.")
-                        else:
-                            _display_tasks_grouped_by_list([])
-                            task_state.set_tasks([])
-                            click.echo(f"Switched to account: {new_account}. No incomplete tasks found.")
-                            
-                    except Exception as e:
-                        click.echo(f"Failed to switch to account {new_account}: {str(e)}")
-                        logger.error(f"Error switching accounts: {e}")
-                else:
-                    # Show current account
-                    current = os.environ.get('GTASKS_DEFAULT_ACCOUNT', 'default')
-                    click.echo(f"Current account: {current}")
-
             else:
                 click.echo(f"Unknown command: {cmd}. Type 'help' for available commands.")
                 
@@ -652,65 +649,6 @@ def interactive(ctx):
         except Exception as e:
             logger.error(f"Error in interactive mode: {e}")
             click.echo(f"An error occurred: {e}")
-
-
-def _parse_search_command(command_parts):
-    """Parse search command with extended time filters"""
-    query_parts = []
-    time_filter = None
-    upcoming_filter = None
-    list_name = None
-    last_n_days = None
-    upcoming_n_days = None
-    
-    i = 1
-    while i < len(command_parts):
-        part = command_parts[i]
-        if part.startswith('--'):
-            if part == '--filter' and i + 1 < len(command_parts):
-                time_filter = command_parts[i + 1]
-                i += 2
-            elif part == '--list' and i + 1 < len(command_parts):
-                list_name = command_parts[i + 1]
-                i += 2
-            else:
-                # Collect unrecognized options as part of query
-                query_parts.append(part)
-                i += 1
-        else:
-            # Check for special time keywords
-            if part == 'today':
-                time_filter = 'today'
-            elif part == 'yesterday':
-                time_filter = 'yesterday'
-            elif part == 'this_week':
-                time_filter = 'this_week'
-            elif part.startswith('last_') and part.endswith('_days'):
-                try:
-                    n = int(part.split('_')[1])
-                    last_n_days = n
-                    time_filter = f'last_{n}_days'
-                except (ValueError, IndexError):
-                    query_parts.append(part)
-            elif part == 'upcoming':
-                upcoming_filter = 'upcoming'
-            elif part == 'upcoming_this_week':
-                upcoming_filter = 'upcoming_this_week'
-            elif part == 'upcoming_this_month':
-                upcoming_filter = 'upcoming_this_month'
-            elif part.startswith('upcoming_next_') and part.endswith('_days'):
-                try:
-                    n = int(part.split('_')[2])
-                    upcoming_n_days = n
-                    upcoming_filter = f'upcoming_next_{n}_days'
-                except (ValueError, IndexError):
-                    query_parts.append(part)
-            else:
-                query_parts.append(part)
-            i += 1
-    
-    query = ' '.join(query_parts) if query_parts else None
-    return query, time_filter, upcoming_filter, list_name, last_n_days, upcoming_n_days
 
 
 def _filter_by_time(tasks, time_filter):
@@ -912,73 +850,3 @@ def _view_task_details(task):
     # Create and print the panel
     panel = Panel("\n".join(panel_content), title="Task Details", expand=False, border_style="bright_black")
     console.print(panel)
-
-
-def _filter_by_time_extended(tasks, time_filter, last_n_days=None):
-    """Extended time filter supporting additional time periods"""
-    from datetime import datetime, timedelta
-    
-    # Use timezone-naive datetimes for comparison to avoid timezone issues
-    now = datetime.now().replace(tzinfo=None)
-    
-    if time_filter == 'today':
-        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_day = start_of_day + timedelta(days=1)
-        tasks = [t for t in tasks if t.due and start_of_day <= _normalize_datetime(t.due) < end_of_day]
-    
-    elif time_filter == 'yesterday':
-        start_of_yesterday = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_yesterday = start_of_yesterday + timedelta(days=1)
-        tasks = [t for t in tasks if t.due and start_of_yesterday <= _normalize_datetime(t.due) < end_of_yesterday]
-    
-    elif time_filter == 'this_week':
-        # Start of week (Monday)
-        start_of_week = now - timedelta(days=now.weekday())
-        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_week = start_of_week + timedelta(days=7)
-        tasks = [t for t in tasks if t.due and start_of_week <= _normalize_datetime(t.due) < end_of_week]
-    
-    elif time_filter.startswith('last_') and time_filter.endswith('_days') and last_n_days:
-        start_of_period = now - timedelta(days=last_n_days)
-        start_of_period = start_of_period.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_period = now.replace(hour=23, minute=59, second=59, microsecond=999999)
-        tasks = [t for t in tasks if t.due and start_of_period <= _normalize_datetime(t.due) <= end_of_period]
-    
-    return tasks
-
-
-def _filter_upcoming_tasks(tasks, upcoming_filter, upcoming_n_days=None):
-    """Filter for upcoming tasks"""
-    from datetime import datetime, timedelta
-    
-    # Use timezone-naive datetimes for comparison to avoid timezone issues
-    now = datetime.now().replace(tzinfo=None)
-    
-    if upcoming_filter == 'upcoming':
-        # All future tasks
-        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= now]
-    
-    elif upcoming_filter == 'upcoming_this_week':
-        # Future tasks this week
-        start_of_week = now - timedelta(days=now.weekday())
-        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_week = start_of_week + timedelta(days=7)
-        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= now and _normalize_datetime(t.due) < end_of_week]
-    
-    elif upcoming_filter == 'upcoming_this_month':
-        # Future tasks this month
-        start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        # End of month
-        if now.month == 12:
-            end_of_month = now.replace(year=now.year + 1, month=1, day=1)
-        else:
-            end_of_month = now.replace(month=now.month + 1, day=1)
-        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= now and _normalize_datetime(t.due) < end_of_month]
-    
-    elif upcoming_filter.startswith('upcoming_next_') and upcoming_filter.endswith('_days') and upcoming_n_days:
-        # Future tasks in next N days
-        end_of_period = now + timedelta(days=upcoming_n_days)
-        end_of_period = end_of_period.replace(hour=23, minute=59, second=59, microsecond=999999)
-        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= now and _normalize_datetime(t.due) <= end_of_period]
-    
-    return tasks
