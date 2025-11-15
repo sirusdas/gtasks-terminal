@@ -13,6 +13,7 @@ from gtasks_cli.commands.done import done
 from gtasks_cli.commands.delete import delete
 from gtasks_cli.commands.update import update
 from gtasks_cli.commands.sync import sync
+from gtasks_cli.commands.advanced_sync import advanced_sync
 from gtasks_cli.commands.auth import auth
 from gtasks_cli.commands.summary import summary
 from gtasks_cli.commands.interactive import interactive
@@ -72,6 +73,7 @@ cli.add_command(done)
 cli.add_command(delete)
 cli.add_command(update)
 cli.add_command(sync)
+cli.add_command(advanced_sync)
 cli.add_command(auth)
 cli.add_command(summary)
 cli.add_command(interactive)

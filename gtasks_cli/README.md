@@ -12,6 +12,7 @@ A powerful, feature-rich CLI application for Google Tasks management in Python.
 - Recurring tasks and dependencies
 - Offline mode with synchronization
 - Import/export functionality
+- Advanced sync operations (push/pull/bidirectional)
 
 ## Installation
 
@@ -30,6 +31,16 @@ Or after installation:
 ```bash
 gtasks --help
 ```
+
+## Advanced Sync Functionality
+
+The CLI includes advanced sync capabilities that allow for granular control over synchronization operations:
+
+- **Push Operations**: Push only local changes to Google Tasks (`gtasks advanced-sync --push`)
+- **Pull Operations**: Pull only changes from Google Tasks (`gtasks advanced-sync --pull`)
+- **Bidirectional Sync**: Full synchronization in both directions (`gtasks advanced-sync`)
+
+See [ADVANCED_SYNC.md](../ADVANCED_SYNC.md) for detailed documentation on the advanced sync functionality.
 
 ## Development
 

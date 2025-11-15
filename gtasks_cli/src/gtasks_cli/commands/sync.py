@@ -16,7 +16,10 @@ logger = setup_logger(__name__)
 @click.option('--account', '-a', help='Account name for multi-account support')
 @click.pass_context
 def sync(ctx, account):
-    """Synchronize tasks between local storage and Google Tasks."""
+    """Synchronize tasks between local storage and Google Tasks.
+    
+    For more advanced sync options (push/pull), see the 'advanced-sync' command.
+    """
     storage_backend = ctx.obj.get('storage_backend', 'json')
     
     # Determine the account to use

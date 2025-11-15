@@ -54,6 +54,16 @@ Master roadmap document:
 - Success metrics
 - Team roles and communication plan
 
+## Advanced Sync Functionality
+
+The Google Tasks CLI now includes advanced synchronization capabilities that provide more granular control over synchronization operations:
+
+- **Push Operations**: Push only local changes to Google Tasks
+- **Pull Operations**: Pull only changes from Google Tasks
+- **Bidirectional Sync**: Full synchronization in both directions with conflict resolution
+
+See [ADVANCED_SYNC.md](ADVANCED_SYNC.md) for detailed documentation on the advanced sync functionality.
+
 ## Search Functionality
 
 The Google Tasks CLI provides powerful search capabilities to help you find tasks quickly and efficiently.

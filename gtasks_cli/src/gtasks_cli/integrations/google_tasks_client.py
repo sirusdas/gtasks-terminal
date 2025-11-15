@@ -18,43 +18,18 @@ logger = setup_logger(__name__)
 class GoogleTasksClient:
     """Client for interacting with the Google Tasks API."""
     
-    def __init__(self, credentials_file: str = None, token_file: str = None, account_name: str = None):
+    def __init__(self, credentials_file: str = None, token_file: str = None):
         """
-        Initialize the GoogleTasksClient.
+        Initialize the Google Tasks client.
         
         Args:
-            credentials_file: Path to the client credentials JSON file
-            token_file: Path to the token pickle file
-            account_name: Name of the account for multi-account support
+            credentials_file: Path to the credentials file
+            token_file: Path to the token file
         """
-        # Set default paths if not provided
-        if account_name:
-            # For multi-account support, use account-specific paths
-            config_dir_env = os.environ.get('GTASKS_CONFIG_DIR')
-            if config_dir_env:
-                config_dir = os.path.join(config_dir_env)
-            else:
-                config_dir = os.path.join(os.path.expanduser("~"), ".gtasks", account_name)
-                
-            os.makedirs(config_dir, exist_ok=True)
-            
-            if credentials_file is None:
-                credentials_file = os.path.join(config_dir, "credentials.json")
-            if token_file is None:
-                token_file = os.path.join(config_dir, "token.pickle")
-        else:
-            # Default behavior
-            if credentials_file is None:
-                credentials_file = os.path.join(os.path.expanduser("~"), ".gtasks", "credentials.json")
-            if token_file is None:
-                token_file = os.path.join(os.path.expanduser("~"), ".gtasks", "token.pickle")
-            
-        self.credentials_file = credentials_file
-        self.token_file = token_file
-        self.account_name = account_name
-        self.auth_manager = GoogleAuthManager(credentials_file, token_file, account_name)
+        self.auth_manager = GoogleAuthManager(credentials_file, token_file)
         self.service = None
         self._default_tasklist_id = None
+        self._auth_failed = False  # Track authentication failures
         logger.debug(f"GoogleTasksClient initialized with credentials: {credentials_file}, token: {token_file}")
     
     def connect(self) -> bool:
@@ -64,11 +39,17 @@ class GoogleTasksClient:
         Returns:
             bool: True if connection was successful, False otherwise
         """
+        # If we've already failed authentication, don't try again unless we're explicitly resetting
+        if self._auth_failed:
+            logger.error("Authentication previously failed. Not attempting to reconnect to prevent duplicates.")
+            return False
+            
         try:
             self.service = self.auth_manager.get_service()
             
             if not self.service:
                 logger.error("Failed to get Google Tasks API service")
+                self._auth_failed = True  # Mark authentication as failed
                 return False
             
             # Get the default task list ID
@@ -86,11 +67,14 @@ class GoogleTasksClient:
                 self._default_tasklist_id = "@default"
             
             logger.debug(f"Using tasklist ID: {self._default_tasklist_id}")
+            # Reset the auth failed flag on successful connection
+            self._auth_failed = False
             return True
             
         except Exception as e:
             logger.error(f"Failed to connect to Google Tasks API: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
+            self._auth_failed = True  # Mark authentication as failed
             return False
     
     def list_tasklists(self) -> List[Dict[str, Any]]:
@@ -143,10 +127,16 @@ class GoogleTasksClient:
         Returns:
             Task object if successful, None otherwise
         """
+        # CRITICAL: Check if we can connect to Google Tasks before attempting to create a task
         if not self.service:
             if not self.connect():
-                logger.error("Failed to connect to Google Tasks")
+                logger.error("CRITICAL: Failed to connect to Google Tasks. ABORTING task creation to prevent duplicates.")
                 return None
+        
+        # CRITICAL: If authentication has failed previously, do not attempt to create tasks
+        if self._auth_failed:
+            logger.error("CRITICAL: Authentication has previously failed. ABORTING task creation to prevent duplicates.")
+            return None
             
         # Handle both Task objects and individual parameters
         if hasattr(task_data, 'title'):  # It's a Task object
@@ -259,6 +249,16 @@ class GoogleTasksClient:
                 # Format the due date correctly for Google Tasks API
                 task_data['due'] = due_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             
+            # CRITICAL: Check if we still have a valid connection before creating the task
+            if not self.service:
+                logger.error("CRITICAL: No valid connection to Google Tasks. ABORTING task creation to prevent duplicates.")
+                return None
+                
+            # CRITICAL: If authentication has failed previously, do not attempt to create tasks
+            if self._auth_failed:
+                logger.error("CRITICAL: Authentication has previously failed. ABORTING task creation to prevent duplicates.")
+                return None
+            
             # Create the task in Google Tasks
             task_result = self.service.tasks().insert(
                 tasklist=tasklist_id,
@@ -288,6 +288,10 @@ class GoogleTasksClient:
             
         except Exception as e:
             logger.error(f"Error creating task in Google Tasks: {e}")
+            # Mark authentication as failed if we get an auth error
+            if 'invalid_grant' in str(e):
+                self._auth_failed = True
+                logger.error("CRITICAL: Authentication failed during task creation. Marking auth as failed to prevent duplicates.")
             return None
     
     def list_tasks(self, tasklist_id: str = None, 

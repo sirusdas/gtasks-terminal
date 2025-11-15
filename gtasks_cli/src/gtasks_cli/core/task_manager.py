@@ -41,7 +41,7 @@ class TaskManager:
         
         # Initialize Google Tasks client if needed
         if use_google_tasks:
-            self.google_client = GoogleTasksClient(account_name=account_name)
+            self.google_client = GoogleTasksClient()
             self.sync_manager = SyncManager(self.storage, self.google_client)
             logger.info(f"Google Tasks client initialized for account: {account_name or 'default'}")
     
