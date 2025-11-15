@@ -269,13 +269,13 @@ class GoogleTasksClient:
             task = Task(
                 id=task_result['id'],
                 title=task_result['title'],
-                description=task_result.get('notes'),
+                notes=task_result.get('notes'),
                 due=datetime.fromisoformat(task_result['due'].replace('Z', '+00:00')) if 'due' in task_result else None,
                 priority=priority,
                 status=TaskStatus.PENDING,
                 project=project,
                 tags=tags or [],
-                notes=notes,
+                description=description,  # Keep the original description for consistency
                 dependencies=dependencies or [],
                 recurrence_rule=recurrence_rule,
                 created_at=datetime.fromisoformat(task_result['updated'].replace('Z', '+00:00')) if 'updated' in task_result else datetime.now(),

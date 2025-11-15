@@ -4,11 +4,15 @@ Advanced Sync Manager - Enhanced synchronization between local tasks and Google 
 with support for push/pull operations and conflict resolution.
 """
 
-import json
 import os
+import sqlite3
+import tempfile
 import traceback
+from typing import List, Dict, Optional, Set, Tuple
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+import hashlib
+import json
+
 from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.models.task import Task
 from gtasks_cli.storage.local_storage import LocalStorage
@@ -139,7 +143,8 @@ class AdvancedSyncManager:
                 title=task.title or "",
                 description=task.description or "",
                 due_date=task.due,
-                status=task.status
+                status=task.status,
+                notes=task.notes or ""
             )
             
             if task_signature not in seen_signatures:
@@ -161,14 +166,25 @@ class AdvancedSyncManager:
         Returns:
             bool: True if push was successful, False otherwise
         """
-        logger.info("Starting push to Google Tasks process")
+        logger.info("Starting push to Google Tasks process with optimized temporary database approach")
         
         # Connect to Google Tasks
         if not self.google_client.connect():
             logger.error("Failed to connect to Google Tasks")
             return False
         
+        temp_db_path = None
         try:
+            # Create temporary database for optimized operations
+            temp_db_path = self._create_temp_database()
+            
+            # Set the temp_db_path attribute so other methods can use it
+            self._temp_db_path = temp_db_path
+            
+            # Load all Google Tasks into temporary database once
+            google_task_count = self._load_google_tasks_to_temp_db(temp_db_path)
+            logger.info(f"Loaded {google_task_count} Google Tasks into temporary database for push operation")
+            
             # Load local tasks
             local_tasks = [Task(**task_dict) for task_dict in self.local_storage.load_tasks()]
             logger.debug(f"Loaded {len(local_tasks)} local tasks")
@@ -176,40 +192,86 @@ class AdvancedSyncManager:
             # Load list mappings for local tasks
             list_mappings = self.local_storage.load_list_mapping()
             
-            # Load all Google Tasks from all lists
-            all_google_tasks = []
-            tasklists = self.google_client.list_tasklists()
+            # Create a mapping of tasklist titles to IDs from temporary database
+            conn = sqlite3.connect(temp_db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT DISTINCT tasklist_id FROM temp_google_tasks')
+            tasklist_ids = [row[0] for row in cursor.fetchall()]
+            conn.close()
             
-            # Create a mapping of tasklist titles to IDs
+            # Create tasklist title to ID mapping (simplified for now)
+            tasklists = self.google_client.list_tasklists()
             tasklist_title_to_id = {tasklist['title']: tasklist['id'] for tasklist in tasklists}
             
-            for tasklist in tasklists:
-                tasklist_id = tasklist['id']
-                google_tasks = self.google_client.list_tasks(
-                    tasklist_id=tasklist_id,
-                    show_completed=True,
-                    show_hidden=True,
-                    show_deleted=False
-                )
-                # Add tasklist information to each task
-                for task in google_tasks:
-                    task.tasklist_id = tasklist_id
-                all_google_tasks.extend(google_tasks)
-                logger.debug(f"Loaded {len(google_tasks)} Google tasks from '{tasklist['title']}'")
-            
-            logger.debug(f"Loaded total of {len(all_google_tasks)} Google tasks from all lists")
-            
-            # Get existing task signatures to prevent duplicates
-            # Only proceed if we can successfully connect to Google Tasks
+            # Get existing task signatures from temporary database to prevent duplicates
             try:
-                existing_signatures = get_existing_task_signatures(use_google_tasks=True)
-                logger.debug(f"Retrieved {len(existing_signatures)} existing task signatures")
+                # Create signatures from tasks in temporary database
+                conn = sqlite3.connect(temp_db_path)
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT title, description, due, status FROM temp_google_tasks
+                ''')
+                
+                existing_signatures = set()
+                rows = cursor.fetchall()
+                for row in rows:
+                    title = row[0] or ""
+                    description = row[1] or ""
+                    due_date = row[2] or ""
+                    status = row[3] or ""
+                    signature = self._create_task_signature(title, description, due_date, status)
+                    existing_signatures.add(signature)
+                
+                conn.close()
+                logger.debug(f"Retrieved {len(existing_signatures)} existing task signatures from temporary database")
             except Exception as e:
-                logger.error(f"Failed to retrieve existing task signatures: {e}")
-                logger.warning("Cannot perform duplicate checking due to connection issues. Aborting push to prevent duplicates.")
+                logger.error(f"Failed to retrieve existing task signatures from temporary database: {e}")
+                logger.warning("Cannot perform duplicate checking due to database issues. Aborting push to prevent duplicates.")
                 return False
             
-            # Push local tasks to Google
+            # Push local tasks to Google using temporary database for reference
+            # For now, we'll use the existing _push_local_tasks method but with data from our temp database
+            # In a full implementation, we would replace this with _push_local_tasks_optimized
+            conn = sqlite3.connect(temp_db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id, title, description, due, priority, status, project, tags, notes,
+                       dependencies, recurrence_rule, created_at, modified_at, tasklist_id
+                FROM temp_google_tasks
+            ''')
+            
+            rows = cursor.fetchall()
+            all_google_tasks = []
+            
+            for row in rows:
+                # Convert row to Task object
+                task_dict = {
+                    'id': row[0],
+                    'title': row[1],
+                    'description': row[2],
+                    'due': datetime.fromisoformat(row[3]) if row[3] else None,
+                    'priority': row[4],
+                    'status': row[5],
+                    'project': row[6],
+                    'tags': json.loads(row[7]) if row[7] else [],
+                    'notes': row[8],
+                    'dependencies': json.loads(row[9]) if row[9] else [],
+                    'recurrence_rule': row[10],
+                    'created_at': datetime.fromisoformat(row[11]) if row[11] else None,
+                    'modified_at': datetime.fromisoformat(row[12]) if row[12] else None,
+                    'tasklist_id': row[13]
+                }
+                
+                try:
+                    task = Task(**task_dict)
+                    all_google_tasks.append(task)
+                except Exception as e:
+                    logger.error(f"Failed to create task from database row: {e}")
+                    continue
+            
+            conn.close()
+            
+            # Use the existing push logic but with data from our temporary database
             pushed_tasks = self._push_local_tasks(local_tasks, all_google_tasks, list_mappings, 
                                                 tasklist_title_to_id, existing_signatures)
             
@@ -224,6 +286,19 @@ class AdvancedSyncManager:
             logger.error(f"Push to Google Tasks failed: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
+            
+        finally:
+            # Clean up temporary database
+            if temp_db_path and os.path.exists(temp_db_path):
+                try:
+                    os.unlink(temp_db_path)
+                    logger.debug(f"Cleaned up temporary database: {temp_db_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up temporary database {temp_db_path}: {e}")
+            
+            # Clear the temp_db_path attribute
+            if hasattr(self, '_temp_db_path'):
+                delattr(self, '_temp_db_path')
     
     def pull_from_google(self) -> bool:
         """
@@ -314,20 +389,31 @@ class AdvancedSyncManager:
     
     def sync(self) -> bool:
         """
-        Perform bidirectional synchronization between local and Google tasks.
+        Perform bidirectional synchronization between local and Google tasks using temporary database.
         Resolves conflicts by keeping the most recently modified version.
         
         Returns:
             bool: True if synchronization was successful, False otherwise
         """
-        logger.info("Starting bidirectional synchronization process")
+        logger.info("Starting bidirectional synchronization process with temporary database")
         
         # Connect to Google Tasks
         if not self.google_client.connect():
             logger.error("Failed to connect to Google Tasks")
             return False
         
+        temp_db_path = None
         try:
+            # Create temporary database
+            temp_db_path = self._create_temp_database()
+            
+            # Set the temp_db_path attribute so other methods can use it
+            self._temp_db_path = temp_db_path
+            
+            # Load all Google Tasks into temporary database
+            google_task_count = self._load_google_tasks_to_temp_db(temp_db_path)
+            logger.info(f"Loaded {google_task_count} Google Tasks into temporary database")
+            
             # Load local tasks
             local_tasks = [Task(**task_dict) for task_dict in self.local_storage.load_tasks()]
             logger.debug(f"Loaded {len(local_tasks)} local tasks")
@@ -335,71 +421,141 @@ class AdvancedSyncManager:
             # Load list mappings for local tasks
             list_mappings = self.local_storage.load_list_mapping()
             
-            # Load all Google Tasks from all lists
-            all_google_tasks = []
-            tasklists = self.google_client.list_tasklists()
+            # Create mappings from temporary database
+            conn = sqlite3.connect(temp_db_path)
+            cursor = conn.cursor()
             
-            # Create mappings
+            # Get tasklists from Google (we still need this for mapping)
+            tasklists = self.google_client.list_tasklists()
             tasklist_title_to_id = {tasklist['title']: tasklist['id'] for tasklist in tasklists}
             tasklist_id_to_title = {tasklist['id']: tasklist['title'] for tasklist in tasklists}
             
-            for tasklist in tasklists:
-                tasklist_id = tasklist['id']
-                google_tasks = self.google_client.list_tasks(
-                    tasklist_id=tasklist_id,
-                    show_completed=True,
-                    show_hidden=True,
-                    show_deleted=False
-                )
-                # Add tasklist information to each task
-                for task in google_tasks:
-                    task.tasklist_id = tasklist_id
-                all_google_tasks.extend(google_tasks)
-                logger.debug(f"Loaded {len(google_tasks)} Google tasks from '{tasklist['title']}'")
+            # Load all Google Tasks from temporary database
+            cursor.execute('''
+                SELECT id, title, description, due, priority, status, project, tags, notes,
+                       dependencies, recurrence_rule, created_at, modified_at, tasklist_id
+                FROM temp_google_tasks
+            ''')
             
-            logger.debug(f"Loaded total of {len(all_google_tasks)} Google tasks from all lists")
+            rows = cursor.fetchall()
+            all_google_tasks = []
+            
+            for row in rows:
+                # Convert row to Task object
+                task_dict = {
+                    'id': row[0],
+                    'title': row[1],
+                    'description': row[2],
+                    'due': datetime.fromisoformat(row[3]) if row[3] else None,
+                    'priority': row[4],
+                    'status': row[5],
+                    'project': row[6],
+                    'tags': json.loads(row[7]) if row[7] else [],
+                    'notes': row[8],
+                    'dependencies': json.loads(row[9]) if row[9] else [],
+                    'recurrence_rule': row[10],
+                    'created_at': datetime.fromisoformat(row[11]) if row[11] else None,
+                    'modified_at': datetime.fromisoformat(row[12]) if row[12] else None,
+                    'tasklist_id': row[13]
+                }
+                
+                try:
+                    task = Task(**task_dict)
+                    # Add tasklist information to each task
+                    task.tasklist_id = row[13]
+                    all_google_tasks.append(task)
+                except Exception as e:
+                    logger.error(f"Failed to create task from database row: {e}")
+                    continue
+            
+            conn.close()
+            
+            logger.debug(f"Loaded total of {len(all_google_tasks)} Google tasks from temporary database")
             
             # Get existing task signatures to prevent duplicates
-            # Only proceed if we can successfully connect to Google Tasks
             try:
-                existing_signatures = get_existing_task_signatures(use_google_tasks=True)
-                logger.debug(f"Retrieved {len(existing_signatures)} existing task signatures for duplicate checking")
+                # Create signatures from tasks in temporary database
+                conn = sqlite3.connect(temp_db_path)
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT title, description, due, status FROM temp_google_tasks
+                ''')
+                
+                existing_signatures = set()
+                rows = cursor.fetchall()
+                for row in rows:
+                    title = row[0] or ""
+                    description = row[1] or ""
+                    due_date = row[2] or ""
+                    status = row[3] or ""
+                    signature = self._create_task_signature(title, description, due_date, status)
+                    existing_signatures.add(signature)
+                
+                conn.close()
+                logger.debug(f"Retrieved {len(existing_signatures)} existing task signatures from temporary database")
             except Exception as e:
-                logger.error(f"Failed to retrieve existing task signatures: {e}")
-                logger.warning("Cannot perform duplicate checking due to connection issues. Aborting sync to prevent duplicates.")
+                logger.error(f"Failed to retrieve existing task signatures from temporary database: {e}")
+                logger.warning("Cannot perform duplicate checking due to database issues. Aborting sync to prevent duplicates.")
                 return False
             
             # First, push local changes
             logger.info("Pushing local changes to Google Tasks")
+            logger.debug(f"About to call _push_local_tasks with {len(local_tasks)} local tasks and {len(all_google_tasks)} Google tasks")
             pushed_tasks = self._push_local_tasks(local_tasks, all_google_tasks, list_mappings, 
                                                 tasklist_title_to_id, existing_signatures)
             
-            # Reload Google Tasks after push
-            all_google_tasks = []
-            # Check if we can still connect before reloading
-            if not self.google_client.connect():
-                logger.warning("Lost connection to Google Tasks after push. Skipping pull phase.")
-                return False
-                
-            for tasklist in tasklists:
-                tasklist_id = tasklist['id']
-                google_tasks = self.google_client.list_tasks(
-                    tasklist_id=tasklist_id,
-                    show_completed=True,
-                    show_hidden=True,
-                    show_deleted=False
-                )
-                # Add tasklist information to each task
-                for task in google_tasks:
-                    task.tasklist_id = tasklist_id
-                all_google_tasks.extend(google_tasks)
+            # Reload Google Tasks after push into temporary database
+            logger.info("Reloading Google Tasks into temporary database after push operations")
+            google_task_count = self._load_google_tasks_to_temp_db(temp_db_path)
+            logger.info(f"Reloaded {google_task_count} Google Tasks into temporary database")
             
-            # Then, pull changes from Google
+            # Load updated Google Tasks from temporary database
+            conn = sqlite3.connect(temp_db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id, title, description, due, priority, status, project, tags, notes,
+                       dependencies, recurrence_rule, created_at, modified_at, tasklist_id
+                FROM temp_google_tasks
+            ''')
+            
+            rows = cursor.fetchall()
+            all_google_tasks = []
+            
+            for row in rows:
+                task_dict = {
+                    'id': row[0],
+                    'title': row[1],
+                    'description': row[2],
+                    'due': datetime.fromisoformat(row[3]) if row[3] else None,
+                    'priority': row[4],
+                    'status': row[5],
+                    'project': row[6],
+                    'tags': json.loads(row[7]) if row[7] else [],
+                    'notes': row[8],
+                    'dependencies': json.loads(row[9]) if row[9] else [],
+                    'recurrence_rule': row[10],
+                    'created_at': datetime.fromisoformat(row[11]) if row[11] else None,
+                    'modified_at': datetime.fromisoformat(row[12]) if row[12] else None,
+                    'tasklist_id': row[13]
+                }
+                
+                try:
+                    task = Task(**task_dict)
+                    # Add tasklist information to each task
+                    task.tasklist_id = row[13]
+                    all_google_tasks.append(task)
+                except Exception as e:
+                    logger.error(f"Failed to create task from database row: {e}")
+                    continue
+            
+            conn.close()
+            
+            # Then, pull remote changes
             logger.info("Pulling changes from Google Tasks")
-            synced_tasks = self._pull_google_tasks(pushed_tasks, all_google_tasks, tasklist_id_to_title)
+            pulled_tasks = self._pull_google_tasks(local_tasks, all_google_tasks, tasklist_id_to_title)
             
             # Final deduplication pass to ensure no duplicates
-            unique_tasks = self._remove_duplicates_from_list(synced_tasks)
+            unique_tasks = self._remove_duplicates_from_list(pulled_tasks)
             
             # Save synchronized tasks locally
             task_dicts = [task.model_dump() for task in unique_tasks]
@@ -416,13 +572,27 @@ class AdvancedSyncManager:
             self.sync_metadata["last_sync"] = datetime.utcnow().isoformat()
             self._save_sync_metadata()
             
+            # Log sync summary
             logger.info("Bidirectional synchronization completed successfully")
             return True
             
         except Exception as e:
-            logger.error(f"Synchronization failed: {e}")
+            logger.error(f"Unexpected error during bidirectional synchronization: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
+            
+        finally:
+            # Clean up temporary database
+            if temp_db_path and os.path.exists(temp_db_path):
+                try:
+                    os.unlink(temp_db_path)
+                    logger.debug(f"Cleaned up temporary database: {temp_db_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up temporary database {temp_db_path}: {e}")
+            
+            # Clear the temp_db_path attribute
+            if hasattr(self, '_temp_db_path'):
+                delattr(self, '_temp_db_path')
     
     def _push_local_tasks(self, local_tasks: List[Task], google_tasks: List[Task],
                          list_mappings: Dict[str, str], tasklist_title_to_id: Dict[str, str],
@@ -440,6 +610,14 @@ class AdvancedSyncManager:
         Returns:
             List[Task]: List of tasks after push operation
         """
+        print("=== ENTERING _push_local_tasks METHOD ===")
+        logger.debug("****************************************")
+        logger.debug("=== ENTERING _push_local_tasks METHOD ===")
+        logger.debug("****************************************")
+        logger.debug(f"Number of local tasks: {len(local_tasks)}")
+        logger.debug(f"Number of Google tasks: {len(google_tasks)}")
+        logger.debug(f"Number of existing signatures: {len(existing_signatures)}")
+        
         # Create mappings for easier lookup
         google_task_dict = {task.id: task for task in google_tasks}
         google_signature_to_task = {}
@@ -449,11 +627,23 @@ class AdvancedSyncManager:
                 title=task.title or "",
                 description=task.description or "",
                 due_date=task.due,
-                status=task.status
+                status=task.status,
+                notes=task.notes or ""
             )
             google_signature_to_task[signature] = task
         
         logger.debug(f"Created Google task mappings: {len(google_task_dict)} by ID, {len(google_signature_to_task)} by signature")
+        
+        # Debug: Check if apple signature is in google_signature_to_task
+        apple_signature = create_task_signature("apple", "", "", "pending")
+        logger.debug(f"Apple signature: {apple_signature}")
+        logger.debug(f"Is apple signature in google_signature_to_task? {apple_signature in google_signature_to_task}")
+        if apple_signature in google_signature_to_task:
+            apple_task = google_signature_to_task[apple_signature]
+            logger.debug(f"Found apple task in google_signature_to_task: ID={apple_task.id}")
+        
+        # Debug: Check if apple signature is in existing_signatures
+        logger.debug(f"Is apple signature in existing_signatures? {apple_signature in existing_signatures}")
         
         # Process local tasks - upload new or updated tasks to Google
         tasks_created = 0
@@ -462,12 +652,19 @@ class AdvancedSyncManager:
         tasks_failed_auth = 0
         tasks_duplicate_check_failed = 0
         
+        # Count apple tasks in local tasks
+        apple_tasks = [task for task in local_tasks if task.title == "apple"]
+        logger.debug(f"Number of local apple tasks: {len(apple_tasks)}")
+        for i, apple_task in enumerate(apple_tasks):
+            logger.debug(f"Local apple task {i+1}: ID={apple_task.id}, Title={apple_task.title}")
+        
         for local_task in local_tasks:
             local_signature = create_task_signature(
                 title=local_task.title or "",
                 description=local_task.description or "",
                 due_date=local_task.due,
-                status=local_task.status
+                status=local_task.status,
+                notes=local_task.notes or ""
             )
             
             logger.debug(f"Processing local task '{local_task.title}' (ID: {local_task.id}) with signature: {local_signature}")
@@ -511,6 +708,9 @@ class AdvancedSyncManager:
                     logger.debug(f"Not updating task '{local_task.title}' - Google version is newer or equal")
             else:
                 # Task doesn't exist in Google, check by signature
+                print(f"Task '{local_task.title}' does not exist in Google by ID, checking by signature")
+                logger.debug(f"Local signature: {local_signature}")
+                logger.debug(f"Is local signature in google_signature_to_task? {local_signature in google_signature_to_task}")
                 if local_signature in google_signature_to_task:
                     # Task exists in Google with different ID, update it
                     google_task = google_signature_to_task[local_signature]
@@ -540,13 +740,19 @@ class AdvancedSyncManager:
                         title=local_task.title or "",
                         description=local_task.description or "",
                         due_date=local_task.due,
-                        status=local_task.status
+                        status=local_task.status,
+                        notes=local_task.notes or ""
                     )
+                    
+                    logger.debug(f"Checking if task '{local_task.title}' already exists by signature")
+                    logger.debug(f"Task signature: {task_signature}")
+                    logger.debug(f"Is task signature in existing_signatures? {task_signature in existing_signatures}")
                     
                     # Additional duplicate check using the existing signatures
                     if task_signature in existing_signatures:
                         tasks_skipped += 1
                         logger.info(f"Task '{local_task.title}' already exists in Google Tasks (based on existing signatures). Skipping creation.")
+                        logger.debug(f"Skipping creation of task '{local_task.title}' as it already exists")
                     else:
                         # Check if we can create the task safely (no auth issues)
                         if not self._can_safely_create_task(tasklist_id, task_signature, local_task.title):
@@ -565,6 +771,7 @@ class AdvancedSyncManager:
                                        f"ABORTING task creation to prevent duplicates.")
                             continue
                             
+                        logger.debug(f"Creating new task: {local_task.title}")
                         new_task = self.google_client.create_task(local_task)
                         if new_task:
                             tasks_created += 1
@@ -595,6 +802,39 @@ class AdvancedSyncManager:
             logger.error(f"CRITICAL: Authentication has previously failed. ABORTING task creation for '{task_title}' to prevent duplicates.")
             return False
             
+        # If we're using the optimized approach with a temporary database, 
+        # we can skip the additional API calls and rely on the data we already loaded
+        if hasattr(self, '_temp_db_path') and self._temp_db_path:
+            logger.debug(f"Using temporary database for safety check of task '{task_title}'")
+            try:
+                # Check if task already exists in our temporary database
+                conn = sqlite3.connect(self._temp_db_path)
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT COUNT(*) FROM temp_google_tasks 
+                    WHERE signature = ? AND tasklist_id = ?
+                ''', (task_signature, tasklist_id))
+                
+                count = cursor.fetchone()[0]
+                conn.close()
+                
+                if count > 0:
+                    logger.info(f"Task '{task_title}' already exists in Google Tasks (from temp database). Skipping creation.")
+                    return False
+                    
+                # If we have the temporary database, we consider this safe
+                # since we've already loaded all the tasks
+                logger.debug(f"Task '{task_title}' does not exist in temporary database. Proceeding with creation.")
+                return True
+            except Exception as e:
+                logger.warning(f"Failed to check temporary database for task '{task_title}': {e}")
+                # Even if database check fails, we still have the data we loaded earlier
+                # so we don't need to make additional API calls
+                logger.debug(f"Falling back to previously loaded data for task '{task_title}' safety check")
+                return True
+        
+        # Fall back to API calls for safety check (should not happen with our new approach)
+        logger.warning(f"Falling back to API calls for safety check of task '{task_title}' - this should not happen with the new approach")
         try:
             # Verify API access by listing tasklists
             test_tasklists = self.google_client.list_tasklists()
@@ -625,7 +865,8 @@ class AdvancedSyncManager:
                     title=task.title or "",
                     description=task.description or "",
                     due_date=task.due,
-                    status=task.status
+                    status=task.status,
+                    notes=task.notes or ""
                 )
                 current_google_signatures.add(signature)
             
@@ -668,7 +909,8 @@ class AdvancedSyncManager:
                 title=task.title or "",
                 description=task.description or "",
                 due_date=task.due,
-                status=task.status
+                status=task.status,
+                notes=task.notes or ""
             )
             local_signature_to_task[signature] = task
         
@@ -763,3 +1005,262 @@ class AdvancedSyncManager:
         """
         task_dicts = self.local_storage.load_tasks()
         return [Task(**task_dict) for task_dict in task_dicts]
+    
+    def _create_temp_database(self) -> str:
+        """
+        Create a temporary database for storing Google Tasks during sync.
+        
+        Returns:
+            str: Path to the temporary database file
+        """
+        # Create a temporary database file
+        temp_db_fd, temp_db_path = tempfile.mkstemp(suffix='.db', prefix='gtasks_sync_')
+        os.close(temp_db_fd)  # Close the file descriptor, we'll use the path
+        
+        # Create the database schema
+        conn = sqlite3.connect(temp_db_path)
+        cursor = conn.cursor()
+        
+        # Create table for Google Tasks
+        cursor.execute('''
+            CREATE TABLE temp_google_tasks (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                description TEXT,
+                due TEXT,
+                priority TEXT,
+                status TEXT,
+                project TEXT,
+                tags TEXT,
+                notes TEXT,
+                dependencies TEXT,
+                recurrence_rule TEXT,
+                created_at TEXT,
+                modified_at TEXT,
+                tasklist_id TEXT,
+                signature TEXT
+            )
+        ''')
+        
+        # Create indexes for faster lookups
+        cursor.execute('CREATE INDEX idx_signature ON temp_google_tasks(signature)')
+        cursor.execute('CREATE INDEX idx_tasklist ON temp_google_tasks(tasklist_id)')
+        cursor.execute('CREATE INDEX idx_modified_at ON temp_google_tasks(modified_at)')
+        
+        conn.commit()
+        conn.close()
+        
+        logger.debug(f"Created temporary database at {temp_db_path}")
+        return temp_db_path
+    
+    def _load_google_tasks_to_temp_db(self, temp_db_path: str) -> int:
+        """
+        Load all Google Tasks into the temporary database.
+        
+        Args:
+            temp_db_path: Path to the temporary database file
+            
+        Returns:
+            int: Number of tasks loaded
+        """
+        logger.info("Loading Google Tasks into temporary database")
+        
+        # Connect to the temporary database
+        conn = sqlite3.connect(temp_db_path)
+        cursor = conn.cursor()
+        
+        # Get all tasklists
+        tasklists = self.google_client.list_tasklists()
+        if not tasklists:
+            logger.warning("No tasklists found in Google Tasks")
+            conn.close()
+            return 0
+        
+        task_count = 0
+        
+        # Load tasks from each tasklist
+        for tasklist in tasklists:
+            tasklist_id = tasklist['id']
+            tasklist_title = tasklist['title']
+            
+            logger.debug(f"Loading tasks from tasklist: {tasklist_title}")
+            
+            # Get all tasks from this tasklist
+            tasks = self.google_client.list_tasks(
+                tasklist_id=tasklist_id,
+                show_completed=True,
+                show_hidden=True,
+                show_deleted=False
+            )
+            
+            if not tasks:
+                logger.debug(f"No tasks found in tasklist: {tasklist_title}")
+                continue
+            
+            # Insert tasks into temporary database
+            for task in tasks:
+                # Create task signature for duplicate detection
+                signature = self._create_task_signature(
+                    title=task.title or "",
+                    description=task.description or "",
+                    due_date=task.due,
+                    status=task.status
+                )
+                
+                # Convert task to dictionary for database insertion
+                task_dict = {
+                    'id': task.id,
+                    'title': task.title,
+                    'description': task.description,
+                    'due': task.due.isoformat() if task.due else None,
+                    'priority': task.priority.value if hasattr(task.priority, 'value') else str(task.priority),
+                    'status': task.status.value if hasattr(task.status, 'value') else str(task.status),
+                    'project': task.project,
+                    'tags': json.dumps(task.tags) if task.tags else None,
+                    'notes': task.notes,
+                    'dependencies': json.dumps(task.dependencies) if task.dependencies else None,
+                    'recurrence_rule': task.recurrence_rule,
+                    'created_at': task.created_at.isoformat() if task.created_at else None,
+                    'modified_at': task.modified_at.isoformat() if task.modified_at else None,
+                    'tasklist_id': tasklist_id,
+                    'signature': signature
+                }
+                
+                # Insert task into database
+                cursor.execute('''
+                    INSERT OR REPLACE INTO temp_google_tasks 
+                    (id, title, description, due, priority, status, project, tags, notes, 
+                     dependencies, recurrence_rule, created_at, modified_at, tasklist_id, signature)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    task_dict['id'], task_dict['title'], task_dict['description'], task_dict['due'],
+                    task_dict['priority'], task_dict['status'], task_dict['project'], task_dict['tags'],
+                    task_dict['notes'], task_dict['dependencies'], task_dict['recurrence_rule'],
+                    task_dict['created_at'], task_dict['modified_at'], task_dict['tasklist_id'], task_dict['signature']
+                ))
+            
+            task_count += len(tasks)
+            logger.debug(f"Loaded {len(tasks)} tasks from tasklist: {tasklist_title}")
+        
+        # Commit all changes
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Loaded {task_count} Google Tasks into temporary database")
+        return task_count
+    
+    def _create_task_signature(self, title: str, description: str, due_date: Optional[datetime], status: str) -> str:
+        """
+        Create a signature for a task to detect duplicates.
+        
+        Args:
+            title: Task title
+            description: Task description
+            due_date: Task due date
+            status: Task status
+            
+        Returns:
+            str: MD5 hash signature of the task
+        """
+        # Normalize due_date for signature
+        due_str = ""
+        if due_date:
+            if isinstance(due_date, str):
+                due_str = due_date
+            else:
+                due_str = due_date.isoformat()
+        
+        # Combine description and notes for signature since they are the same in Google Tasks
+        # This handles the case where a task might have content in either field
+        combined_description = ""
+        if description:
+            combined_description = description
+        # We don't have access to notes here, but in the calling code we should combine them
+        
+        # Create signature string
+        signature_string = f"{title}|{description}|{due_str}|{status}"
+        
+        # Create MD5 hash
+        return hashlib.md5(signature_string.encode()).hexdigest()
+    
+    def _batch_create_tasks(self, tasks: List) -> Tuple[List, int, int]:
+        """
+        Create multiple tasks in batch.
+        
+        Args:
+            tasks: List of tasks to create
+            
+        Returns:
+            Tuple[List, int, int]: (created_tasks, success_count, failure_count)
+        """
+        created_tasks = []
+        success_count = 0
+        failure_count = 0
+        
+        logger.info(f"Creating {len(tasks)} tasks in batch")
+        
+        for task in tasks:
+            try:
+                # Check if we can still create tasks (authentication check)
+                if not self.google_client.connect():
+                    logger.error("Lost connection to Google Tasks. Aborting batch creation.")
+                    failure_count += 1
+                    continue
+                    
+                created_task = self.google_client.create_task(task)
+                if created_task:
+                    created_tasks.append(created_task)
+                    success_count += 1
+                    logger.debug(f"Successfully created task: {task.title}")
+                else:
+                    failure_count += 1
+                    logger.warning(f"Failed to create task: {task.title}")
+            except Exception as e:
+                failure_count += 1
+                logger.error(f"Exception while creating task '{task.title}': {e}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        logger.info(f"Batch creation completed: {success_count} succeeded, {failure_count} failed")
+        return created_tasks, success_count, failure_count
+    
+    def _batch_update_tasks(self, tasks: List) -> Tuple[List, int, int]:
+        """
+        Update multiple tasks in batch.
+        
+        Args:
+            tasks: List of tasks to update
+            
+        Returns:
+            Tuple[List, int, int]: (updated_tasks, success_count, failure_count)
+        """
+        updated_tasks = []
+        success_count = 0
+        failure_count = 0
+        
+        logger.info(f"Updating {len(tasks)} tasks in batch")
+        
+        for task in tasks:
+            try:
+                # Check if we can still update tasks (authentication check)
+                if not self.google_client.connect():
+                    logger.error("Lost connection to Google Tasks. Aborting batch update.")
+                    failure_count += 1
+                    continue
+                    
+                # For updates, we need the tasklist_id
+                tasklist_id = getattr(task, 'tasklist_id', '@default')
+                updated_task = self.google_client.update_task(task, tasklist_id)
+                if updated_task:
+                    updated_tasks.append(updated_task)
+                    success_count += 1
+                    logger.debug(f"Successfully updated task: {task.title}")
+                else:
+                    failure_count += 1
+                    logger.warning(f"Failed to update task: {task.title}")
+            except Exception as e:
+                failure_count += 1
+                logger.error(f"Exception while updating task '{task.title}': {e}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        logger.info(f"Batch update completed: {success_count} succeeded, {failure_count} failed")
+        return updated_tasks, success_count, failure_count

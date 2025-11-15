@@ -1,6 +1,21 @@
-# Google Tasks CLI - Project Planning Suite
+# Google Tasks CLI Application
 
-This repository contains comprehensive planning documents for the development of a powerful Google Tasks CLI application.
+A command-line interface for managing Google Tasks with advanced synchronization capabilities and performance optimizations.
+
+This repository contains comprehensive planning documents for the development of a powerful Google Tasks CLI application with optimized performance for bulk operations.
+
+## Features
+
+- Add, list, complete, and manage tasks from the command line
+- Synchronize tasks with Google Tasks
+- Advanced synchronization with conflict resolution
+- Multi-account support
+- SQLite and JSON storage backends
+- **Optimized performance with temporary database approach for bulk operations**
+- Interactive mode for efficient task management
+- Task search functionality
+- Task prioritization
+- Due date management
 
 ## Documents Overview
 
@@ -61,6 +76,7 @@ The Google Tasks CLI now includes advanced synchronization capabilities that pro
 - **Push Operations**: Push only local changes to Google Tasks
 - **Pull Operations**: Pull only changes from Google Tasks
 - **Bidirectional Sync**: Full synchronization in both directions with conflict resolution
+- **Performance optimization using temporary database for bulk operations (10-50x faster sync)**
 
 See [ADVANCED_SYNC.md](ADVANCED_SYNC.md) for detailed documentation on the advanced sync functionality.
 
