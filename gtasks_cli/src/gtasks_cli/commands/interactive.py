@@ -515,8 +515,76 @@ def interactive(ctx):
                 if description == "":
                     description = None
                 
-                # Add the task
-                task = task_manager.add_task(title=title, description=description)
+                # Get available task lists
+                tasklist_name = None
+                tasklist_id = None
+                
+                if use_google_tasks:
+                    # For Google Tasks, get available task lists
+                    try:
+                        client = GoogleTasksClient()
+                        tasklists = client.list_tasklists()
+                        if tasklists:
+                            click.echo("\nAvailable task lists:")
+                            for i, tasklist in enumerate(tasklists, 1):
+                                click.echo(f"  {i}. {tasklist.get('title', 'Untitled List')}")
+                            
+                            # Ask user to select a task list
+                            while True:
+                                try:
+                                    choice = click.prompt("Select task list (number)", type=int)
+                                    if 1 <= choice <= len(tasklists):
+                                        selected_tasklist = tasklists[choice - 1]
+                                        tasklist_name = selected_tasklist.get('title')
+                                        tasklist_id = selected_tasklist.get('id')
+                                        break
+                                    else:
+                                        click.echo(f"Please enter a number between 1 and {len(tasklists)}")
+                                except (ValueError, click.Abort):
+                                    click.echo("Invalid input. Please enter a valid number.")
+                        else:
+                            click.echo("No task lists found. Using default list.")
+                    except Exception as e:
+                        logger.error(f"Error getting task lists: {e}")
+                        click.echo("Error retrieving task lists. Using default list.")
+                else:
+                    # For local mode, get list names from storage or offer defaults
+                    try:
+                        list_names = task_manager.get_list_names()
+                        if not list_names:
+                            # If no lists exist, provide some defaults
+                            list_names = ["Tasks", "Work", "Personal", "Shopping", "Projects"]
+                    except Exception as e:
+                        logger.error(f"Error getting list names: {e}")
+                        # Fallback to defaults
+                        list_names = ["Tasks", "Work", "Personal", "Shopping", "Projects"]
+                    
+                    click.echo("\nAvailable task lists:")
+                    for i, list_name in enumerate(list_names, 1):
+                        click.echo(f"  {i}. {list_name}")
+                    click.echo(f"  {len(list_names) + 1}. Enter custom list name")
+                    
+                    while True:
+                        try:
+                            choice = click.prompt("Select task list (number)", type=int)
+                            if 1 <= choice <= len(list_names):
+                                tasklist_name = list_names[choice - 1]
+                                break
+                            elif choice == len(list_names) + 1:
+                                tasklist_name = click.prompt("Enter custom task list name")
+                                break
+                            else:
+                                click.echo(f"Please enter a number between 1 and {len(list_names) + 1}")
+                        except (ValueError, click.Abort):
+                            click.echo("Invalid input. Please enter a valid number.")
+                
+                # Add the task using the correct method name
+                task = task_manager.create_task(
+                    title=title, 
+                    description=description,
+                    tasklist_name=tasklist_name,
+                    tasklist_id=tasklist_id
+                )
                 if task:
                     click.echo(f"Task '{title}' added successfully.")
                     # Refresh task list - only show incomplete tasks and maintain grouped display
