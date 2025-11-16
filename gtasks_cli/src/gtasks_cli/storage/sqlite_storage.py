@@ -252,24 +252,6 @@ class SQLiteStorage:
             logger.error(f"Error loading list mappings from database: {e}")
             return {}
     
-    def get_list_names(self) -> List[str]:
-        """
-        Get all distinct list names from database.
-        
-        Returns:
-            List of distinct list names
-        """
-        try:
-            with sqlite3.connect(self.storage_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('SELECT DISTINCT list_name FROM task_lists WHERE list_name IS NOT NULL')
-                list_names = [row[0] for row in cursor.fetchall()]
-                logger.debug(f"Loaded {len(list_names)} distinct list names from database")
-                return list_names
-        except sqlite3.Error as e:
-            logger.error(f"Error loading list names from database: {e}")
-            return []
-    
     def save_list_mapping(self, mapping: Dict[str, str]) -> None:
         """
         Save task list mappings to database.

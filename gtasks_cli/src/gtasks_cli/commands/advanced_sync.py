@@ -100,8 +100,3 @@ def advanced_sync(ctx, push, pull, account):
                 click.echo(f"❌ Failed to synchronize with Google Tasks for account '{account_name}'!")
             else:
                 click.echo("❌ Failed to synchronize with Google Tasks!")
-    
-    if not success:
-        logger.error("Synchronization failed")
-        # Print more detailed error information
-        click.echo("For more details, check the logs or run with increased verbosity.")

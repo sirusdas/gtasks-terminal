@@ -5,7 +5,6 @@ Task management for the Google Tasks CLI application.
 from typing import List, Optional
 from datetime import datetime
 import traceback
-import uuid
 from gtasks_cli.models.task import Task, Priority, TaskStatus
 from gtasks_cli.storage.local_storage import LocalStorage
 from gtasks_cli.storage.sqlite_storage import SQLiteStorage
@@ -41,18 +40,9 @@ class TaskManager:
         
         # Initialize Google Tasks client if needed
         if use_google_tasks:
-            self.google_client = GoogleTasksClient()
+            self.google_client = GoogleTasksClient(account_name=account_name)
             self.sync_manager = SyncManager(self.storage, self.google_client)
             logger.info(f"Google Tasks client initialized for account: {account_name or 'default'}")
-    
-    def get_list_names(self) -> List[str]:
-        """
-        Get all distinct list names from storage.
-        
-        Returns:
-            List[str]: List of distinct list names
-        """
-        return self.storage.get_list_names()
     
     def create_task(self, title: str, description: Optional[str] = None, 
                    due: Optional[str] = None, priority: Priority = Priority.MEDIUM,

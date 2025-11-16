@@ -60,7 +60,7 @@ def add(ctx, title, description, due, priority, project, tags, notes, recurrence
         project=project,
         tags=list(tags),
         notes=notes,
-        recurrence_rule=recurrence,
+        recurrence_rule=recurring,
         tasklist_name=list_name
     )
     

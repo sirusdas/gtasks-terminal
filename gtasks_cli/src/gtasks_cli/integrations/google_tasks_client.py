@@ -18,18 +18,43 @@ logger = setup_logger(__name__)
 class GoogleTasksClient:
     """Client for interacting with the Google Tasks API."""
     
-    def __init__(self, credentials_file: str = None, token_file: str = None):
+    def __init__(self, credentials_file: str = None, token_file: str = None, account_name: str = None):
         """
-        Initialize the Google Tasks client.
+        Initialize the GoogleTasksClient.
         
         Args:
-            credentials_file: Path to the credentials file
-            token_file: Path to the token file
+            credentials_file: Path to the client credentials JSON file
+            token_file: Path to the token pickle file
+            account_name: Name of the account for multi-account support
         """
-        self.auth_manager = GoogleAuthManager(credentials_file, token_file)
+        # Set default paths if not provided
+        if account_name:
+            # For multi-account support, use account-specific paths
+            config_dir_env = os.environ.get('GTASKS_CONFIG_DIR')
+            if config_dir_env:
+                config_dir = os.path.join(config_dir_env)
+            else:
+                config_dir = os.path.join(os.path.expanduser("~"), ".gtasks", account_name)
+                
+            os.makedirs(config_dir, exist_ok=True)
+            
+            if credentials_file is None:
+                credentials_file = os.path.join(config_dir, "credentials.json")
+            if token_file is None:
+                token_file = os.path.join(config_dir, "token.pickle")
+        else:
+            # Default behavior
+            if credentials_file is None:
+                credentials_file = os.path.join(os.path.expanduser("~"), ".gtasks", "credentials.json")
+            if token_file is None:
+                token_file = os.path.join(os.path.expanduser("~"), ".gtasks", "token.pickle")
+            
+        self.credentials_file = credentials_file
+        self.token_file = token_file
+        self.account_name = account_name
+        self.auth_manager = GoogleAuthManager(credentials_file, token_file, account_name)
         self.service = None
         self._default_tasklist_id = None
-        self._auth_failed = False  # Track authentication failures
         logger.debug(f"GoogleTasksClient initialized with credentials: {credentials_file}, token: {token_file}")
     
     def connect(self) -> bool:
@@ -39,17 +64,11 @@ class GoogleTasksClient:
         Returns:
             bool: True if connection was successful, False otherwise
         """
-        # If we've already failed authentication, don't try again unless we're explicitly resetting
-        if self._auth_failed:
-            logger.error("Authentication previously failed. Not attempting to reconnect to prevent duplicates.")
-            return False
-            
         try:
             self.service = self.auth_manager.get_service()
             
             if not self.service:
                 logger.error("Failed to get Google Tasks API service")
-                self._auth_failed = True  # Mark authentication as failed
                 return False
             
             # Get the default task list ID
@@ -67,14 +86,11 @@ class GoogleTasksClient:
                 self._default_tasklist_id = "@default"
             
             logger.debug(f"Using tasklist ID: {self._default_tasklist_id}")
-            # Reset the auth failed flag on successful connection
-            self._auth_failed = False
             return True
             
         except Exception as e:
             logger.error(f"Failed to connect to Google Tasks API: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
-            self._auth_failed = True  # Mark authentication as failed
             return False
     
     def list_tasklists(self) -> List[Dict[str, Any]]:
@@ -116,119 +132,85 @@ class GoogleTasksClient:
             logger.error(f"Error getting tasklist title: {e}")
             return None
 
-    def create_task(self, task_data, existing_signatures: Optional[Set[str]] = None):
+    def create_task(self, task: Task, existing_signatures: Optional[Set[str]] = None) -> Optional[Task]:
         """
         Create a new task in Google Tasks.
         
         Args:
-            task_data: Either a Task object or parameters for creating a task
-            existing_signatures: Optional set of existing task signatures to avoid duplicates
+            task: Task object to create
+            existing_signatures: Optional set of existing task signatures to check against
             
         Returns:
-            Task object if successful, None otherwise
+            Task: Created task object or None if failed/already exists
         """
-        # CRITICAL: Check if we can connect to Google Tasks before attempting to create a task
-        if not self.service:
-            if not self.connect():
-                logger.error("CRITICAL: Failed to connect to Google Tasks. ABORTING task creation to prevent duplicates.")
-                return None
-        
-        # CRITICAL: If authentication has failed previously, do not attempt to create tasks
-        if self._auth_failed:
-            logger.error("CRITICAL: Authentication has previously failed. ABORTING task creation to prevent duplicates.")
-            return None
-            
-        # Handle both Task objects and individual parameters
-        if hasattr(task_data, 'title'):  # It's a Task object
-            title = task_data.title
-            description = task_data.description
-            due = task_data.due
-            priority = task_data.priority
-            project = task_data.project
-            tags = task_data.tags
-            tasklist_id = getattr(task_data, 'tasklist_id', None) or self._default_tasklist_id or "@default"
-            notes = task_data.notes
-            dependencies = task_data.dependencies
-            recurrence_rule = task_data.recurrence_rule
-        else:
-            # It's individual parameters (dict)
-            title = task_data.get('title')
-            description = task_data.get('description')
-            due = task_data.get('due')
-            priority = task_data.get('priority', Priority.MEDIUM)
-            project = task_data.get('project')
-            tags = task_data.get('tags')
-            tasklist_id = task_data.get('tasklist_id') or self._default_tasklist_id or "@default"
-            notes = task_data.get('notes')
-            dependencies = task_data.get('dependencies')
-            recurrence_rule = task_data.get('recurrence_rule')
-        
-        logger.debug(f"Tasklist ID from task_data: {task_data.get('tasklist_id') if isinstance(task_data, dict) else getattr(task_data, 'tasklist_id', None)}")
-        logger.debug(f"Default tasklist ID: {self._default_tasklist_id}")
-        logger.debug(f"Final tasklist ID: {tasklist_id}")
-        
-        # Use create_task_signature to precompute signatures for better performance
-        from gtasks_cli.utils.task_deduplication import is_task_duplicate, create_task_signature
-            
-        # Format the due date the same way it will be stored in Google Tasks
-        formatted_due = None
-        if due:
-            if isinstance(due, str):
-                # Handle string dates
-                try:
-                    due_date = datetime.fromisoformat(due.replace('Z', '+00:00'))
-                except ValueError:
-                    # If parsing fails, try another format
-                    due_date = datetime.fromisoformat(due)
-            elif isinstance(due, datetime):
-                # Already a datetime object
-                due_date = due
-            else:
-                # Some other type, convert to string first
-                due_date = datetime.fromisoformat(str(due).replace('Z', '+00:00'))
-            
-            # Format the due date correctly for Google Tasks API
-            formatted_due = due_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-            # Then parse it back to match how it will be stored
-            formatted_due = str(datetime.fromisoformat(formatted_due.replace('Z', '+00:00')))
-            
-        # Check if task already exists to prevent duplicates
-        logger.debug(f"Checking for duplicate task: title='{title}', description='{description}', due='{formatted_due}', status='pending'")
-        
-        # Create a signature for this task
-        task_signature = create_task_signature(
-            title=title,
-            description=description or "",
-            due_date=formatted_due or ""
-        )
-        
-        # If we have existing signatures, check against them
-        if existing_signatures:
-            is_duplicate = task_signature in existing_signatures
-        else:
-            # Fall back to checking against Google Tasks if no existing signatures provided
-            is_duplicate = is_task_duplicate(
-                task_title=title, 
-                task_description=description or "", 
-                task_due_date=formatted_due or "", 
-                task_status="pending",
-                use_google_tasks=True
-            )
-        
-        if is_duplicate:
-            logger.info(f"Task '{title}' already exists. Skipping creation.")
-            return None
-        else:
-            logger.debug(f"Task '{title}' is not a duplicate. Proceeding with creation.")
-        
         try:
+            logger.info(f"Creating task in Google Tasks: {task.title}")
+            
+            # Check if we're still connected
+            if not self.service:
+                if not self.connect():
+                    logger.error("Not connected to Google Tasks")
+                    return None
+            
+            # Extract task properties
+            title = task.title
+            description = task.description
+            notes = task.notes
+            due = task.due
+            
+            # Combine description and notes for signature checking
+            full_description = (description or "") + (notes or "")
+            
+            # Format due date for signature creation
+            formatted_due = None
+            if due:
+                # Ensure due is a datetime object
+                if isinstance(due, str):
+                    due_date = datetime.fromisoformat(due.replace('Z', '+00:00'))
+                else:
+                    due_date = due
+                formatted_due = due_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                # Then parse it back to match how it will be stored
+                formatted_due = str(datetime.fromisoformat(formatted_due.replace('Z', '+00:00')))
+            
+            # Check if task already exists to prevent duplicates
+            logger.debug(f"Checking for duplicate task: title='{title}', description='{full_description}', due='{formatted_due}', status='pending'")
+            
+            # Create a signature for this task
+            task_signature = create_task_signature(
+                title=title,
+                description=full_description or "",
+                due_date=formatted_due or "",
+                status="pending"
+            )
+            
+            # If we have existing signatures, check against them
+            if existing_signatures is not None:
+                is_duplicate = task_signature in existing_signatures
+                logger.debug(f"Using provided signatures set with {len(existing_signatures)} items")
+            else:
+                # Fall back to checking against Google Tasks if no existing signatures provided
+                is_duplicate = is_task_duplicate(
+                    task_title=title, 
+                    task_description=full_description or "", 
+                    task_due_date=formatted_due or "", 
+                    task_status="pending",
+                    use_google_tasks=True
+                )
+            
+            if is_duplicate:
+                logger.info(f"Task '{title}' already exists. Skipping creation.")
+                return None
+            else:
+                logger.debug(f"Task '{title}' is not a duplicate. Proceeding with creation.")
+            
             # Prepare task data
             task_data = {
                 'title': title
             }
             
-            if description:
-                task_data['notes'] = description
+            if full_description:
+                task_data['notes'] = full_description
                 
             if due:
                 # Parse the due date
@@ -239,59 +221,35 @@ class GoogleTasksClient:
                     except ValueError:
                         # If parsing fails, try another format
                         due_date = datetime.fromisoformat(due)
-                elif isinstance(due, datetime):
-                    # Already a datetime object
-                    due_date = due
                 else:
-                    # Some other type, convert to string first
-                    due_date = datetime.fromisoformat(str(due).replace('Z', '+00:00'))
-                
-                # Format the due date correctly for Google Tasks API
+                    due_date = due
+                    
+                # Format for Google Tasks API
                 task_data['due'] = due_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             
-            # CRITICAL: Check if we still have a valid connection before creating the task
-            if not self.service:
-                logger.error("CRITICAL: No valid connection to Google Tasks. ABORTING task creation to prevent duplicates.")
-                return None
-                
-            # CRITICAL: If authentication has failed previously, do not attempt to create tasks
-            if self._auth_failed:
-                logger.error("CRITICAL: Authentication has previously failed. ABORTING task creation to prevent duplicates.")
-                return None
+            # Determine tasklist
+            tasklist_id = getattr(task, 'tasklist_id', '@default')
+            if not tasklist_id:
+                tasklist_id = '@default'
             
-            # Create the task in Google Tasks
-            task_result = self.service.tasks().insert(
+            logger.debug(f"Creating task in tasklist: {tasklist_id}")
+            
+            # Create the task
+            result = self.service.tasks().insert(
                 tasklist=tasklist_id,
                 body=task_data
             ).execute()
             
             # Convert to Task object
-            task = Task(
-                id=task_result['id'],
-                title=task_result['title'],
-                notes=task_result.get('notes'),
-                due=datetime.fromisoformat(task_result['due'].replace('Z', '+00:00')) if 'due' in task_result else None,
-                priority=priority,
-                status=TaskStatus.PENDING,
-                project=project,
-                tags=tags or [],
-                description=description,  # Keep the original description for consistency
-                dependencies=dependencies or [],
-                recurrence_rule=recurrence_rule,
-                created_at=datetime.fromisoformat(task_result['updated'].replace('Z', '+00:00')) if 'updated' in task_result else datetime.now(),
-                modified_at=datetime.fromisoformat(task_result['updated'].replace('Z', '+00:00')) if 'updated' in task_result else datetime.now(),
-                tasklist_id=self._default_tasklist_id or "@default"
-            )
-            
-            logger.info(f"Created task in Google Tasks: {task.title}")
-            return task
+            created_task = self._convert_google_task_to_local(result)
+            if created_task:
+                created_task.tasklist_id = tasklist_id
+            logger.info(f"Created task in Google Tasks: {created_task.title} (ID: {created_task.id})")
+            return created_task
             
         except Exception as e:
-            logger.error(f"Error creating task in Google Tasks: {e}")
-            # Mark authentication as failed if we get an auth error
-            if 'invalid_grant' in str(e):
-                self._auth_failed = True
-                logger.error("CRITICAL: Authentication failed during task creation. Marking auth as failed to prevent duplicates.")
+            logger.error(f"Failed to create task '{task.title}': {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return None
     
     def list_tasks(self, tasklist_id: str = None, 

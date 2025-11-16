@@ -47,7 +47,7 @@ def _format_due_date_for_signature(due_date_str: str) -> str:
         return str(due_date_str)
 
 
-def create_task_signature(title: str, description: str = "", due_date: str = "", status: str = "", notes: str = "") -> str:
+def create_task_signature(title: str, description: str = "", due_date: str = "", status: str = "") -> str:
     """
     Create a unique signature for a task based on its key attributes.
     
@@ -56,7 +56,6 @@ def create_task_signature(title: str, description: str = "", due_date: str = "",
         description: Task description
         due_date: Task due date
         status: Task status
-        notes: Task notes (combined with description for Google Tasks compatibility)
         
     Returns:
         MD5 hash of the task signature
@@ -64,15 +63,9 @@ def create_task_signature(title: str, description: str = "", due_date: str = "",
     # Format due date consistently
     formatted_due_date = _format_due_date_for_signature(due_date)
     
-    # Combine description and notes since they are the same field in Google Tasks
-    combined_description = ""
-    if description:
-        combined_description = description
-    elif notes:
-        combined_description = notes
-    
-    signature_string = f"{title}|{combined_description}|{formatted_due_date}|{status}"
+    signature_string = f"{title}|{description}|{formatted_due_date}|{status}"
     signature = hashlib.md5(signature_string.encode('utf-8')).hexdigest()
+    logger.debug(f"Created signature '{signature}' for task: {title}|{description}|{formatted_due_date}|{status}")
     return signature
 
 
@@ -110,8 +103,6 @@ def get_existing_task_signatures(use_google_tasks: bool = True) -> Set[str]:
             from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
             client = GoogleTasksClient()
             if client.connect():
-                # Check if we're in an optimized sync context with a temporary database
-                # For now, we'll just note that we should optimize this in the future
                 # Get all task lists
                 tasklists = client.list_tasklists()
                 

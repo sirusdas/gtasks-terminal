@@ -1,21 +1,6 @@
-# Google Tasks CLI Application
+# Google Tasks CLI - Project Planning Suite
 
-A command-line interface for managing Google Tasks with advanced synchronization capabilities and performance optimizations.
-
-This repository contains comprehensive planning documents for the development of a powerful Google Tasks CLI application with optimized performance for bulk operations.
-
-## Features
-
-- Add, list, complete, and manage tasks from the command line
-- Synchronize tasks with Google Tasks
-- Advanced synchronization with conflict resolution
-- Multi-account support
-- SQLite and JSON storage backends
-- **Optimized performance with temporary database approach for bulk operations**
-- Interactive mode for efficient task management
-- Task search functionality
-- Task prioritization
-- Due date management
+This repository contains comprehensive planning documents for the development of a powerful Google Tasks CLI application.
 
 ## Documents Overview
 
@@ -69,16 +54,34 @@ Master roadmap document:
 - Success metrics
 - Team roles and communication plan
 
-## Advanced Sync Functionality
+## Advanced Sync Feature
 
-The Google Tasks CLI now includes advanced synchronization capabilities that provide more granular control over synchronization operations:
+The Google Tasks CLI now includes an Advanced Sync feature that implements a 4-step simplified synchronization approach to efficiently synchronize tasks between local storage and Google Tasks.
 
-- **Push Operations**: Push only local changes to Google Tasks
-- **Pull Operations**: Pull only changes from Google Tasks
-- **Bidirectional Sync**: Full synchronization in both directions with conflict resolution
-- **Performance optimization using temporary database for bulk operations (10-50x faster sync)**
+### Benefits
 
-See [ADVANCED_SYNC.md](ADVANCED_SYNC.md) for detailed documentation on the advanced sync functionality.
+1. **Reduced API Calls**: Only one initial API call to load all remote tasks instead of multiple calls
+2. **Improved Performance**: All comparisons and decisions are made using local data
+3. **Better Resource Usage**: Fewer network requests mean less bandwidth usage and lower chance of hitting rate limits
+4. **Simplified Logic**: Clear separation of concerns makes the sync process more predictable
+
+### Usage
+
+```bash
+# Bidirectional sync (default)
+gtasks advanced-sync
+
+# Push only
+gtasks advanced-sync --push
+
+# Pull only
+gtasks advanced-sync --pull
+
+# Specify account
+gtasks advanced-sync --account myaccount
+```
+
+For more details, see the [Advanced Sync documentation](ADVANCED_SYNC.md).
 
 ## Search Functionality
 

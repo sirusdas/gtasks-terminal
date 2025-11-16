@@ -90,6 +90,21 @@ class LocalStorage:
             logger.error(f"Error loading tasks from {self.storage_path}: {e}")
             return []
     
+    def save_list_mapping(self, list_mapping: Dict[str, str]) -> None:
+        """
+        Save task list mapping to storage.
+        
+        Args:
+            list_mapping: Dictionary mapping task IDs to list names
+        """
+        try:
+            logger.debug(f"Saving list mapping for {len(list_mapping)} tasks to {self.lists_path}")
+            with open(self.lists_path, 'w') as f:
+                json.dump(list_mapping, f, indent=2)
+            logger.debug(f"Saved list mapping to {self.lists_path}")
+        except Exception as e:
+            logger.error(f"Error saving list mapping to {self.lists_path}: {e}")
+    
     def load_list_mapping(self) -> Dict[str, str]:
         """
         Load task list mapping from storage.
@@ -109,30 +124,3 @@ class LocalStorage:
         except Exception as e:
             logger.error(f"Error loading list mapping from {self.lists_path}: {e}")
             return {}
-    
-    def get_list_names(self) -> List[str]:
-        """
-        Get all distinct list names from storage.
-        
-        Returns:
-            List[str]: List of distinct list names
-        """
-        list_mapping = self.load_list_mapping()
-        list_names = list(set(list_mapping.values()))
-        logger.debug(f"Loaded {len(list_names)} distinct list names from storage")
-        return list_names
-    
-    def save_list_mapping(self, list_mapping: Dict[str, str]) -> None:
-        """
-        Save task list mapping to storage.
-        
-        Args:
-            list_mapping: Dictionary mapping task IDs to list names
-        """
-        try:
-            logger.debug(f"Saving list mapping for {len(list_mapping)} tasks to {self.lists_path}")
-            with open(self.lists_path, 'w') as f:
-                json.dump(list_mapping, f, indent=2)
-            logger.debug(f"Saved list mapping to {self.lists_path}")
-        except Exception as e:
-            logger.error(f"Error saving list mapping to {self.lists_path}: {e}")
