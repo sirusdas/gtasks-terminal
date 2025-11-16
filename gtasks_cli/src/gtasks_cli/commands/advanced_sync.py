@@ -10,6 +10,7 @@ from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.core.task_manager import TaskManager
 from gtasks_cli.integrations.advanced_sync_manager import AdvancedSyncManager
 from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
+from gtasks_cli.storage.config_manager import ConfigManager
 
 logger = setup_logger(__name__)
 
@@ -33,6 +34,10 @@ def advanced_sync(ctx, push, pull, account):
     
     logger.info(f"Advanced synchronization with Google Tasks using {storage_backend} storage backend for account: {account_name or 'default'}")
     
+    # Load configuration to get sync settings
+    config_manager = ConfigManager(account_name=account_name)
+    pull_range_days = config_manager.get('sync.pull_range_days')
+    
     # Create task manager with Google Tasks enabled, the selected storage backend, and account
     task_manager = TaskManager(use_google_tasks=True, storage_backend=storage_backend, account_name=account_name)
     
@@ -40,8 +45,8 @@ def advanced_sync(ctx, push, pull, account):
     google_client = task_manager.google_client
     storage = task_manager.storage
     
-    # Create advanced sync manager
-    sync_manager = AdvancedSyncManager(storage, google_client)
+    # Create advanced sync manager with pull_range_days configuration
+    sync_manager = AdvancedSyncManager(storage, google_client, pull_range_days=pull_range_days)
     
     success = False
     if push and not pull:

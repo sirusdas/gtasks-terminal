@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 Advanced Sync Manager - Enhanced synchronization between local tasks and Google Tasks
@@ -9,7 +10,7 @@ import sqlite3
 import tempfile
 import traceback
 from typing import List, Dict, Optional, Set, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 import hashlib
 import json
 
@@ -19,6 +20,7 @@ from gtasks_cli.storage.local_storage import LocalStorage
 from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
 from gtasks_cli.utils.task_deduplication import create_task_signature, get_existing_task_signatures
 from gtasks_cli.utils.datetime_utils import _normalize_datetime
+from gtasks_cli.storage.config_manager import ConfigManager
 
 logger = setup_logger(__name__)
 
@@ -26,18 +28,16 @@ logger = setup_logger(__name__)
 class AdvancedSyncManager:
     """Advanced synchronization manager for Google Tasks with SQLite storage backend."""
     
-    def __init__(self, storage, google_client, pull_range_days=None):
+    def __init__(self, storage, google_client):
         """
         Initialize the AdvancedSyncManager.
         
         Args:
             storage: An instance of a storage backend (e.g., LocalStorage, SQLiteStorage)
             google_client: An instance of GoogleTasksClient
-            pull_range_days: Number of days to look back for incremental sync (None for full sync)
         """
         self.local_storage = storage
         self.google_client = google_client
-        self.pull_range_days = pull_range_days
         self.sync_metadata_file = os.path.join(
             os.path.expanduser("~"), ".gtasks", "advanced_sync_metadata.json"
         )
@@ -45,6 +45,7 @@ class AdvancedSyncManager:
             os.path.expanduser("~"), ".gtasks", "deletion_log.json"
         )
         self.sync_metadata = self._load_sync_metadata()
+        self.config_manager = ConfigManager()
     
     def _load_sync_metadata(self) -> Dict:
         """
@@ -180,18 +181,102 @@ class AdvancedSyncManager:
                 logger.error("Failed to connect to Google Tasks")
                 return False
             
-            # Step 1: Pull all remote records once and save to memory
-            logger.info("Step 1: Loading all Google Tasks into memory")
+            # Check if local database is empty
+            local_tasks = [Task(**task_dict) for task_dict in self.local_storage.load_tasks()]
+            is_db_empty = len(local_tasks) == 0
+            
+            if is_db_empty:
+                logger.info("Local database is empty. Performing full sync.")
+                # Step 1: Pull all remote records and save directly to main tables
+                success = self._perform_full_sync()
+            else:
+                logger.info("Local database has data. Performing incremental sync.")
+                # Step 2: Check default pull data range from config
+                # Step 3: Pull only data in the specified time range
+                # Step 4: Follow current process
+                success = self._perform_incremental_sync(local_tasks, push_only, pull_only)
+            
+            if success:
+                logger.info("Synchronization completed successfully")
+                # Update sync metadata
+                self.sync_metadata["last_sync"] = datetime.utcnow().isoformat()
+                self._save_sync_metadata()
+                return True
+            else:
+                logger.error("Synchronization failed")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error during synchronization: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
+    
+    def _perform_full_sync(self) -> bool:
+        """
+        Perform a full sync when local database is empty.
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            logger.info("Performing full sync - pulling all remote records")
+            
+            # Load all Google Tasks
             all_google_tasks = self._load_all_google_tasks_once()
             if all_google_tasks is None:
                 logger.error("Failed to load Google Tasks")
                 return False
             
-            logger.info(f"Loaded {len(all_google_tasks)} Google Tasks into memory")
+            logger.info(f"Loaded {len(all_google_tasks)} Google Tasks")
+            
+            # Save all tasks directly to local storage
+            task_dicts = [task.model_dump() for task in all_google_tasks]
+            self.local_storage.save_tasks(task_dicts)
+            
+            logger.info("Full sync completed successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error during full sync: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
+    
+    def _perform_incremental_sync(self, local_tasks: List[Task], push_only: bool, pull_only: bool) -> bool:
+        """
+        Perform an incremental sync when local database has data.
+        
+        Args:
+            local_tasks: List of local tasks
+            push_only: If True, only push local changes to Google Tasks
+            pull_only: If True, only pull changes from Google Tasks
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            logger.info("Performing incremental sync")
+            
+            # Get default pull data range from config (default to 3 months)
+            pull_range_days = self.config_manager.get('sync.pull_range_days', 90)  # Default 90 days = 3 months
+            logger.info(f"Using pull range of {pull_range_days} days")
+            
+            # Calculate the minimum date for filtering
+            min_date = datetime.utcnow() - timedelta(days=pull_range_days)
+            min_date_iso = min_date.isoformat() + 'Z'  # RFC 3339 format
+            
+            logger.info(f"Loading Google Tasks from the last {pull_range_days} days (since {min_date_iso})")
+            
+            # Load Google Tasks filtered by date range
+            filtered_google_tasks = self._load_filtered_google_tasks(min_date_iso)
+            if filtered_google_tasks is None:
+                logger.error("Failed to load filtered Google Tasks")
+                return False
+            
+            logger.info(f"Loaded {len(filtered_google_tasks)} Google Tasks from the last {pull_range_days} days")
             
             # Create a set of existing signatures for duplicate checking (only Google Tasks)
             google_signatures = set()
-            for task in all_google_tasks:
+            for task in filtered_google_tasks:
                 # Combine description and notes since the signature function only takes description
                 description = (task.description or "") + (task.notes or "")
                 signature = create_task_signature(
@@ -202,8 +287,6 @@ class AdvancedSyncManager:
                 )
                 google_signatures.add(signature)
             
-            # Get local tasks
-            local_tasks = [Task(**task_dict) for task_dict in self.local_storage.load_tasks()]
             logger.info(f"Retrieved {len(local_tasks)} local tasks")
             
             # Create a set of local task signatures for duplicate checking
@@ -224,42 +307,71 @@ class AdvancedSyncManager:
             
             # Step 2: Compare records based on latest changes
             logger.info("Step 2: Comparing records based on latest changes")
-            sync_plan = self._compare_and_plan_changes(local_tasks, all_google_tasks)
-            
-            # Short-circuit if there's nothing to do
-            total_changes = sum(len(tasks) for tasks in sync_plan.values())
-            if total_changes == 0:
-                logger.info("No changes detected during sync comparison")
-                return True
+            sync_plan = self._compare_and_plan_changes(local_tasks, filtered_google_tasks)
             
             # Step 3: Check for duplicates and mark for removal
             logger.info("Step 3: Checking for duplicates")
-            self._identify_and_mark_duplicates(sync_plan, local_tasks, all_google_tasks)
-            
-            # Re-check if there's anything to do after duplicate checking
-            total_changes = sum(len(tasks) for tasks in sync_plan.values())
-            if total_changes == 0:
-                logger.info("No changes to sync after duplicate checking")
-                return True
+            self._identify_and_mark_duplicates(sync_plan, local_tasks, filtered_google_tasks)
             
             # Step 4: Execute all changes
             logger.info("Step 4: Executing all changes")
             success = self._execute_sync_plan(sync_plan, push_only, pull_only)
             
-            if success:
-                logger.info("Simplified bidirectional synchronization completed successfully")
-                # Update sync metadata
-                self.sync_metadata["last_sync"] = datetime.utcnow().isoformat()
-                self._save_sync_metadata()
-                return True
-            else:
-                logger.error("Simplified bidirectional synchronization failed")
-                return False
-                
+            return success
+            
         except Exception as e:
-            logger.error(f"Error during simplified synchronization: {e}")
+            logger.error(f"Error during incremental sync: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
+    
+    def _load_filtered_google_tasks(self, min_date_iso: str) -> List[Task]:
+        """
+        Load Google Tasks filtered by date range.
+        
+        Args:
+            min_date_iso: Minimum date in ISO format to filter tasks
+            
+        Returns:
+            List[Task]: List of filtered Google Tasks, or None if failed
+        """
+        try:
+            logger.info(f"Loading Google Tasks with combined filters: min_date={min_date_iso}")
+            
+            # Get all tasklists
+            tasklists = self.google_client.list_tasklists()
+            if not tasklists:
+                logger.error("Failed to retrieve tasklists from Google Tasks")
+                return None
+            
+            # Collect all tasks from all tasklists with combined filters in a single call per tasklist
+            all_tasks = []
+            task_ids = set()  # To avoid duplicates
+            
+            for tasklist in tasklists:
+                # Make a single call with combined filters to get maximum coverage
+                # This will get tasks that match any of the criteria in one API call
+                tasks = self.google_client.list_tasks_with_combined_filters(
+                    tasklist_id=tasklist['id'],
+                    min_date_iso=min_date_iso,
+                    show_completed=True,
+                    show_hidden=True,
+                    show_deleted=False
+                )
+                
+                # Add tasklist information and track unique tasks
+                for task in tasks:
+                    if task.id not in task_ids:
+                        task.tasklist_id = tasklist['id']
+                        all_tasks.append(task)
+                        task_ids.add(task.id)
+            
+            logger.info(f"Successfully loaded {len(all_tasks)} unique filtered tasks from Google Tasks")
+            return all_tasks
+            
+        except Exception as e:
+            logger.error(f"Error loading filtered Google Tasks: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return None
     
     def _load_all_google_tasks_once(self) -> List[Task]:
         """
@@ -277,51 +389,19 @@ class AdvancedSyncManager:
                 logger.error("Failed to retrieve tasklists from Google Tasks")
                 return None
             
-            # Create a mapping of tasklist IDs to titles
-            tasklist_titles = {tl['id']: tl.get('title', 'Untitled List') for tl in tasklists}
-            
             # Collect all tasks from all tasklists
             all_tasks = []
-            
-            # Determine if we should do incremental sync
-            if self.pull_range_days is not None:
-                # Calculate the minimum update time for incremental sync
-                from datetime import datetime, timedelta, timezone
-                min_update_time = datetime.now(timezone.utc) - timedelta(days=self.pull_range_days)
-                min_update_time_iso = min_update_time.isoformat()
-                
-                logger.info(f"Performing incremental sync with {self.pull_range_days} day range (since {min_update_time_iso})")
-                
-                for tasklist in tasklists:
-                    tasks = self.google_client.list_tasks_with_filters(
-                        tasklist_id=tasklist['id'],
-                        updated_min=min_update_time_iso,
-                        show_completed=True,
-                        show_hidden=True,
-                        show_deleted=False
-                    )
-                    # Add tasklist information to each task
-                    for task in tasks:
-                        task.tasklist_id = tasklist['id']
-                        # Add list title as well for display purposes
-                        task.list_title = tasklist_titles.get(tasklist['id'], 'Untitled List')
-                    all_tasks.extend(tasks)
-            else:
-                # Full sync - get all tasks
-                logger.info("Performing full sync of all Google Tasks")
-                for tasklist in tasklists:
-                    tasks = self.google_client.list_tasks(
-                        tasklist_id=tasklist['id'],
-                        show_completed=True,
-                        show_hidden=True,
-                        show_deleted=False
-                    )
-                    # Add tasklist information to each task
-                    for task in tasks:
-                        task.tasklist_id = tasklist['id']
-                        # Add list title as well for display purposes
-                        task.list_title = tasklist_titles.get(tasklist['id'], 'Untitled List')
-                    all_tasks.extend(tasks)
+            for tasklist in tasklists:
+                tasks = self.google_client.list_tasks(
+                    tasklist_id=tasklist['id'],
+                    show_completed=True,
+                    show_hidden=True,
+                    show_deleted=False
+                )
+                # Add tasklist information to each task
+                for task in tasks:
+                    task.tasklist_id = tasklist['id']
+                all_tasks.extend(tasks)
             
             logger.info(f"Successfully loaded {len(all_tasks)} tasks from Google Tasks")
             return all_tasks
@@ -397,13 +477,14 @@ class AdvancedSyncManager:
                     # Task already exists remotely, this is a duplicate
                     logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - Already exists remotely, skipping creation")
                 else:
+                    # Task doesn't exist remotely
                     # Check if it was previously synced with Google Tasks (has a valid tasklist_id)
                     # Google Tasks tasklist IDs are long base64-like strings
                     if (hasattr(local_task, 'tasklist_id') and 
                         local_task.tasklist_id and 
                         len(local_task.tasklist_id) > 20):
                         # This task has a Google Tasks tasklist ID, which means it was previously synced
-                        # Since it's no longer in Google Tasks during a full sync, it was likely deleted
+                        # Since it's no longer in Google Tasks, it was likely deleted
                         # Mark it as deleted locally
                         logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - Previously synced with Google Tasks but no longer exists, marking as deleted locally")
                         local_task.status = TaskStatus.DELETED
@@ -541,14 +622,16 @@ class AdvancedSyncManager:
             bool: True if successful, False otherwise
         """
         try:
-            # Short-circuit if there's nothing to do
-            if not any([
-                len(sync_plan['remove_local_duplicates']),
-                len(sync_plan['update_remote']),
-                len(sync_plan['create_remote'])
-            ]):
-                logger.info("No push operations needed")
+            # Check if there's anything to push
+            tasks_to_push = (len(sync_plan['remove_local_duplicates']) + 
+                           len(sync_plan['update_remote']) + 
+                           len(sync_plan['create_remote']))
+            
+            if tasks_to_push == 0:
+                logger.info("No tasks to push, skipping push operations")
                 return True
+            
+            logger.info(f"Executing push operations for {tasks_to_push} tasks")
             
             # Remove local duplicates - we'll do this by marking them as deleted
             for task in sync_plan['remove_local_duplicates']:
@@ -568,13 +651,11 @@ class AdvancedSyncManager:
                     logger.warning(f"Failed to mark duplicate local task {task.title} as deleted: {e}")
             
             # Update remote tasks
-            updated_tasks = []
             for task in sync_plan['update_remote']:
                 try:
                     updated_task = self.google_client.update_task(task, task.tasklist_id)
                     if updated_task:
                         logger.debug(f"Updated task in Google: {task.title}")
-                        updated_tasks.append(task)
                     else:
                         logger.warning(f"Failed to update task in Google: {task.title}")
                 except Exception as e:
@@ -582,7 +663,6 @@ class AdvancedSyncManager:
                     logger.error(f"Traceback: {traceback.format_exc()}")
             
             # Create remote tasks
-            created_tasks = []
             for task in sync_plan['create_remote']:
                 try:
                     # Create task in Google Tasks, passing Google signatures to prevent additional API calls
@@ -618,37 +698,11 @@ class AdvancedSyncManager:
                             status=task.status
                         )
                         self._google_signatures.add(signature)
-                        
-                        created_tasks.append(task)
                     else:
                         logger.warning(f"Failed to create task in Google: {task.title}")
                 except Exception as e:
                     logger.error(f"Exception while creating task '{task.title}': {e}")
                     logger.error(f"Traceback: {traceback.format_exc()}")
-            
-            # Update list mappings only for tasks that were actually modified
-            if updated_tasks or created_tasks:
-                list_mappings = self.local_storage.load_list_mapping()
-                new_list_mapping = list_mappings.copy()
-                
-                # Update list mappings for updated tasks
-                for task in updated_tasks:
-                    if hasattr(task, 'tasklist_id') and task.tasklist_id:
-                        # Get the task list title from Google
-                        list_title = self.google_client.get_tasklist_title(task.tasklist_id)
-                        if list_title:
-                            new_list_mapping[task.id] = list_title
-                
-                # Update list mappings for created tasks
-                for task in created_tasks:
-                    if hasattr(task, 'tasklist_id') and task.tasklist_id:
-                        # Get the task list title from Google
-                        list_title = self.google_client.get_tasklist_title(task.tasklist_id)
-                        if list_title:
-                            new_list_mapping[task.id] = list_title
-                
-                # Save updated list mappings
-                self.local_storage.save_list_mapping(new_list_mapping)
             
             return True
             
@@ -668,15 +722,6 @@ class AdvancedSyncManager:
             bool: True if successful, False otherwise
         """
         try:
-            # Short-circuit if there's nothing to do
-            if not any([
-                len(sync_plan['remove_remote_duplicates']),
-                len(sync_plan['update_local']),
-                len(sync_plan['create_local'])
-            ]):
-                logger.info("No pull operations needed")
-                return True
-            
             # Remove remote duplicates - actually delete them from Google Tasks
             deleted_remote_count = 0
             for task in sync_plan['remove_remote_duplicates']:
@@ -776,36 +821,20 @@ class AdvancedSyncManager:
             # Final deduplication pass to ensure no duplicates
             unique_tasks = self._remove_duplicates_from_list(all_pulled_tasks)
             
-            # Create and save the list mapping only if we have tasks
-            if unique_tasks or updated_tasks:
-                list_mappings = self.local_storage.load_list_mapping()
-                new_list_mapping = list_mappings.copy()  # Start with existing mappings
-                
-                # Update list mappings with any new tasklist IDs
-                for task in unique_tasks:
-                    if hasattr(task, 'tasklist_id') and task.tasklist_id:
-                        # Update mapping with tasklist ID if it's not already there
-                        list_name = getattr(task, 'list_title', None)
-                        if not list_name:
-                            # Get the list title from Google if not already set
-                            list_name = self.google_client.get_tasklist_title(task.tasklist_id)
-                        
-                        if list_name:
-                            new_list_mapping[task.id] = list_name
-                
-                # Also update list mappings for updated tasks
-                for task in updated_tasks:
-                    if hasattr(task, 'tasklist_id') and task.tasklist_id:
-                        list_name = getattr(task, 'list_title', None)
-                        if not list_name:
-                            # Get the list title from Google if not already set
-                            list_name = self.google_client.get_tasklist_title(task.tasklist_id)
-                        
-                        if list_name:
-                            new_list_mapping[task.id] = list_name
-                
-                # Save updated list mappings
-                self.local_storage.save_list_mapping(new_list_mapping)
+            # Create and save the list mapping
+            list_mappings = self.local_storage.load_list_mapping()
+            new_list_mapping = list_mappings.copy()  # Start with existing mappings
+            
+            # Update list mappings with any new tasklist IDs
+            for task in unique_tasks:
+                if hasattr(task, 'tasklist_id') and task.tasklist_id:
+                    # Update mapping with tasklist ID if it's not already there
+                    list_name = getattr(task, 'list_name', 'default')
+                    if list_name not in new_list_mapping or not new_list_mapping[list_name]:
+                        new_list_mapping[list_name] = task.tasklist_id
+            
+            # Save updated list mappings
+            self.local_storage.save_list_mapping(new_list_mapping)
             
             logger.info(f"Pull operations completed: {len(updated_tasks)} updated, {len(created_tasks)} created, {deleted_local_count} local tasks handled, {deleted_remote_count} duplicates deleted")
             return True

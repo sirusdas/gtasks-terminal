@@ -184,6 +184,7 @@ def interactive(ctx):
     """
     use_google_tasks = ctx.obj.get('use_google_tasks', False)
     storage_backend = ctx.obj.get('storage_backend', 'sqlite')
+    account_name = ctx.obj.get('account_name', None)
     logger.info(f"Starting interactive mode {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
     # Import here to avoid issues with module loading
@@ -193,7 +194,8 @@ def interactive(ctx):
     # Create task manager
     task_manager = TaskManager(
         use_google_tasks=use_google_tasks,
-        storage_backend=storage_backend
+        storage_backend=storage_backend,
+        account_name=account_name
     )
     
     # Get only pending/incomplete tasks by default
@@ -219,34 +221,25 @@ def interactive(ctx):
                 task.list_title = tasklist_title
                 
             tasks.extend(incomplete_tasks)
-            
-        # Display tasks grouped by list names with color coding
-        _display_tasks_grouped_by_list(tasks)
-        task_state.set_tasks(tasks)
     else:
         # For local mode, just get incomplete tasks
         tasks = task_manager.list_tasks()
+        logger.debug(f"Loaded {len(tasks)} total tasks")
+        for task in tasks:
+            logger.debug(f"Task: {task.title} (ID: {task.id}) - Status: {task.status}")
         tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
+        logger.debug(f"Filtered to {len(tasks)} incomplete tasks")
         # Add list_title to each task for grouping display (default to "Tasks" for local mode)
         for task in tasks:
             if not hasattr(task, 'list_title') or not task.list_title:
                 task.list_title = "Tasks"
-        
-        # Display tasks grouped by list names with color coding
-        _display_tasks_grouped_by_list(tasks)
-        task_state.set_tasks(tasks)
     
     if not tasks:
         click.echo("No incomplete tasks found.")
         return
     
     # Display tasks with numbers
-    if use_google_tasks:
-        # For Google Tasks, group by list names
-        _display_tasks_grouped_by_list(tasks)
-    else:
-        # For local tasks, also group by list names
-        _display_tasks_grouped_by_list(tasks)
+    _display_tasks_grouped_by_list(tasks)
     
     # Store current tasks in task_state
     task_state.set_tasks(tasks)

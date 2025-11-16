@@ -312,6 +312,154 @@ class GoogleTasksClient:
             logger.error(f"Error listing tasks from Google Tasks: {e}")
             return []
     
+    def list_tasks_with_filters(self, tasklist_id: str = None, 
+                               completed_min: str = None,
+                               due_min: str = None,
+                               updated_min: str = None,
+                               show_completed: bool = False,
+                               show_hidden: bool = False,
+                               show_deleted: bool = False) -> List[Task]:
+        """
+        List tasks from a task list with date filtering options.
+        
+        Args:
+            tasklist_id: The ID of the task list to retrieve tasks from
+            completed_min: Timestamp of the minimum completed time to filter by (RFC 3339 format)
+            due_min: Timestamp of the minimum due time to filter by (RFC 3339 format)
+            updated_min: Timestamp of the minimum updated time to filter by (RFC 3339 format)
+            show_completed: Whether to include completed tasks
+            show_hidden: Whether to include hidden tasks
+            show_deleted: Whether to include deleted tasks
+            
+        Returns:
+            List of Task objects
+        """
+        if not self.service:
+            if not self.connect():
+                return []
+        
+        tasklist_id = tasklist_id or self._default_tasklist_id or "@default"
+        
+        try:
+            # Build parameters for the request
+            params = {
+                'tasklist': tasklist_id,
+                'showCompleted': show_completed,
+                'showHidden': show_hidden,
+                'showDeleted': show_deleted
+            }
+            
+            # Add optional date filters
+            if completed_min:
+                params['completedMin'] = completed_min
+                
+            if due_min:
+                params['dueMin'] = due_min
+                
+            if updated_min:
+                params['updatedMin'] = updated_min
+            
+            tasks = []
+            page_token = None
+            
+            # Handle pagination
+            while True:
+                # Add page token if we have one
+                if page_token:
+                    params['pageToken'] = page_token
+                
+                # Execute the request
+                result = self.service.tasks().list(**params).execute()
+                
+                # Convert to Task objects
+                for item in result.get('items', []):
+                    task = self._convert_google_task_to_local(item)
+                    task.tasklist_id = tasklist_id  # Set the tasklist_id
+                    tasks.append(task)
+                
+                # Check if there are more pages
+                page_token = result.get('nextPageToken')
+                if not page_token:
+                    break
+            
+            logger.info(f"Retrieved {len(tasks)} filtered tasks from Google Tasks (tasklist: {tasklist_id})")
+            return tasks
+        except Exception as e:
+            logger.error(f"Error listing filtered tasks from Google Tasks: {e}")
+            logger.error(f"Parameters used: {params}")
+            return []
+
+    def list_tasks_with_combined_filters(self, tasklist_id: str = None,
+                                       min_date_iso: str = None,
+                                       show_completed: bool = False,
+                                       show_hidden: bool = False,
+                                       show_deleted: bool = False) -> List[Task]:
+        """
+        List tasks from a task list with combined date filtering for better efficiency.
+        This method uses a single API call with multiple date filters to get all 
+        relevant tasks in one request.
+        
+        Args:
+            tasklist_id: The ID of the task list to retrieve tasks from
+            min_date_iso: Minimum date for all filters (completed, due, updated)
+            show_completed: Whether to include completed tasks
+            show_hidden: Whether to include hidden tasks
+            show_deleted: Whether to include deleted tasks
+            
+        Returns:
+            List of Task objects
+        """
+        if not self.service:
+            if not self.connect():
+                return []
+        
+        tasklist_id = tasklist_id or self._default_tasklist_id or "@default"
+        
+        try:
+            # Build parameters for the request with all filters
+            params = {
+                'tasklist': tasklist_id,
+                'showCompleted': show_completed,
+                'showHidden': show_hidden,
+                'showDeleted': show_deleted
+            }
+            
+            # Add all date filters with the same minimum date
+            if min_date_iso:
+                params['completedMin'] = min_date_iso
+                params['dueMin'] = min_date_iso
+                params['updatedMin'] = min_date_iso
+            
+            tasks = []
+            page_token = None
+            
+            # Handle pagination
+            while True:
+                # Add page token if we have one
+                if page_token:
+                    params['pageToken'] = page_token
+                
+                # Execute the request
+                result = self.service.tasks().list(**params).execute()
+                
+                # Convert to Task objects
+                for item in result.get('items', []):
+                    task = self._convert_google_task_to_local(item)
+                    task.tasklist_id = tasklist_id  # Set the tasklist_id
+                    tasks.append(task)
+                
+                # Check if there are more pages
+                page_token = result.get('nextPageToken')
+                if not page_token:
+                    break
+            
+            logger.info(f"Retrieved {len(tasks)} combined filtered tasks from Google Tasks (tasklist: {tasklist_id})")
+            return tasks
+        except Exception as e:
+            logger.error(f"Error listing combined filtered tasks from Google Tasks: {e}")
+            logger.error(f"Parameters used: {params}")
+            return []
+
     def get_task(self, task_id: str, tasklist_id: str = None) -> Optional[Task]:
         """
         Get a specific task by ID.

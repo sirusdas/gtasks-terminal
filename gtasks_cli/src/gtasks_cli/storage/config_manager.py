@@ -61,6 +61,9 @@ class ConfigManager:
                 'table_style': 'simple',
                 'max_width': 100
             },
+            'sync': {
+                'pull_range_days': 10  # Default to 10 days
+            },
             'accounts': {}  # For multi-account support
         }
         

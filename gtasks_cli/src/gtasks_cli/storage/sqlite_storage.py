@@ -87,11 +87,12 @@ class SQLiteStorage:
                     )
                 ''')
                 
-                # Create lists table for task list mappings
+                # Create lists table for task list mappings with foreign key constraint
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS task_lists (
                         task_id TEXT PRIMARY KEY,
-                        list_name TEXT NOT NULL
+                        list_name TEXT NOT NULL,
+                        FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
                     )
                 ''')
                 
@@ -181,14 +182,17 @@ class SQLiteStorage:
                 
                 cursor.execute('''
                     SELECT 
-                        id, title, description, due, priority, status, project,
-                        tags, notes, dependencies, recurrence_rule, created_at,
-                        modified_at, completed_at, estimated_duration, actual_duration,
-                        is_recurring, recurring_task_id, tasklist_id
-                    FROM tasks
+                        t.id, t.title, t.description, t.due, t.priority, t.status, t.project,
+                        t.tags, t.notes, t.dependencies, t.recurrence_rule, t.created_at,
+                        t.modified_at, t.completed_at, t.estimated_duration, t.actual_duration,
+                        t.is_recurring, t.recurring_task_id, t.tasklist_id,
+                        l.list_name
+                    FROM tasks t
+                    LEFT JOIN task_lists l ON t.id = l.task_id
                 ''')
                 
                 rows = cursor.fetchall()
+                logger.debug(f"Loaded {len(rows)} rows from database")
                 tasks = []
                 
                 for row in rows:
@@ -215,7 +219,8 @@ class SQLiteStorage:
                         'actual_duration': row[15],
                         'is_recurring': row[16],
                         'recurring_task_id': row[17],
-                        'tasklist_id': row[18]
+                        'tasklist_id': row[18],
+                        'list_name': row[19] if len(row) > 19 else None
                     }
                     tasks.append(task)
                 
@@ -223,10 +228,7 @@ class SQLiteStorage:
                 cursor.execute('SELECT task_id, list_name FROM task_lists')
                 list_mappings = {row[0]: row[1] for row in cursor.fetchall()}
                 
-                # Add list names to tasks
-                for task in tasks:
-                    if task['id'] in list_mappings:
-                        task['list_name'] = list_mappings[task['id']]
+                # List name is already included from the JOIN in the main query
                 
                 logger.debug(f"Loaded {len(tasks)} tasks from database")
                 return tasks

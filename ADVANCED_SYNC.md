@@ -4,6 +4,16 @@
 
 The Advanced Sync feature implements a 4-step simplified synchronization approach that significantly reduces the number of API calls and improves overall efficiency when synchronizing tasks between local storage and Google Tasks.
 
+## Optimization
+
+The Advanced Sync has been further optimized to improve performance based on the state of the local database:
+
+1. **Full Sync for Empty Databases**: When the local database is empty, all remote tasks are pulled and stored directly without complex processing.
+2. **Incremental Sync for Existing Databases**: When the local database contains data, only tasks from a specified time range are pulled to reduce data transfer and processing time.
+3. **API Call Reduction**: Using combined filters in single API calls instead of multiple separate calls.
+
+See [Advanced Sync Optimization](./ADVANCED_SYNC_OPTIMIZATION.md) for detailed information about these optimizations.
+
 ## The 4-Step Simplified Approach
 
 ### Step 1: Pull Remote Records Once
@@ -49,15 +59,10 @@ Duplicate detection is performed once on the local data:
 
 ```python
 def _identify_and_mark_duplicates(self, sync_plan: Dict, local_tasks: List[Task], google_tasks: List[Task]):
-    # Find duplicates in local tasks
-    local_signature_map = self._create_signature_map(local_tasks)
-    for signature, tasks in local_signature_map.items():
-        if len(tasks) > 1:
-            # Mark duplicates for removal
 ```
 
-### Step 4: Execute All Changes in Batch
-All changes are executed in batch operations:
+### Step 4: Execute All Changes
+All changes are executed in batches to minimize API calls:
 
 ```python
 def _execute_sync_plan(self, sync_plan: Dict, push_only: bool, pull_only: bool) -> bool:
@@ -70,44 +75,38 @@ def _execute_sync_plan(self, sync_plan: Dict, push_only: bool, pull_only: bool) 
         pull_success = self._execute_pull_operations(sync_plan)
 ```
 
-## Benefits of This Approach
+## API Call Optimization
 
-### 1. Reduced API Calls
-- **Before**: Multiple API calls throughout the sync process
-- **After**: Only one initial API call to load all remote tasks
+Previously, for each task list, the system made 3 separate API calls:
+1. One for completed tasks within the time range
+2. One for due tasks within the time range
+3. One for updated tasks within the time range
 
-### 2. Improved Performance
-- All comparisons and decisions are made using local data
-- Eliminates network latency from the decision-making process
-- Reduces overall sync time
+This has been optimized to make a single API call per task list with all three filters:
+- `completedMin`, `dueMin`, and `updatedMin` are all specified in one request
+- This returns tasks that match any of the criteria
+- Results are deduplicated to avoid processing the same task multiple times
 
-### 3. Better Resource Usage
-- Fewer network requests mean less bandwidth usage
-- Lower chance of hitting rate limits
-- Reduced battery usage on mobile devices
+This optimization reduces the number of API calls by approximately 66%, significantly improving sync performance.
 
-### 4. Simplified Logic
-- The sync process becomes more predictable
-- Easier to debug and maintain
-- Clear separation of concerns
+## Benefits
 
-## Usage
+1. **Reduced API Calls**: The 4-step approach minimizes the number of calls to the Google Tasks API
+2. **Improved Performance**: Loading data once and processing in memory is much faster
+3. **Better Error Handling**: Centralized data loading makes error handling more straightforward
+4. **Enhanced Reliability**: Fewer API calls mean fewer opportunities for connection issues
+5. **Better API Quota Usage**: Reduced API calls help stay within Google Tasks API quotas
 
-The advanced sync feature can be accessed through the CLI using the `advanced-sync` command:
+## Configuration
 
-```bash
-# Bidirectional sync (default)
-gtasks advanced-sync
+The sync behavior can be configured using the `sync.pull_range_days` setting in the configuration file:
 
-# Push only
-gtasks advanced-sync --push
-
-# Pull only
-gtasks advanced-sync --pull
-
-# Specify account
-gtasks advanced-sync --account myaccount
+```yaml
+sync:
+  pull_range_days: 90  # Default is 90 days (3 months)
 ```
+
+This setting controls how far back in time to fetch tasks during incremental sync operations.
 
 ## Implementation Details
 

@@ -38,6 +38,8 @@ class TaskManager:
             self.storage = LocalStorage(account_name=account_name)
             logger.info(f"Using JSON file storage backend for account: {account_name or 'default'}")
         
+        logger.debug(f"TaskManager initialized with use_google_tasks={use_google_tasks}, storage_backend={storage_backend}, account_name={account_name}")
+        
         # Initialize Google Tasks client if needed
         if use_google_tasks:
             self.google_client = GoogleTasksClient(account_name=account_name)
@@ -178,11 +180,14 @@ class TaskManager:
                     logger.error(f"Error converting Google Task {google_task.id}: {e}")
                     continue
             
+            logger.debug(f"Loaded {len(tasks)} tasks from Google Tasks")
             return tasks
         else:
             # In local mode, get tasks from local storage
             task_dicts = self.storage.load_tasks()
+            logger.debug(f"Loaded {len(task_dicts)} task dictionaries from storage")
             tasks = [Task(**task_dict) for task_dict in task_dicts]
+            logger.debug(f"Converted to {len(tasks)} Task objects")
 
             # Load list mapping and set list_title on each task
             list_mapping = self.storage.load_list_mapping()
@@ -236,6 +241,7 @@ class TaskManager:
                 
                 filtered_tasks.append(task)
             
+            logger.debug(f"Filtered to {len(filtered_tasks)} tasks")
             return filtered_tasks
     
     def get_task(self, task_id: str) -> Optional[Task]:

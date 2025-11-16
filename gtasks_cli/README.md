@@ -12,6 +12,7 @@ A powerful, feature-rich CLI application for Google Tasks management in Python.
 - Recurring tasks and dependencies
 - Offline mode with synchronization
 - Import/export functionality
+- [Optimized Advanced Sync](../ADVANCED_SYNC_OPTIMIZATION.md) for improved performance
 
 ## Installation
 

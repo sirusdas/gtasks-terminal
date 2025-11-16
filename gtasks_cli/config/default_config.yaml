@@ -13,6 +13,13 @@ display:
   table_style: "simple"
   max_width: 100
 
+# Sync settings
+sync:
+  pull_range_days: 10  # Default to 10 Days
+
+# Account settings
+accounts: {}
+
 # Aliases
 aliases:
   ls: list
