@@ -146,8 +146,28 @@ def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
     # Use timezone-naive datetimes for comparison to avoid timezone issues
     now = datetime.now().replace(tzinfo=None)
     
-    def _task_in_time_period(task: Task, start_time, end_time) -> bool:
-        """Check if a task falls within the specified time period based on due, created, or modified dates"""
+    # Parse filter type to check if it specifies a date field
+    # Format: "this_month:due_date" or "this_week:created_at"
+    if ':' in filter_type:
+        period, date_field = filter_type.split(':', 1)
+        date_field = date_field.lower()
+    else:
+        period = filter_type
+        date_field = None  # Will use all date fields
+    
+    def _task_in_time_period(task: Task, start_time, end_time, specific_field=None) -> bool:
+        """Check if a task falls within the specified time period based on specified or all date fields"""
+        # If a specific field is requested, only check that field
+        if specific_field:
+            if specific_field == 'due_date' and task.due:
+                return start_time <= _normalize_datetime(task.due) < end_time
+            elif specific_field == 'created_at' and task.created_at:
+                return start_time <= _normalize_datetime(task.created_at) < end_time
+            elif specific_field == 'modified_at' and task.modified_at:
+                return start_time <= _normalize_datetime(task.modified_at) < end_time
+            return False
+            
+        # Otherwise check all date fields
         # Check due date first
         if task.due and start_time <= _normalize_datetime(task.due) < end_time:
             return True
@@ -162,45 +182,45 @@ def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
             
         return False
     
-    if filter_type == 'today':
+    if period == 'today':
         start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = start_of_day + timedelta(days=1)
-        return [t for t in tasks if _task_in_time_period(t, start_of_day, end_of_day)]
+        return [t for t in tasks if _task_in_time_period(t, start_of_day, end_of_day, date_field)]
     
-    elif filter_type == 'this_week':
+    elif period == 'this_week':
         start_of_week = now - timedelta(days=now.weekday())
         start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_week = start_of_week + timedelta(weeks=1)
-        return [t for t in tasks if _task_in_time_period(t, start_of_week, end_of_week)]
+        return [t for t in tasks if _task_in_time_period(t, start_of_week, end_of_week, date_field)]
     
-    elif filter_type == 'this_month':
+    elif period == 'this_month':
         start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         if now.month == 12:
             end_of_month = now.replace(year=now.year + 1, month=1, day=1)
         else:
             end_of_month = now.replace(month=now.month + 1, day=1)
-        return [t for t in tasks if _task_in_time_period(t, start_of_month, end_of_month)]
+        return [t for t in tasks if _task_in_time_period(t, start_of_month, end_of_month, date_field)]
     
-    elif filter_type == 'last_month':
+    elif period == 'last_month':
         if now.month == 1:
             start_of_month = now.replace(year=now.year - 1, month=12, day=1, hour=0, minute=0, second=0, microsecond=0)
             end_of_month = now.replace(year=now.year, month=1, day=1)
         else:
             start_of_month = now.replace(month=now.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0)
             end_of_month = now.replace(day=1)
-        return [t for t in tasks if _task_in_time_period(t, start_of_month, end_of_month)]
+        return [t for t in tasks if _task_in_time_period(t, start_of_month, end_of_month, date_field)]
     
-    elif filter_type == 'last_3m':
+    elif period == 'last_3m':
         start_date = now - timedelta(days=90)
-        return [t for t in tasks if _task_in_time_period(t, start_date, now)]
+        return [t for t in tasks if _task_in_time_period(t, start_date, now, date_field)]
     
-    elif filter_type == 'last_6m':
+    elif period == 'last_6m':
         start_date = now - timedelta(days=180)
-        return [t for t in tasks if _task_in_time_period(t, start_date, now)]
+        return [t for t in tasks if _task_in_time_period(t, start_date, now, date_field)]
     
-    elif filter_type == 'last_year':
+    elif period == 'last_year':
         start_date = now - timedelta(days=365)
-        return [t for t in tasks if _task_in_time_period(t, start_date, now)]
+        return [t for t in tasks if _task_in_time_period(t, start_date, now, date_field)]
     
     return tasks
 
@@ -263,8 +283,12 @@ task_state = TaskState()
 @click.option('--project', '-P', help='Filter tasks by project')
 @click.option('--recurring', '-r', is_flag=True, help='Show only recurring tasks')
 @click.option('--filter', '-f', 'time_filter', 
-              type=click.Choice(['today', 'this_week', 'this_month', 'last_month', 'last_3m', 'last_6m', 'last_year']),
-              help='Filter tasks by time period')
+              help='Filter tasks by time period. '
+                   'Use format like "this_month", "this_week", etc. '
+                   'To filter by a specific date field, use "this_month:due_date", '
+                   '"this_week:created_at", or "this_month:modified_at". '
+                   'Supported periods: today, this_week, this_month, last_month, '
+                   'last_3m, last_6m, last_year.')
 @click.option('--search', '-S', help='Search tasks by title, description, or notes')
 @click.option('--account', '-a', help='Account name for multi-account support')
 @click.pass_context

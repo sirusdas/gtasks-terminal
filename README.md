@@ -54,6 +54,12 @@ Master roadmap document:
 - Success metrics
 - Team roles and communication plan
 
+### 6. [Advanced Filtering](ADVANCED_FILTERING.md)
+Documentation for advanced filtering capabilities:
+- Time-based filtering with specific date fields
+- Combining multiple filters for precise results
+- Best practices for different filtering scenarios
+
 ## Advanced Sync Feature
 
 The Google Tasks CLI now includes an Advanced Sync feature that implements a 4-step simplified synchronization approach to efficiently synchronize tasks between local storage and Google Tasks.
