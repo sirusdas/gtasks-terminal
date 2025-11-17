@@ -437,9 +437,16 @@ def interactive(ctx, command):
                     
                     # Apply search filter if provided
                     if search_filter:
-                        all_tasks = [t for t in all_tasks if search_filter.lower() in t.title.lower() or 
-                                   (t.description and search_filter.lower() in t.description.lower()) or
-                                   (t.notes and search_filter.lower() in t.notes.lower())]
+                        # Support OR logic with pipe separator
+                        if '|' in search_filter:
+                            search_terms = [term.strip().lower() for term in search_filter.split('|')]
+                            all_tasks = [t for t in all_tasks if any(term in t.title.lower() or 
+                                       (t.description and term in t.description.lower()) or
+                                       (t.notes and term in t.notes.lower()) for term in search_terms)]
+                        else:
+                            all_tasks = [t for t in all_tasks if search_filter.lower() in t.title.lower() or 
+                                       (t.description and search_filter.lower() in t.description.lower()) or
+                                       (t.notes and search_filter.lower() in t.notes.lower())]
                     
                     # Add list_title to each task for grouping display (default to "Tasks" for local mode)
                     for task in all_tasks:

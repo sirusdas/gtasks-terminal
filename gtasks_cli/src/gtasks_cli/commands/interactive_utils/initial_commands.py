@@ -117,9 +117,16 @@ def handle_initial_list_command(task_manager, list_args, use_google_tasks):
         tasks = _filter_tasks_by_time(tasks, time_filter)
     
     if search_term:
-        tasks = [t for t in tasks if search_term.lower() in t.title.lower() or 
-                 (t.description and search_term.lower() in t.description.lower()) or
-                 (t.notes and search_term.lower() in t.notes.lower())]
+        # Support OR logic with pipe separator
+        if '|' in search_term:
+            search_terms = [term.strip().lower() for term in search_term.split('|')]
+            tasks = [t for t in tasks if any(term in t.title.lower() or 
+                     (t.description and term in t.description.lower()) or
+                     (t.notes and term in t.notes.lower()) for term in search_terms)]
+        else:
+            tasks = [t for t in tasks if search_term.lower() in t.title.lower() or 
+                     (t.description and search_term.lower() in t.description.lower()) or
+                     (t.notes and search_term.lower() in t.notes.lower())]
     
     if project_filter:
         tasks = [t for t in tasks if t.project and project_filter.lower() in t.project.lower()]
