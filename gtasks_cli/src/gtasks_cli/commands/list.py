@@ -141,22 +141,37 @@ def _get_status_color(status) -> str:
     return color_map.get(status_value, 'white')
 
 
-
 def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
     """Filter tasks by time period"""
     # Use timezone-naive datetimes for comparison to avoid timezone issues
     now = datetime.now().replace(tzinfo=None)
     
+    def _task_in_time_period(task: Task, start_time, end_time) -> bool:
+        """Check if a task falls within the specified time period based on due, created, or modified dates"""
+        # Check due date first
+        if task.due and start_time <= _normalize_datetime(task.due) < end_time:
+            return True
+        
+        # Check created date
+        if task.created_at and start_time <= _normalize_datetime(task.created_at) < end_time:
+            return True
+            
+        # Check modified date
+        if task.modified_at and start_time <= _normalize_datetime(task.modified_at) < end_time:
+            return True
+            
+        return False
+    
     if filter_type == 'today':
         start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = start_of_day + timedelta(days=1)
-        return [t for t in tasks if t.due and start_of_day <= _normalize_datetime(t.due) < end_of_day]
+        return [t for t in tasks if _task_in_time_period(t, start_of_day, end_of_day)]
     
     elif filter_type == 'this_week':
         start_of_week = now - timedelta(days=now.weekday())
         start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_week = start_of_week + timedelta(weeks=1)
-        return [t for t in tasks if t.due and start_of_week <= _normalize_datetime(t.due) < end_of_week]
+        return [t for t in tasks if _task_in_time_period(t, start_of_week, end_of_week)]
     
     elif filter_type == 'this_month':
         start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -164,7 +179,7 @@ def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
             end_of_month = now.replace(year=now.year + 1, month=1, day=1)
         else:
             end_of_month = now.replace(month=now.month + 1, day=1)
-        return [t for t in tasks if t.due and start_of_month <= _normalize_datetime(t.due) < end_of_month]
+        return [t for t in tasks if _task_in_time_period(t, start_of_month, end_of_month)]
     
     elif filter_type == 'last_month':
         if now.month == 1:
@@ -173,19 +188,19 @@ def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
         else:
             start_of_month = now.replace(month=now.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0)
             end_of_month = now.replace(day=1)
-        return [t for t in tasks if t.due and start_of_month <= _normalize_datetime(t.due) < end_of_month]
+        return [t for t in tasks if _task_in_time_period(t, start_of_month, end_of_month)]
     
     elif filter_type == 'last_3m':
         start_date = now - timedelta(days=90)
-        return [t for t in tasks if t.due and start_date <= _normalize_datetime(t.due) <= now]
+        return [t for t in tasks if _task_in_time_period(t, start_date, now)]
     
     elif filter_type == 'last_6m':
         start_date = now - timedelta(days=180)
-        return [t for t in tasks if t.due and start_date <= _normalize_datetime(t.due) <= now]
+        return [t for t in tasks if _task_in_time_period(t, start_date, now)]
     
     elif filter_type == 'last_year':
         start_date = now - timedelta(days=365)
-        return [t for t in tasks if t.due and start_date <= _normalize_datetime(t.due) <= now]
+        return [t for t in tasks if _task_in_time_period(t, start_date, now)]
     
     return tasks
 

@@ -10,7 +10,9 @@ from datetime import datetime, timedelta
 from typing import List
 from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.models.task import Task, TaskStatus, Priority
-from gtasks_cli.utils.datetime_utils import _normalize_datetime
+from gtasks_cli.commands.interactive_utils.initial_commands import handle_initial_list_command, handle_initial_search_command
+from gtasks_cli.commands.interactive_utils.display import display_tasks_grouped_by_list
+from gtasks_cli.commands.interactive_utils.task_details import view_task_details
 from rich.console import Console
 from rich.text import Text
 from rich.panel import Panel
@@ -162,12 +164,20 @@ def _display_tasks_grouped_by_list(tasks, start_number=1):
 
 
 @click.command()
+@click.argument('command', nargs=-1)
 @click.pass_context
-def interactive(ctx):
+def interactive(ctx, command):
     """Start interactive mode for task management.
     
     In interactive mode, tasks are numbered sequentially and you can perform
     operations on them using these numbers.
+    
+    You can also pass a command directly to start with a filtered list:
+    
+    \b
+    Examples:
+      gtasks interactive -- list --status pending --filter this_week
+      gtasks interactive -- search "important project"
     
     \b
     Commands in interactive mode:
@@ -198,44 +208,72 @@ def interactive(ctx):
         account_name=account_name
     )
     
-    # Get only pending/incomplete tasks by default
-    if use_google_tasks:
-        # For Google Tasks, we need to get tasks grouped by their lists
-        from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
-        client = GoogleTasksClient()
-        tasklists = client.list_tasklists()
-        
-        tasks = []
-        for tasklist in tasklists:
-            tasklist_id = tasklist['id']
-            tasklist_title = tasklist.get('title', 'Untitled List')
-            # Get all tasks and filter for this specific tasklist
-            all_tasks = task_manager.list_tasks()
-            list_tasks = [t for t in all_tasks if getattr(t, 'tasklist_id', None) == tasklist_id]
-            
-            # Filter for incomplete tasks
-            incomplete_tasks = [t for t in list_tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
-            
-            # Add list_title to each task for grouping display
-            for task in incomplete_tasks:
-                task.list_title = tasklist_title
-                
-            tasks.extend(incomplete_tasks)
+    # Parse initial command if provided
+    initial_command = None
+    if command:
+        initial_command = ' '.join(command)
+        logger.debug(f"Initial command provided: {initial_command}")
+    
+    # Get tasks based on initial command or default to incomplete tasks
+    tasks = []
+    if initial_command:
+        # Parse the initial command
+        if initial_command.startswith('list'):
+            # Handle list command with filters
+            list_args = initial_command[4:].strip()  # Remove 'list' and get the rest
+            tasks = handle_initial_list_command(task_manager, list_args, use_google_tasks)
+        elif initial_command.startswith('search'):
+            # Handle search command
+            search_args = initial_command[6:].strip()  # Remove 'search' and get the rest
+            tasks = handle_initial_search_command(task_manager, search_args, use_google_tasks)
+        else:
+            # Invalid initial command
+            click.echo(f"Invalid initial command: {initial_command}")
+            click.echo("Supported initial commands: list, search")
+            return
     else:
-        # For local mode, just get incomplete tasks
-        tasks = task_manager.list_tasks()
-        logger.debug(f"Loaded {len(tasks)} total tasks")
-        for task in tasks:
-            logger.debug(f"Task: {task.title} (ID: {task.id}) - Status: {task.status}")
-        tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
-        logger.debug(f"Filtered to {len(tasks)} incomplete tasks")
-        # Add list_title to each task for grouping display (default to "Tasks" for local mode)
-        for task in tasks:
-            if not hasattr(task, 'list_title') or not task.list_title:
-                task.list_title = "Tasks"
+        # Get only pending/incomplete tasks by default
+        if use_google_tasks:
+            # For Google Tasks, we need to get tasks grouped by their lists
+            from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
+            client = GoogleTasksClient()
+            tasklists = client.list_tasklists()
+            
+            tasks = []
+            for tasklist in tasklists:
+                tasklist_id = tasklist['id']
+                tasklist_title = tasklist.get('title', 'Untitled List')
+                # Get all tasks and filter for this specific tasklist
+                all_tasks = task_manager.list_tasks()
+                list_tasks = [t for t in all_tasks if getattr(t, 'tasklist_id', None) == tasklist_id]
+                
+                # Filter for incomplete tasks
+                incomplete_tasks = [t for t in list_tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
+                
+                # Add list_title to each task for grouping display
+                for task in incomplete_tasks:
+                    task.list_title = tasklist_title
+                    
+                tasks.extend(incomplete_tasks)
+        else:
+            # For local mode, just get incomplete tasks
+            tasks = task_manager.list_tasks()
+            logger.debug(f"Loaded {len(tasks)} total tasks")
+            for task in tasks:
+                logger.debug(f"Task: {task.title} (ID: {task.id}) - Status: {task.status}")
+            tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
+            logger.debug(f"Filtered to {len(tasks)} incomplete tasks")
+            # Add list_title to each task for grouping display (default to "Tasks" for local mode)
+            for task in tasks:
+                if not hasattr(task, 'list_title') or not task.list_title:
+                    task.list_title = "Tasks"
     
     if not tasks:
-        click.echo("No incomplete tasks found.")
+        # Check if we had initial command filters
+        if initial_command:
+            click.echo("No tasks found matching your criteria.")
+        else:
+            click.echo("No incomplete tasks found.")
         return
     
     # Display tasks with numbers
@@ -381,7 +419,7 @@ def interactive(ctx):
                         all_tasks.extend(tasks)
                     
                     # Display tasks grouped by list names
-                    displayed_tasks = _display_tasks_grouped_by_list(all_tasks)
+                    displayed_tasks = display_tasks_grouped_by_list(all_tasks)
                     task_state.tasks = displayed_tasks
                 else:
                     # Local mode with list filtering support
@@ -443,7 +481,7 @@ def interactive(ctx):
                             for task in incomplete_tasks:
                                 if not hasattr(task, 'list_title') or not task.list_title:
                                     task.list_title = "Tasks"
-                            _display_tasks_grouped_by_list(incomplete_tasks)
+                            display_tasks_grouped_by_list(incomplete_tasks)
                             task_state.set_tasks(incomplete_tasks)
                         else:
                             click.echo("Failed to mark task as completed.")
@@ -487,7 +525,7 @@ def interactive(ctx):
                                             
                                         tasks.extend(incomplete_tasks)
                                     
-                                    _display_tasks_grouped_by_list(tasks)
+                                    display_tasks_grouped_by_list(tasks)
                                     task_state.set_tasks(tasks)
                                 else:
                                     # For local mode
@@ -522,7 +560,7 @@ def interactive(ctx):
                             task.list_title = "Tasks"
 
                     # Display tasks grouped by list names
-                    displayed_tasks = _display_tasks_grouped_by_list(incomplete_tasks)
+                    displayed_tasks = display_tasks_grouped_by_list(incomplete_tasks)
                     task_state.set_tasks(displayed_tasks)
                 else:
                     click.echo("Failed to add task.")
@@ -554,7 +592,7 @@ def interactive(ctx):
                                 if not hasattr(task, 'list_title') or not task.list_title:
                                     task.list_title = "Tasks"
 
-                            _display_tasks_grouped_by_list(incomplete_tasks)
+                            display_tasks_grouped_by_list(incomplete_tasks)
                             task_state.set_tasks(incomplete_tasks)
                         else:
                             click.echo("Failed to update task.")
@@ -572,7 +610,7 @@ def interactive(ctx):
                 search_results = task_manager.list_tasks(search=query)
                 if search_results:
                     click.echo(f"\nSearch results for '{query}':")
-                    _display_tasks_grouped_by_list(search_results)
+                    display_tasks_grouped_by_list(search_results)
                     task_state.set_tasks(search_results)
                 else:
                     click.echo(f"No tasks found matching '{query}'.")
