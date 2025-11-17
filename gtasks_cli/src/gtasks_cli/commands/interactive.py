@@ -326,6 +326,7 @@ def interactive(ctx, command):
                 recurring_filter = False
                 time_filter = None
                 search_filter = None
+                order_by = None
 
                 # Parse arguments
                 i = 1
@@ -347,9 +348,11 @@ def interactive(ctx, command):
                         elif part == '--filter' and i + 1 < len(command_parts):
                             time_filter = command_parts[i + 1]
                             i += 2
+                        elif part in ['--order-by', '-o'] and i + 1 < len(command_parts):
+                            order_by = command_parts[i + 1]
+                            i += 2
                         elif part == '--search' and i + 1 < len(command_parts):
                             search_filter = command_parts[i + 1]
-                            i += 2
                         else:
                             i += 1
                     else:
@@ -447,6 +450,11 @@ def interactive(ctx, command):
                             all_tasks = [t for t in all_tasks if search_filter.lower() in t.title.lower() or 
                                        (t.description and search_filter.lower() in t.description.lower()) or
                                        (t.notes and search_filter.lower() in t.notes.lower())]
+                    
+                    # Apply sorting if requested
+                    if order_by:
+                        from gtasks_cli.commands.list import _sort_tasks
+                        all_tasks = _sort_tasks(all_tasks, order_by)
                     
                     # Add list_title to each task for grouping display (default to "Tasks" for local mode)
                     for task in all_tasks:

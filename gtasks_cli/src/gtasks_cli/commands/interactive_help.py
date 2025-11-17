@@ -36,6 +36,7 @@ List Filter Options (same as gtasks list):
   --filter PERIOD   - Filter by time (today, this_week, this_month, last_3m, etc.)
                     - To filter by specific date field: this_month:due_date, this_week:created_at, last_3m:modified_at
   --search QUERY    - Search in title, description, notes
+  --order-by FIELD  - Sort tasks by field (due, created, modified, priority, title)
     """)
 
 
@@ -180,7 +181,8 @@ def show_list_help():
     console.print("  --project NAME        Filter by project")
     console.print("  --recurring           Show only recurring tasks")
     console.print("  --filter PERIOD       Filter by time (today, this_week, this_month, last_3m, etc.)")
-    console.print("  --search QUERY        Search in title, description, notes\n")
+    console.print("  --search QUERY        Search in title, description, notes")
+    console.print("  --order-by FIELD      Sort tasks by field (due, created, modified, priority, title)\n")
     
     console.print("[bold]Examples:[/bold]")
     console.print("  [green]# List all tasks[/green]")
@@ -200,6 +202,9 @@ def show_list_help():
     
     console.print("  [green]# List tasks modified in the last 3 months[/green]")
     console.print("  list --filter last_3m:modified_at\n")
+    
+    console.print("  [green]# List tasks sorted by due date[/green]")
+    console.print("  list --order-by due\n")
     
     console.print("  [green]# List completed tasks containing 'report'[/green]")
     console.print("  list --status completed --search report\n")

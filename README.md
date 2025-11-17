@@ -60,6 +60,12 @@ Documentation for advanced filtering capabilities:
 - Combining multiple filters for precise results
 - Best practices for different filtering scenarios
 
+### 7. [Order By Feature](ORDER_BY_FEATURE.md)
+Documentation for sorting tasks:
+- Sorting by due date, creation date, modification date, priority, and title
+- Usage examples for both command line and interactive mode
+- Implementation details and best practices
+
 ## Advanced Sync Feature
 
 The Google Tasks CLI now includes an Advanced Sync feature that implements a 4-step simplified synchronization approach to efficiently synchronize tasks between local storage and Google Tasks.

@@ -26,6 +26,7 @@ def handle_initial_list_command(task_manager, list_args, use_google_tasks):
     time_filter = None
     search_term = None
     project_filter = None
+    order_by = None
     
     i = 0
     while i < len(args):
@@ -44,6 +45,9 @@ def handle_initial_list_command(task_manager, list_args, use_google_tasks):
         elif arg in ['--search', '--query'] and i + 1 < len(args):
             search_term = args[i + 1]
             i += 2
+        elif arg in ['--order-by', '-o'] and i + 1 < len(args):
+            order_by = args[i + 1]
+            i += 2
         elif arg in ['--project', '-p'] and i + 1 < len(args):
             project_filter = args[i + 1]
             i += 2
@@ -52,6 +56,9 @@ def handle_initial_list_command(task_manager, list_args, use_google_tasks):
             i += 1
         elif arg.startswith('--filter='):
             time_filter = arg.split('=', 1)[1]
+            i += 1
+        elif arg.startswith('--order-by=') or arg.startswith('-o='):
+            order_by = arg.split('=', 1)[1]
             i += 1
         elif arg.startswith('--search=') or arg.startswith('--query='):
             search_term = arg.split('=', 1)[1]
@@ -127,6 +134,41 @@ def handle_initial_list_command(task_manager, list_args, use_google_tasks):
             tasks = [t for t in tasks if search_term.lower() in t.title.lower() or 
                      (t.description and search_term.lower() in t.description.lower()) or
                      (t.notes and search_term.lower() in t.notes.lower())]
+
+    # Process order_by parameter
+    order_by = None
+    if use_google_tasks:
+        # For Google Tasks, we can only sort by title
+        if '--order-by' in list_args or '-o' in list_args:
+            # Find the index of order-by flag
+            for i, arg in enumerate(args):
+                if arg in ['--order-by', '-o'] and i + 1 < len(args):
+                    order_by = args[i + 1]
+                    break
+        elif any(arg.startswith('--order-by=') for arg in args):
+            # Handle case where order-by is specified with equals sign
+            for arg in args:
+                if arg.startswith('--order-by='):
+                    order_by = arg.split('=', 1)[1]
+                    break
+    else:
+        # For local mode, we can support multiple sort options
+        i = 0
+        while i < len(args):
+            arg = args[i]
+            if arg in ['--order-by', '-o'] and i + 1 < len(args):
+                order_by = args[i + 1]
+                i += 2
+            elif arg.startswith('--order-by='):
+                order_by = arg.split('=', 1)[1]
+                i += 1
+            else:
+                i += 1
+
+    # Apply sorting if requested
+    if order_by:
+        from gtasks_cli.commands.list import _sort_tasks
+        tasks = _sort_tasks(tasks, order_by)
     
     if project_filter:
         tasks = [t for t in tasks if t.project and project_filter.lower() in t.project.lower()]
@@ -169,6 +211,34 @@ def handle_initial_search_command(task_manager, search_args, use_google_tasks):
             (task.description and search_term.lower() in task.description.lower()) or
             (task.notes and search_term.lower() in task.notes.lower())):
             filtered_tasks.append(task)
+
+    # Process order_by parameter
+    order_by = None
+    # Check for order-by flag
+    if '--order-by' in search_term or '-o' in search_term:
+        # Parse with shlex to handle quoted strings properly
+        try:
+            args = shlex.split(search_term)
+        except ValueError as e:
+            click.echo(f"Error parsing search arguments: {e}")
+            return []
+            
+        i = 0
+        while i < len(args):
+            arg = args[i]
+            if arg in ['--order-by', '-o'] and i + 1 < len(args):
+                order_by = args[i + 1]
+                i += 2
+            elif arg.startswith('--order-by='):
+                order_by = arg.split('=', 1)[1]
+                i += 1
+            else:
+                i += 1
+
+    # Apply sorting if requested
+    if order_by:
+        from gtasks_cli.commands.list import _sort_tasks
+        filtered_tasks = _sort_tasks(filtered_tasks, order_by)
     
     # Add list_title for grouping display
     if use_google_tasks:

@@ -224,6 +224,31 @@ def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
     
     return tasks
 
+
+def _sort_tasks(tasks: List[Task], sort_field: str) -> List[Task]:
+    """Sort tasks by the specified field"""
+    sorted_tasks = tasks.copy()
+    
+    if sort_field == 'due':
+        # Sort by due date, with tasks without due dates at the end
+        sorted_tasks.sort(key=lambda t: (t.due is None, t.due))
+    elif sort_field == 'created':
+        # Sort by creation date
+        sorted_tasks.sort(key=lambda t: t.created_at)
+    elif sort_field == 'modified':
+        # Sort by modification date
+        sorted_tasks.sort(key=lambda t: t.modified_at)
+    elif sort_field == 'priority':
+        # Sort by priority (critical, high, medium, low)
+        priority_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
+        sorted_tasks.sort(key=lambda t: priority_order.get(t.priority.value if hasattr(t.priority, 'value') else t.priority, 4))
+    elif sort_field == 'title':
+        # Sort by title alphabetically
+        sorted_tasks.sort(key=lambda t: t.title.lower())
+        
+    return sorted_tasks
+
+
 #!/usr/bin/env python3
 """
 List command for the Google Tasks CLI application.
@@ -289,10 +314,13 @@ task_state = TaskState()
                    '"this_week:created_at", or "this_month:modified_at". '
                    'Supported periods: today, this_week, this_month, last_month, '
                    'last_3m, last_6m, last_year.')
+@click.option('--order-by', '-o', 'order_by',
+              type=click.Choice(['due', 'created', 'modified', 'priority', 'title']),
+              help='Order tasks by field (due, created, modified, priority, title)')
 @click.option('--search', '-S', help='Search tasks by title, description, or notes')
 @click.option('--account', '-a', help='Account name for multi-account support')
 @click.pass_context
-def list(ctx, list_filter, status, priority, project, recurring, time_filter, search, account):
+def list(ctx, list_filter, status, priority, project, recurring, time_filter, search, account, order_by):
     """List tasks with optional filtering.
     
     LIST_FILTER: Filter tasks by list name (partial match, case insensitive)
@@ -301,12 +329,7 @@ def list(ctx, list_filter, status, priority, project, recurring, time_filter, se
     storage_backend = ctx.obj.get('storage_backend', 'json')
     
     # Determine the account to use
-    if account:
-        # Explicitly specified account
-        account_name = account
-    else:
-        # Check context object for account
-        account_name = ctx.obj.get('account_name')
+    account_name = account or ctx.obj.get('account')
     
     logger.info(f"Listing tasks {'(Google Tasks)' if use_google_tasks else '(Local)'} for account: {account_name or 'default'}")
     
@@ -348,6 +371,10 @@ def list(ctx, list_filter, status, priority, project, recurring, time_filter, se
     # For Google Tasks, we need to filter for incomplete tasks by default
     if use_google_tasks:
         tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
+    
+    # Apply sorting if requested
+    if order_by:
+        tasks = _sort_tasks(tasks, order_by)
     
     # Display tasks grouped by list names with color coding
     display_tasks_grouped_by_list(tasks)
