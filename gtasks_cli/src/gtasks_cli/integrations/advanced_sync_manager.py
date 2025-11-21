@@ -222,9 +222,9 @@ class AdvancedSyncManager:
             # Store the Google signatures for use in push operations to prevent duplicates
             self._google_signatures = google_signatures
             
-            # Step 2: Compare records based on latest changes
+            # Step 2: Compare records based on latest changes using cached versions
             logger.info("Step 2: Comparing records based on latest changes")
-            sync_plan = self._compare_and_plan_changes(local_tasks, all_google_tasks)
+            sync_plan = self._compare_and_plan_changes_with_cache(local_tasks, all_google_tasks)
             
             # Short-circuit if there's nothing to do
             total_changes = sum(len(tasks) for tasks in sync_plan.values())
@@ -232,12 +232,22 @@ class AdvancedSyncManager:
                 logger.info("No changes detected during sync comparison")
                 return True
             
+            logger.info(f"Sync plan summary before duplicate checking:")
+            logger.info(f"  Tasks to update in remote: {len(sync_plan['update_remote'])}")
+            logger.info(f"  Tasks to create in remote: {len(sync_plan['create_remote'])}")
+            logger.info(f"  Tasks to update in local: {len(sync_plan['update_local'])}")
+            logger.info(f"  Tasks to create in local: {len(sync_plan['create_local'])}")
+            logger.info(f"  Local duplicates to remove: {len(sync_plan['remove_local_duplicates'])}")
+            logger.info(f"  Remote duplicates to remove: {len(sync_plan['remove_remote_duplicates'])}")
+            
             # Step 3: Check for duplicates and mark for removal
             logger.info("Step 3: Checking for duplicates")
             self._identify_and_mark_duplicates(sync_plan, local_tasks, all_google_tasks)
             
             # Re-check if there's anything to do after duplicate checking
             total_changes = sum(len(tasks) for tasks in sync_plan.values())
+            logger.info(f"Total changes after duplicate checking: {total_changes}")
+            
             if total_changes == 0:
                 logger.info("No changes to sync after duplicate checking")
                 return True
@@ -260,6 +270,33 @@ class AdvancedSyncManager:
             logger.error(f"Error during simplified synchronization: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
+    
+    def _create_task_version(self, task: Task) -> str:
+        """
+        Create a version fingerprint for a task based on its key attributes.
+        This helps detect actual changes vs. timestamp drift.
+        
+        Args:
+            task: The task to create a version for
+            
+        Returns:
+            str: A hash representing the task's key attributes
+        """
+        # Create a string with the key attributes that define a task's content
+        key_attributes = [
+            str(task.title),
+            str(task.description or ""),
+            str(task.notes or ""),
+            str(task.due.isoformat() if task.due else ""),
+            str(task.status.value if hasattr(task.status, 'value') else task.status),
+            str(task.priority.value if hasattr(task.priority, 'value') else task.priority),
+            str(task.project or ""),
+            str(",".join(sorted(task.tags)) if task.tags else ""),
+        ]
+        
+        # Create a hash of these attributes
+        task_string = "|".join(key_attributes)
+        return hashlib.md5(task_string.encode('utf-8')).hexdigest()
     
     def _load_all_google_tasks_once(self) -> List[Task]:
         """
@@ -333,20 +370,20 @@ class AdvancedSyncManager:
     
     def _compare_and_plan_changes(self, local_tasks: List[Task], google_tasks: List[Task]) -> Dict:
         """
-        Compare local and remote tasks and create a sync plan.
+        Compare local and remote tasks and plan synchronization changes.
         
         Args:
             local_tasks: List of local tasks
-            google_tasks: List of Google tasks
+            google_tasks: List of Google Tasks
             
         Returns:
             Dict: Sync plan with tasks to update/create/delete
         """
-        # Create mappings for easier lookup
+        # Create dictionaries for quick lookup
         local_task_dict = {task.id: task for task in local_tasks}
         google_task_dict = {task.id: task for task in google_tasks}
         
-        # Create signature mappings for duplicate detection
+        # Create signature maps for duplicate detection
         local_signature_map = self._create_signature_map(local_tasks)
         google_signature_map = self._create_signature_map(google_tasks)
         
@@ -369,19 +406,33 @@ class AdvancedSyncManager:
             
             if local_task and google_task:
                 # Task exists in both locations, compare modification times
-                local_modified = local_task.modified_at or datetime.min
-                google_modified = google_task.modified_at or datetime.min
+                # Normalize both datetimes before comparison
+                local_modified = _normalize_datetime(local_task.modified_at)
+                google_modified = _normalize_datetime(google_task.modified_at)
                 
-                if local_modified > google_modified:
-                    # Local is newer, update remote
-                    sync_plan['update_remote'].append(local_task)
-                    logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - Local is newer")
-                elif google_modified > local_modified:
-                    # Remote is newer, update local
-                    sync_plan['update_local'].append(google_task)
-                    logger.debug(f"Task '{google_task.title}' (ID: {task_id}) - Remote is newer")
+                # If either datetime is None after normalization, treat as datetime.min
+                if local_modified is None:
+                    local_modified = datetime.min
+                if google_modified is None:
+                    google_modified = datetime.min
+                
+                # Only consider tasks as different if their modification times differ by more than a small threshold
+                # This accounts for minor timestamp differences that might occur during sync operations
+                time_difference = abs((local_modified - google_modified).total_seconds())
+                
+                if time_difference > 1:  # More than 1 second difference
+                    if local_modified > google_modified:
+                        # Local is newer, update remote
+                        sync_plan['update_remote'].append(local_task)
+                        logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - Local is newer (local: {local_modified}, remote: {google_modified})")
+                    elif google_modified > local_modified:
+                        # Remote is newer, update local
+                        sync_plan['update_local'].append(google_task)
+                        logger.debug(f"Task '{google_task.title}' (ID: {task_id}) - Remote is newer (local: {local_modified}, remote: {google_modified})")
+                    else:
+                        logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - No significant changes (modified: {local_modified})")
                 else:
-                    logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - No changes")
+                    logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - No significant changes (time difference: {time_difference}s)")
             elif local_task:
                 # Task only exists locally, check if it already exists remotely by signature
                 # Combine description and notes since the signature function only takes description
@@ -399,15 +450,25 @@ class AdvancedSyncManager:
                 else:
                     # Check if it was previously synced with Google Tasks (has a valid tasklist_id)
                     # Google Tasks tasklist IDs are long base64-like strings
+                    # Only mark as deleted during full sync, not incremental sync
+                    is_incremental_sync = self.pull_range_days is not None
                     if (hasattr(local_task, 'tasklist_id') and 
                         local_task.tasklist_id and 
-                        len(local_task.tasklist_id) > 20):
+                        len(local_task.tasklist_id) > 20 and
+                        not is_incremental_sync):  # Only during full sync
                         # This task has a Google Tasks tasklist ID, which means it was previously synced
                         # Since it's no longer in Google Tasks during a full sync, it was likely deleted
                         # Mark it as deleted locally
                         logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - Previously synced with Google Tasks but no longer exists, marking as deleted locally")
                         local_task.status = TaskStatus.DELETED
                         sync_plan['remove_local_duplicates'].append(local_task)
+                    elif (hasattr(local_task, 'tasklist_id') and 
+                          local_task.tasklist_id and 
+                          len(local_task.tasklist_id) > 20 and
+                          is_incremental_sync):
+                        # During incremental sync, skip tasks that were previously synced
+                        # but are not in the current time window
+                        logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - Previously synced, skipping during incremental sync")
                     else:
                         # Task doesn't exist remotely and wasn't previously synced, needs to be created
                         sync_plan['create_remote'].append(local_task)
@@ -430,6 +491,167 @@ class AdvancedSyncManager:
                     # Task doesn't exist locally, needs to be created
                     sync_plan['create_local'].append(google_task)
                     logger.debug(f"Task '{google_task.title}' (ID: {task_id}) - New remote task")
+        
+        return sync_plan
+    
+    def _compare_and_plan_changes_with_cache(self, local_tasks: List[Task], google_tasks: List[Task]) -> Dict:
+        """
+        Compare local and remote tasks using cached versions for more efficient change detection.
+        
+        Args:
+            local_tasks: List of local tasks
+            google_tasks: List of Google Tasks
+            
+        Returns:
+            Dict: Sync plan with tasks to update/create/delete
+        """
+        # Create dictionaries for quick lookup
+        local_task_dict = {task.id: task for task in local_tasks}
+        google_task_dict = {task.id: task for task in google_tasks}
+        
+        # Create signature maps for duplicate detection
+        local_signature_map = self._create_signature_map(local_tasks)
+        google_signature_map = self._create_signature_map(google_tasks)
+        
+        # Get cached task versions
+        local_task_versions = self.sync_metadata.get("local_task_versions", {})
+        google_task_versions = self.sync_metadata.get("google_task_versions", {})
+        
+        # Plan the changes
+        sync_plan = {
+            'update_remote': [],      # Local tasks that are newer than remote
+            'create_remote': [],      # Local tasks that don't exist remotely
+            'update_local': [],       # Remote tasks that are newer than local
+            'create_local': [],       # Remote tasks that don't exist locally
+            'remove_local_duplicates': [],
+            'remove_remote_duplicates': [],
+        }
+        
+        # Compare tasks by ID first
+        all_task_ids = set(local_task_dict.keys()) | set(google_task_dict.keys())
+        
+        logger.debug(f"Total task IDs to compare: {len(all_task_ids)}")
+        local_duplicates_count = 0
+        
+        for task_id in all_task_ids:
+            local_task = local_task_dict.get(task_id)
+            google_task = google_task_dict.get(task_id)
+            
+            if local_task and google_task:
+                # Task exists in both locations, compare versions
+                local_version = self._create_task_version(local_task)
+                google_version = self._create_task_version(google_task)
+                
+                # Check cached versions
+                cached_local_version = local_task_versions.get(task_id)
+                cached_google_version = google_task_versions.get(task_id)
+                
+                # If versions have changed, determine which is newer based on modification time
+                if local_version != cached_local_version or google_version != cached_google_version:
+                    # Normalize both datetimes before comparison
+                    local_modified = _normalize_datetime(local_task.modified_at)
+                    google_modified = _normalize_datetime(google_task.modified_at)
+                    
+                    # If either datetime is None after normalization, treat as datetime.min
+                    if local_modified is None:
+                        local_modified = datetime.min
+                    if google_modified is None:
+                        google_modified = datetime.min
+                    
+                    # Only consider tasks as different if their modification times differ by more than a small threshold
+                    # This accounts for minor timestamp differences that might occur during sync operations
+                    time_difference = abs((local_modified - google_modified).total_seconds())
+                    
+                    if time_difference > 1:  # More than 1 second difference
+                        if local_modified > google_modified:
+                            # Local is newer, update remote
+                            sync_plan['update_remote'].append(local_task)
+                            logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - Local is newer (local: {local_modified}, remote: {google_modified})")
+                        elif google_modified > local_modified:
+                            # Remote is newer, update local
+                            sync_plan['update_local'].append(google_task)
+                            logger.debug(f"Task '{google_task.title}' (ID: {task_id}) - Remote is newer (local: {local_modified}, remote: {google_modified})")
+                        else:
+                            logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - No significant changes (modified: {local_modified})")
+                    else:
+                        logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - No significant changes (time difference: {time_difference}s)")
+                else:
+                    logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - No changes detected via version comparison")
+                    
+                # Update cached versions
+                local_task_versions[task_id] = local_version
+                google_task_versions[task_id] = google_version
+            elif local_task:
+                # Task only exists locally, check if it already exists remotely by signature
+                # Combine description and notes since the signature function only takes description
+                description = (local_task.description or "") + (local_task.notes or "")
+                local_signature = create_task_signature(
+                    title=local_task.title or "",
+                    description=description,
+                    due_date=local_task.due,
+                    status=local_task.status
+                )
+                
+                if local_signature in google_signature_map:
+                    # Task already exists remotely, this is a duplicate
+                    logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - Already exists remotely, skipping creation")
+                else:
+                    # Check if it was previously synced with Google Tasks (has a valid tasklist_id)
+                    # Google Tasks tasklist IDs are long base64-like strings
+                    # Only mark as deleted during full sync, not incremental sync
+                    is_incremental_sync = self.pull_range_days is not None
+                    if (hasattr(local_task, 'tasklist_id') and 
+                        local_task.tasklist_id and 
+                        len(local_task.tasklist_id) > 20 and
+                        not is_incremental_sync):  # Only during full sync
+                        # This task has a Google Tasks tasklist ID, which means it was previously synced
+                        # Since it's no longer in Google Tasks during a full sync, it was likely deleted
+                        # Mark it as deleted locally
+                        logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - Previously synced with Google Tasks but no longer exists, marking as deleted locally")
+                        local_task.status = TaskStatus.DELETED
+                        sync_plan['remove_local_duplicates'].append(local_task)
+                        local_duplicates_count += 1
+                    elif (hasattr(local_task, 'tasklist_id') and 
+                          local_task.tasklist_id and 
+                          len(local_task.tasklist_id) > 20 and
+                          is_incremental_sync):
+                        # During incremental sync, skip tasks that were previously synced
+                        # but are not in the current time window
+                        logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - Previously synced, skipping during incremental sync")
+                    else:
+                        # Task doesn't exist remotely and wasn't previously synced, needs to be created
+                        sync_plan['create_remote'].append(local_task)
+                        logger.debug(f"Task '{local_task.title}' (ID: {task_id}) - New local task")
+                        
+                # Update cached version
+                local_task_versions[task_id] = self._create_task_version(local_task)
+            elif google_task:
+                # Task only exists remotely, check if it already exists locally by signature
+                # Combine description and notes since the signature function only takes description
+                description = (google_task.description or "") + (google_task.notes or "")
+                google_signature = create_task_signature(
+                    title=google_task.title or "",
+                    description=description,
+                    due_date=google_task.due,
+                    status=google_task.status
+                )
+                
+                if google_signature in local_signature_map:
+                    # Task already exists locally, this is a duplicate
+                    logger.debug(f"Task '{google_task.title}' (ID: {task_id}) - Already exists locally, skipping creation")
+                else:
+                    # Task doesn't exist locally, needs to be created
+                    sync_plan['create_local'].append(google_task)
+                    logger.debug(f"Task '{google_task.title}' (ID: {task_id}) - New remote task")
+                    
+                # Update cached version
+                google_task_versions[task_id] = self._create_task_version(google_task)
+        
+        logger.debug(f"Added {local_duplicates_count} tasks to remove_local_duplicates during comparison")
+        
+        # Update cached versions in metadata
+        self.sync_metadata["local_task_versions"] = local_task_versions
+        self.sync_metadata["google_task_versions"] = google_task_versions
         
         return sync_plan
     
@@ -469,23 +691,60 @@ class AdvancedSyncManager:
         """
         # Find duplicates in local tasks
         local_signature_map = self._create_signature_map(local_tasks)
+        duplicate_count = 0
         for signature, tasks in local_signature_map.items():
             if len(tasks) > 1:
                 logger.debug(f"Found {len(tasks)} duplicate local tasks with signature {signature}")
                 # Keep the first one, mark others for removal
-                for task in tasks[1:]:
-                    sync_plan['remove_local_duplicates'].append(task)
-                    logger.debug(f"Marking local task '{task.title}' (ID: {task.id}) for removal")
+                # But only mark tasks that are not already marked for other operations
+                tasks_to_check = tasks[1:]  # Skip the first task (keep it)
+                for task in tasks_to_check:
+                    # Check if this task is already marked for another operation
+                    is_already_handled = (
+                        task in sync_plan['update_local'] or
+                        task in sync_plan['create_local'] or
+                        task in sync_plan['update_remote'] or
+                        task in sync_plan['create_remote']
+                    )
+                    
+                    if not is_already_handled:
+                        sync_plan['remove_local_duplicates'].append(task)
+                        duplicate_count += 1
+                        logger.debug(f"Marking local task '{task.title}' (ID: {task.id}) for removal")
+                        # Log additional details about why this task is considered a duplicate
+                        logger.debug(f"  Duplicate details - Title: '{task.title}', Description: '{task.description}', Due: {task.due}, Status: {task.status}")
+                    else:
+                        logger.debug(f"Skipping duplicate task '{task.title}' (ID: {task.id}) as it's already being processed")
         
         # Find duplicates in remote tasks
         google_signature_map = self._create_signature_map(google_tasks)
+        remote_duplicate_count = 0
         for signature, tasks in google_signature_map.items():
             if len(tasks) > 1:
                 logger.debug(f"Found {len(tasks)} duplicate remote tasks with signature {signature}")
                 # Keep the first one, mark others for removal
-                for task in tasks[1:]:
-                    sync_plan['remove_remote_duplicates'].append(task)
-                    logger.debug(f"Marking remote task '{task.title}' (ID: {task.id}) for removal")
+                # But only mark tasks that are not already marked for other operations
+                tasks_to_check = tasks[1:]  # Skip the first task (keep it)
+                for task in tasks_to_check:
+                    # Check if this task is already marked for another operation
+                    is_already_handled = (
+                        task in sync_plan['update_local'] or
+                        task in sync_plan['create_local'] or
+                        task in sync_plan['update_remote'] or
+                        task in sync_plan['create_remote']
+                    )
+                    
+                    if not is_already_handled:
+                        sync_plan['remove_remote_duplicates'].append(task)
+                        remote_duplicate_count += 1
+                        logger.debug(f"Marking remote task '{task.title}' (ID: {task.id}) for removal")
+                        # Log additional details about why this task is considered a duplicate
+                        logger.debug(f"  Duplicate details - Title: '{task.title}', Description: '{task.description}', Due: {task.due}, Status: {task.status}")
+                    else:
+                        logger.debug(f"Skipping duplicate remote task '{task.title}' (ID: {task.id}) as it's already being processed")
+        
+        if duplicate_count > 0 or remote_duplicate_count > 0:
+            logger.info(f"Identified {duplicate_count} local and {remote_duplicate_count} remote duplicate tasks for removal")
     
     def _execute_sync_plan(self, sync_plan: Dict, push_only: bool, pull_only: bool) -> bool:
         """

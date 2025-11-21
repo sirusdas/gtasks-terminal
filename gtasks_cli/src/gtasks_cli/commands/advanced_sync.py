@@ -18,9 +18,10 @@ logger = setup_logger(__name__)
 @click.command()
 @click.option('--push', is_flag=True, help='Push local changes to Google Tasks only')
 @click.option('--pull', is_flag=True, help='Pull changes from Google Tasks only')
+@click.option('--all', 'sync_all', is_flag=True, help='Perform full sync instead of incremental sync')
 @click.option('--account', '-a', help='Account name for multi-account support')
 @click.pass_context
-def advanced_sync(ctx, push, pull, account):
+def advanced_sync(ctx, push, pull, sync_all, account):
     """Advanced synchronization between local storage and Google Tasks with push/pull options."""
     storage_backend = ctx.obj.get('storage_backend', 'json')
     
@@ -37,6 +38,11 @@ def advanced_sync(ctx, push, pull, account):
     # Load configuration to get sync settings
     config_manager = ConfigManager(account_name=account_name)
     pull_range_days = config_manager.get('sync.pull_range_days')
+    
+    # If --all is specified, set pull_range_days to None to perform full sync
+    if sync_all:
+        pull_range_days = None
+        logger.info("Full sync mode enabled (--all)")
     
     # Create task manager with Google Tasks enabled, the selected storage backend, and account
     task_manager = TaskManager(use_google_tasks=True, storage_backend=storage_backend, account_name=account_name)
