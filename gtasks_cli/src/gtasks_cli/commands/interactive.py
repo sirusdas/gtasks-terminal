@@ -54,116 +54,154 @@ from gtasks_cli.commands.interactive_help import (
     show_quit_help
 )
 
-# Import the time filter function
-from gtasks_cli.commands.list import _filter_tasks_by_time
+# Import time filtering function
+from gtasks_cli.commands.list import _filter_tasks_by_time, _sort_tasks
+
+# State for interactive mode
+class TaskState:
+    """Hold state for interactive mode"""
+    def __init__(self):
+        self.tasks = []
+        self.task_number_to_id = {}
+        self.task_id_to_number = {}
+        # Track the current command context for navigation
+        self.command_history = []  # Stack of commands for 'back' functionality
+        self.default_tasks = []    # Default task list for 'default' functionality
+    
+    def set_tasks(self, tasks: List[Task], is_default=False):
+        """Set tasks and create mappings"""
+        self.tasks = tasks
+        self.task_number_to_id = {}
+        self.task_id_to_number = {}
+        
+        for i, task in enumerate(tasks, 1):
+            self.task_number_to_id[i] = task.id
+            self.task_id_to_number[task.id] = i
+            
+        if is_default:
+            self.default_tasks = tasks.copy()
+    
+    def push_command(self, command: str):
+        """Push a command to the history stack"""
+        self.command_history.append(command)
+    
+    def pop_command(self):
+        """Pop and return the last command from history, or None if empty"""
+        if self.command_history:
+            return self.command_history.pop()
+        return None
+    
+    def get_default_tasks(self):
+        """Get the default task list"""
+        return self.default_tasks
+    
+    def get_task_by_number(self, number: int) -> Task:
+        """Get task by its display number"""
+        if number in self.task_number_to_id:
+            task_id = self.task_number_to_id[number]
+            for task in self.tasks:
+                if task.id == task_id:
+                    return task
+        return None
+    
+    def get_number_by_task_id(self, task_id: str) -> int:
+        """Get display number by task ID"""
+        return self.task_id_to_number.get(task_id)
+
+# Global state for interactive mode
+task_state = TaskState()
 
 
-def _display_tasks_grouped_by_list(tasks, start_number=1):
-    """Display tasks grouped by their list names"""
-    # Group tasks by list title
+def _display_tasks_grouped_by_list(tasks: List[Task]) -> List[Task]:
+    """Display tasks grouped by their task lists with color coding.
+    Returns the displayed tasks for state tracking."""
+    if not tasks:
+        click.echo("No tasks found.")
+        return tasks
+    
+    # Group tasks by list
     tasks_by_list = defaultdict(list)
     for task in tasks:
-        list_title = getattr(task, 'list_title', 'Unknown List')
+        list_title = getattr(task, 'list_title', 'Tasks')
         tasks_by_list[list_title].append(task)
     
     # Display tasks grouped by list
-    task_index = start_number
-    all_tasks = []
-    
     for list_title, list_tasks in tasks_by_list.items():
-        # Display list name with color in a panel
-        console.print(Panel(f"[bold blue]List Name: \"{list_title}\"[/bold blue]", expand=False))
+        # Use different colors for different lists
+        list_title_color = 'blue'
+        if 'work' in list_title.lower():
+            list_title_color = 'cyan'
+        elif 'personal' in list_title.lower():
+            list_title_color = 'green'
+        elif 'shopping' in list_title.lower():
+            list_title_color = 'yellow'
         
-        for i, task in enumerate(list_tasks, task_index):
-            # For enum values, we need to check if they are already strings or enum instances
-            status_value = task.status if isinstance(task.status, str) else task.status.value
-            priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
+        console.print(Panel(f"[bold]{list_title}[/bold]", expand=False, style=list_title_color))
+        
+        for i, task in enumerate(list_tasks, 1):
+            # Find the global index of this task
+            global_index = next((j for j, t in enumerate(tasks, 1) if t.id == task.id), i)
             
-            # Color coding for status
-            status_colors = {
-                'pending': 'yellow',
-                'in_progress': 'cyan',
-                'completed': 'green',
-                'waiting': 'magenta',
-                'deleted': 'red'
+            # Format the task line with priority indicator
+            priority_icons = {
+                'LOW': '🔽',
+                'MEDIUM': '🔸', 
+                'HIGH': '🔺',
+                'CRITICAL': '💥'
             }
-            status_icon = {
-                'pending': '⏳',
-                'in_progress': '🔄',
-                'completed': '✅',
-                'waiting': '⏸️',
-                'deleted': '🗑️'
-            }.get(status_value, '❓')
-            status_color = status_colors.get(status_value, 'white')
+            priority_icon = priority_icons.get(str(task.priority).upper(), '🔸')
             
-            # Color coding for priority
-            priority_colors = {
-                'low': 'blue',
-                'medium': 'yellow',
-                'high': 'orange_red1',  # More vibrant orange
-                'critical': 'red'
-            }
-            priority_icon = {
-                'low': '🔽',
-                'medium': '🔸',
-                'high': '🔺',
-                'critical': '💥'
-            }.get(priority_value, '🔹')
-            priority_color = priority_colors.get(priority_value, 'white')
-            
-            # Format due date if present
-            due_info = ""
+            # Format due date
+            due_str = ""
             if task.due:
-                due_info = f" [blue]📅 {task.due.strftime('%Y-%m-%d')}[/blue]"
+                try:
+                    if isinstance(task.due, str):
+                        due_date = datetime.fromisoformat(task.due)
+                    else:
+                        due_date = task.due
+                    
+                    # Normalize datetime to remove timezone for comparison
+                    due_date = due_date.replace(tzinfo=None)
+                    now = datetime.now().replace(tzinfo=None)
+                    
+                    # Format based on proximity to current date
+                    if due_date.date() == now.date():
+                        due_str = " 📅 Today"
+                    elif due_date.date() == (now + timedelta(days=1)).date():
+                        due_str = " 📅 Tomorrow"
+                    elif due_date.date() < now.date():
+                        due_str = " ⏳ Overdue"
+                    else:
+                        due_str = f" 📅 {due_date.strftime('%Y-%m-%d')}"
+                except Exception as e:
+                    logger.debug(f"Error formatting due date: {e}")
+                    due_str = ""
             
-            # Format project if present
-            project_info = ""
-            if task.project:
-                project_info = f" [purple]📁 {task.project}[/purple]"
+            # Build the task line
+            task_line = f"{global_index:2d}. {priority_icon} {task.title}{due_str}"
             
-            # Format tags if present
-            tags_info = ""
-            if task.tags:
-                tags_info = f" [cyan]🏷️  {', '.join(task.tags)}[/cyan]"
+            # Color code task status
+            status_colors = {
+                'PENDING': 'white',
+                'IN_PROGRESS': 'cyan',
+                'COMPLETED': 'green',
+                'WAITING': 'yellow',
+                'DELETED': 'red'
+            }
+            task_color = status_colors.get(str(task.status).upper(), 'white')
             
-            # Format recurring info
-            recurring_info = ""
-            if task.is_recurring:
-                recurring_info = " [green]🔁[/green]"
+            console.print(task_line, style=task_color)
             
-            # Format description/notes with limit (max 3 lines)
-            description_info = ""
-            content = task.description or task.notes
-            if content:
-                # Limit content to 3 lines
-                max_chars = 300
-                desc = content.strip()
-                if len(desc) > max_chars:
-                    # Try to break at a word boundary
-                    truncated = desc[:max_chars].rsplit(' ', 1)[0] + "..."
-                    desc_lines = truncated.split('\n')
-                else:
-                    desc_lines = desc.split('\n')
-                
-                # Take only first 3 lines and format them
-                formatted_lines = []
-                for line in desc_lines[:3]:
-                    if line.strip():  # Only add non-empty lines
-                        formatted_lines.append(f"      [italic white]{line.strip()}[/italic white]")
-                
-                # Join the lines with newlines
-                if formatted_lines:
-                    description_info = "\n" + "\n".join(formatted_lines)
-            
-            # Display task with number
-            task_line = f"  {i:2d}. [bright_black]{task.id[:8]}[/bright_black]: [{status_color}]{status_icon}[/{status_color}] [{priority_color}]{priority_icon}[/{priority_color}] {task.title}{due_info}{project_info}{tags_info}{recurring_info}{description_info}"
-            console.print(task_line)
-                
-            all_tasks.append(task)
-        task_index += len(list_tasks)
-        console.print()  # Add spacing between lists
+            # Display description if available
+            if task.description:
+                # Truncate long descriptions
+                desc = task.description[:60] + "..." if len(task.description) > 60 else task.description
+                console.print(f"     📝 {desc}")
     
-    return all_tasks
+    # Summary
+    console.print(f"\nTotal: {len(tasks)} task(s) across {len(tasks_by_list)} list(s)")
+    
+    return tasks
 
 
 @click.command()
@@ -192,6 +230,8 @@ def interactive(ctx, command):
       list              - List all tasks
       list [filter]     - List tasks with filters (same as gtasks list command)
       search <query>    - Search tasks
+      back              - Go back to previous command results
+      default           - Go back to default listing
       help              - Show this help
       quit/exit         - Exit interactive mode
     """
@@ -202,7 +242,7 @@ def interactive(ctx, command):
     
     # Import here to avoid issues with module loading
     from gtasks_cli.core.task_manager import TaskManager
-    from gtasks_cli.commands.list import task_state
+    from gtasks_cli.commands.list import task_state as list_task_state
     
     # Create task manager
     task_manager = TaskManager(
@@ -283,7 +323,9 @@ def interactive(ctx, command):
     _display_tasks_grouped_by_list(tasks)
     
     # Store current tasks in task_state
-    task_state.set_tasks(tasks)
+    task_state.set_tasks(tasks, is_default=(not initial_command))
+    if initial_command:
+        task_state.push_command(initial_command)
     
     # Command history for prompt_toolkit
     if HAS_PROMPT_TOOLKIT:
@@ -320,6 +362,43 @@ def interactive(ctx, command):
             if cmd in ['quit', 'exit']:
                 click.echo("Exiting interactive mode.")
                 break
+            elif cmd == 'back':
+                # Go back to previous command results
+                previous_command = task_state.pop_command()
+                if previous_command:
+                    # Re-execute the previous command
+                    if previous_command.startswith('list'):
+                        list_args = previous_command[4:].strip()
+                        tasks = handle_initial_list_command(task_manager, list_args, use_google_tasks)
+                        _display_tasks_grouped_by_list(tasks)
+                        task_state.set_tasks(tasks)
+                        task_state.push_command(previous_command)
+                    elif previous_command.startswith('search'):
+                        search_args = previous_command[6:].strip()
+                        tasks = handle_initial_search_command(task_manager, search_args, use_google_tasks)
+                        _display_tasks_grouped_by_list(tasks)
+                        task_state.set_tasks(tasks)
+                        task_state.push_command(previous_command)
+                    else:
+                        # For other commands, go back to default view
+                        tasks = task_state.get_default_tasks()
+                        _display_tasks_grouped_by_list(tasks)
+                        task_state.set_tasks(tasks)
+                else:
+                    # No previous command, go to default view
+                    tasks = task_state.get_default_tasks()
+                    _display_tasks_grouped_by_list(tasks)
+                    task_state.set_tasks(tasks, is_default=True)
+            elif cmd == 'default':
+                # Go back to default listing
+                tasks = task_state.get_default_tasks()
+                if tasks:
+                    _display_tasks_grouped_by_list(tasks)
+                    task_state.set_tasks(tasks, is_default=True)
+                    # Clear command history when going to default
+                    task_state.command_history.clear()
+                else:
+                    click.echo("No default task list available.")
             elif cmd == 'list':
                 # Parse list command with filters
                 list_filter = None
@@ -426,7 +505,8 @@ def interactive(ctx, command):
                     
                     # Display tasks grouped by list names
                     displayed_tasks = display_tasks_grouped_by_list(all_tasks)
-                    task_state.tasks = displayed_tasks
+                    task_state.set_tasks(displayed_tasks)
+                    task_state.push_command(command_input)
                 else:
                     # Local mode with list filtering support
                     all_tasks = task_manager.list_tasks(
@@ -467,6 +547,7 @@ def interactive(ctx, command):
                     # Display tasks grouped by list names with color coding
                     displayed_tasks = _display_tasks_grouped_by_list(all_tasks)
                     task_state.set_tasks(displayed_tasks)
+                    task_state.push_command(command_input)
             elif cmd == 'view':
                 if len(command_parts) < 2:
                     click.echo("Usage: view <number>")
@@ -509,6 +590,7 @@ def interactive(ctx, command):
                     click.echo(f"\nSearch results for '{query}':")
                     display_tasks_grouped_by_list(search_results)
                     task_state.set_tasks(search_results)
+                    task_state.push_command(command_input)
                 else:
                     click.echo(f"No tasks found matching '{query}'.")
                     # Keep current tasks unchanged
@@ -583,294 +665,7 @@ def interactive(ctx, command):
             click.echo(f"An error occurred: {e}")
 
 
-def _filter_by_time(tasks, time_filter):
-    """Filter tasks by time period"""
-    
-    # Use timezone-naive datetimes for comparison to avoid timezone issues
-    now = datetime.now().replace(tzinfo=None)
-    
-    if time_filter == 'today':
-        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_day = start_of_day + timedelta(days=1)
-        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= start_of_day and _normalize_datetime(t.due) < end_of_day]
-    
-    elif time_filter == 'this_week':
-        # Start of week (Monday)
-        start_of_week = now - timedelta(days=now.weekday())
-        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_week = start_of_week + timedelta(days=7)
-        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= start_of_week and _normalize_datetime(t.due) < end_of_week]
-    
-    elif time_filter == 'this_month':
-        # Start of month
-        start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        # End of month
-        if now.month == 12:
-            end_of_month = now.replace(year=now.year + 1, month=1, day=1)
-        else:
-            end_of_month = now.replace(month=now.month + 1, day=1)
-        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= start_of_month and _normalize_datetime(t.due) < end_of_month]
-    
-    elif time_filter == 'last_month':
-        # Start of last month
-        if now.month == 1:
-            start_of_month = now.replace(year=now.year - 1, month=12, day=1, hour=0, minute=0, second=0, microsecond=0)
-        else:
-            start_of_month = now.replace(month=now.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        
-        # End of last month
-        end_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= start_of_month and _normalize_datetime(t.due) < end_of_month]
-    
-    elif time_filter == 'last_3m':
-        # Start of 3 months ago
-        months_ago = now.month - 3
-        years_ago = now.year
-        while months_ago <= 0:
-            months_ago += 12
-            years_ago -= 1
-        start_of_period = now.replace(year=years_ago, month=months_ago, day=1, hour=0, minute=0, second=0, microsecond=0)
-        # End is today
-        end_of_period = now
-        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= start_of_period and _normalize_datetime(t.due) <= end_of_period]
-    
-    elif time_filter == 'last_6m':
-        # Start of 6 months ago
-        months_ago = now.month - 6
-        years_ago = now.year
-        while months_ago <= 0:
-            months_ago += 12
-            years_ago -= 1
-        start_of_period = now.replace(year=years_ago, month=months_ago, day=1, hour=0, minute=0, second=0, microsecond=0)
-        # End is today
-        end_of_period = now
-        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= start_of_period and _normalize_datetime(t.due) <= end_of_period]
-    
-    elif time_filter == 'last_year':
-        # Start of last year
-        start_of_year = now.replace(year=now.year - 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        # End of last year
-        end_of_year = now.replace(year=now.year, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        tasks = [t for t in tasks if t.due and _normalize_datetime(t.due) >= start_of_year and _normalize_datetime(t.due) < end_of_year]
-    
-    return tasks
-
-
-
-
-def _display_tasks(tasks, start_number=1):
-    """Display tasks with numbering"""
-    tasks_header = Text("\nTasks:", style="bold green")
-    console.print(tasks_header)
-    for i, task in enumerate(tasks, start_number):
-        _display_single_task(i, task)
-
-
-# Remove _display_single_task as it's no longer needed
-# The functionality is now handled by _display_tasks_grouped_by_list
-
-
-# Remove _display_numbered_tasks as it's no longer needed
-# The functionality is now handled by _display_tasks_grouped_by_list
-
-
-def _view_task_details(task):
-    """Display detailed information about a task with color formatting"""
-    # Create a panel for the task details
-    panel_content = []
-    
-    # Add basic task info
-    panel_content.append(f"[bold]{task.title}[/bold]")
-    panel_content.append(f"ID: {task.id}")
-    
-    # Add description
-    if task.description:
-        # Format description with proper alignment and limit
-        max_chars = 500  # Increased limit for view details
-        desc = task.description.strip()
-        if len(desc) > max_chars:
-            desc = desc[:max_chars].rsplit(' ', 1)[0] + "..."
-        
-        # Split description into lines for proper alignment
-        desc_lines = desc.split('\n')
-        formatted_desc = "\n".join([f"    {line}" for line in desc_lines])
-        panel_content.append(f"[italic white]📝 {formatted_desc}[/italic white]")
-    
-    # Add notes
-    if task.notes:
-        panel_content.append(f"📌 Notes: {task.notes}")
-    
-    # Add due date
-    if task.due:
-        panel_content.append(f"[blue]📅 Due: {task.due.strftime('%Y-%m-%d')}[/blue]")
-    
-    # Add status and priority on the same line
-    status_value = task.status if isinstance(task.status, str) else task.status.value
-    status_colors = {
-        'pending': 'yellow',
-        'in_progress': 'cyan',
-        'completed': 'green',
-        'waiting': 'magenta',
-        'deleted': 'red'
-    }
-    status_icon = {
-        'pending': '⏳',
-        'in_progress': '🔄',
-        'completed': '✅',
-        'waiting': '⏸️',
-        'deleted': '🗑️'
-    }.get(status_value, '❓')
-    status_color = status_colors.get(status_value, 'white')
-    
-    priority_value = task.priority if isinstance(task.priority, str) else task.priority.value
-    priority_colors = {
-        'low': 'blue',
-        'medium': 'yellow',
-        'high': 'orange_red1',
-        'critical': 'red'
-    }
-    priority_icon = {
-        'low': '🔽',
-        'medium': '🔸',
-        'high': '🔺',
-        'critical': '💥'
-    }.get(priority_value, '🔹')
-    priority_color = priority_colors.get(priority_value, 'white')
-    
-    status_priority_line = f"[{status_color}]{status_icon} {status_value.upper()}[/{status_color}] | [{priority_color}]{priority_icon} {priority_value.upper()}[/{priority_color}]"
-    panel_content.append(status_priority_line)
-    
-    # Add project and tags
-    project_tags_line = ""
-    if task.project:
-        project_tags_line += f"📁 {task.project}  "
-    if task.tags:
-        project_tags_line += f"🏷️  {', '.join(task.tags)}"
-    
-    if project_tags_line:
-        panel_content.append(project_tags_line)
-    
-    # Add recurrence info
-    if task.is_recurring:
-        panel_content.append("🔁 Recurring Task")
-    
-    # Add dependencies
-    if task.dependencies:
-        deps_formatted = ", ".join(task.dependencies)
-        panel_content.append(f"🔗 Dependencies: {deps_formatted}")
-    
-    # Add timestamps
-    timestamp_lines = []
-    timestamp_lines.append(f"⏱️ Created: {task.created_at}")
-    if task.modified_at:
-        timestamp_lines.append(f"🔄 Modified: {task.modified_at}")
-    if hasattr(task, 'completed_at') and task.completed_at:
-        timestamp_lines.append(f"✅ Completed: {task.completed_at}")
-    
-    if timestamp_lines:
-        panel_content.extend(timestamp_lines)
-    
-    # Create and print the panel
-    panel = Panel("\n".join(panel_content), title="Task Details", expand=False, border_style="bright_black")
-    console.print(panel)
-def _edit_task_in_editor(task: Task, task_manager) -> Task:
-    """Edit a task in an external editor.
-    
-    Args:
-        task: The task to edit
-        task_manager: The task manager instance
-        
-    Returns:
-        Updated task if successful, None if cancelled or failed
-    """
-    # Create a temporary file with task content
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as temp_file:
-        # Write task content to the temporary file
-        temp_file.write(f"# Editing Task: {task.title}\n\n")
-        temp_file.write("## Instructions\n")
-        temp_file.write("# - Modify the title after the 'Title:' marker\n")
-        temp_file.write("# - Modify the description after the 'Description:' marker\n")
-        temp_file.write("# - Lines starting with '#' are comments and will be ignored\n")
-        temp_file.write("# - Save and exit the editor to apply changes\n")
-        temp_file.write("# - Close the editor without saving to cancel\n\n")
-        temp_file.write(f"Title: {task.title}\n\n")
-        temp_file.write("Description:\n")
-        if task.description:
-            # Add the description with proper indentation
-            for line in task.description.split('\n'):
-                temp_file.write(f"{line}\n")
-        temp_file.flush()
-        
-        # Get editor from environment or use default
-        editor = os.environ.get('EDITOR', 'vim')
-        
-        try:
-            # Open the file in the editor
-            result = subprocess.run([editor, temp_file.name])
-            
-            # If editor was closed successfully, read the updated content
-            if result.returncode == 0:
-                with open(temp_file.name, 'r') as updated_file:
-                    content = updated_file.read()
-                    
-                # Parse the updated content
-                lines = content.split('\n')
-                title = task.title  # Default to original title
-                description_lines = []
-                in_description = False
-                
-                for line in lines:
-                    # Skip comment lines
-                    if line.startswith('#'):
-                        continue
-                        
-                    # Check for title line
-                    if line.startswith('Title:'):
-                        title = line[6:].strip()  # Remove 'Title:' prefix
-                    # Check for description section
-                    elif line == 'Description:':
-                        in_description = True
-                    elif in_description:
-                        # Collect description lines
-                        description_lines.append(line)
-                
-                # Clean up description (remove trailing empty lines)
-                while description_lines and not description_lines[-1].strip():
-                    description_lines.pop()
-                    
-                description = '\n'.join(description_lines) if description_lines else None
-                
-                # Update the task
-                update_result = task_manager.update_task(
-                    task.id, 
-                    title=title, 
-                )
-                
-                if update_result:
-                    # If update was successful, retrieve and return the updated task
-                    updated_tasks = task_manager.list_tasks()
-                    for updated_task in updated_tasks:
-                        if updated_task.id == task.id:
-                            return updated_task
-                    # If we can't find the task, return None
-                    return None
-                else:
-                    # Update failed
-                    return None
-                
-            else:
-                # Editor was not closed successfully (e.g., killed)
-                return None
-                
-        except FileNotFoundError:
-            click.echo(f"Editor '{editor}' not found. Please set the EDITOR environment variable to a valid editor.")
-            return None
-        except Exception as e:
-            click.echo(f"Error editing task: {e}")
-            return None
-        finally:
-            # Clean up the temporary file
-            try:
-                os.unlink(temp_file.name)
-            except:
-                pass
+def _view_task_details(task: Task):
+    """View detailed information about a task"""
+    # Use the imported function for consistency
+    view_task_details(task)

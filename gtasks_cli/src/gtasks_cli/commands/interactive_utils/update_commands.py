@@ -30,9 +30,8 @@ def handle_update_command(task_state, task_manager, command_parts, use_google_ta
                 updated_task = _edit_task_in_editor(task, task_manager)
                 if updated_task:
                     click.echo(f"Task '{updated_task.title}' updated successfully with editor.")
-                    # Refresh task list using common utility
-                    from gtasks_cli.commands.interactive_utils.common import refresh_task_list
-                    refresh_task_list(task_manager, task_state, use_google_tasks)
+                    # Refresh the specific task in the task list instead of full refresh
+                    _update_single_task_in_state(task_state, updated_task)
                 else:
                     click.echo("Task update cancelled or failed.")
             else:
@@ -46,15 +45,34 @@ def handle_update_command(task_state, task_manager, command_parts, use_google_ta
                 update_success = task_manager.update_task(task.id, title=title, description=description)
                 if update_success:
                     click.echo(f"Task '{title}' updated successfully.")
-                    # Refresh task list using common utility
-                    from gtasks_cli.commands.interactive_utils.common import refresh_task_list
-                    refresh_task_list(task_manager, task_state, use_google_tasks)
+                    # Just update the specific task in our current view instead of refreshing everything
+                    # Get the updated task and update it in place
+                    updated_tasks = task_manager.list_tasks()
+                    for updated_task in updated_tasks:
+                        if updated_task.id == task.id:
+                            _update_single_task_in_state(task_state, updated_task)
+                            break
                 else:
                     click.echo("Failed to update task.")
         else:
             click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.tasks)}.")
     except ValueError:
         click.echo("Invalid task number. Please enter a valid integer.")
+
+
+def _update_single_task_in_state(task_state, updated_task):
+    """Update a single task in the task state instead of refreshing the entire list"""
+    # Find and update the task in place
+    for i, task in enumerate(task_state.tasks):
+        if task.id == updated_task.id:
+            task_state.tasks[i] = updated_task
+            break
+    # Refresh the mappings
+    task_state.task_number_to_id = {}
+    task_state.task_id_to_number = {}
+    for i, task in enumerate(task_state.tasks, 1):
+        task_state.task_number_to_id[i] = task.id
+        task_state.task_id_to_number[task.id] = i
 
 
 def _refresh_task_list(task_manager, task_state):

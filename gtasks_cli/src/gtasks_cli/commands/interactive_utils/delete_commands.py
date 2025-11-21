@@ -15,20 +15,37 @@ def handle_delete_command(task_state, task_manager, command_parts, use_google_ta
     if len(command_parts) < 2:
         click.echo("Usage: delete <task_number>")
         return
-        
+    
     try:
         task_num = int(command_parts[1])
         task = task_state.get_task_by_number(task_num)
         if task:
+            # Confirm deletion
             confirm = click.confirm(f"Are you sure you want to delete task '{task.title}'?")
             if confirm:
-                if task_manager.delete_task(task.id):
-                    click.echo(f"Task '{task.title}' deleted.")
-                    # Refresh task list - only show incomplete tasks
-                    refresh_task_list(task_manager, task_state, use_google_tasks)
+                success = task_manager.delete_task(task.id)
+                if success:
+                    click.echo(f"Task '{task.title}' deleted successfully.")
+                    # Instead of refreshing the whole list, just remove the task from current view
+                    _remove_task_from_state(task_state, task.id)
                 else:
                     click.echo("Failed to delete task.")
+            else:
+                click.echo("Deletion cancelled.")
         else:
             click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.tasks)}.")
     except ValueError:
         click.echo("Invalid task number. Please enter a valid integer.")
+
+
+def _remove_task_from_state(task_state, task_id):
+    """Remove a task from the task state instead of refreshing the entire list"""
+    # Remove the task from the list
+    task_state.tasks = [task for task in task_state.tasks if task.id != task_id]
+    
+    # Refresh the mappings
+    task_state.task_number_to_id = {}
+    task_state.task_id_to_number = {}
+    for i, task in enumerate(task_state.tasks, 1):
+        task_state.task_number_to_id[i] = task.id
+        task_state.task_id_to_number[task.id] = i

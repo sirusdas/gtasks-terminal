@@ -4,10 +4,7 @@ Add command functionality for interactive mode
 """
 
 import click
-from gtasks_cli.utils.logger import setup_logger
-from gtasks_cli.commands.interactive_utils.common import refresh_task_list
-
-logger = setup_logger(__name__)
+from gtasks_cli.models.task import Task, TaskStatus, Priority
 
 
 def handle_add_command(task_state, task_manager, command_parts, use_google_tasks=False):
@@ -18,11 +15,32 @@ def handle_add_command(task_state, task_manager, command_parts, use_google_tasks
     if description == "":
         description = None
     
+    # Create the task
+    task = Task(
+        title=title,
+        description=description,
+        status=TaskStatus.PENDING,
+        priority=Priority.MEDIUM
+    )
+    
     # Add the task
-    task = task_manager.add_task(title=title, description=description)
-    if task:
-        click.echo(f"Task '{title}' added successfully.")
-        # Refresh task list - only show incomplete tasks and maintain grouped display
-        refresh_task_list(task_manager, task_state, use_google_tasks)
+    added_task = task_manager.add_task(task)
+    if added_task:
+        click.echo(f"Task '{added_task.title}' added successfully.")
+        # Instead of refreshing the whole list, just add the new task to current view
+        _add_task_to_state(task_state, added_task)
     else:
         click.echo("Failed to add task.")
+
+
+def _add_task_to_state(task_state, new_task):
+    """Add a new task to the task state instead of refreshing the entire list"""
+    # Add the task to the list
+    task_state.tasks.append(new_task)
+    
+    # Refresh the mappings
+    task_state.task_number_to_id = {}
+    task_state.task_id_to_number = {}
+    for i, task in enumerate(task_state.tasks, 1):
+        task_state.task_number_to_id[i] = task.id
+        task_state.task_id_to_number[task.id] = i
