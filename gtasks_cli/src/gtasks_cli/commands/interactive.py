@@ -78,6 +78,7 @@ class TaskState:
             self.task_number_to_id[i] = task.id
             self.task_id_to_number[task.id] = i
             
+            
         if is_default:
             self.default_tasks = tasks.copy()
     
@@ -222,18 +223,19 @@ def interactive(ctx, command):
     
     \b
     Commands in interactive mode:
-      view <number>     - View task details
-      done <number>     - Mark task as completed
-      delete <number>   - Delete a task
-      update <number>   - Update a task
-      add               - Add a new task
-      list              - List all tasks
-      list [filter]     - List tasks with filters (same as gtasks list command)
-      search <query>    - Search tasks
-      back              - Go back to previous command results
-      default           - Go back to default listing
-      help              - Show this help
-      quit/exit         - Exit interactive mode
+      view <number>           - View task details
+      done <number>           - Mark task as completed
+      delete <number>         - Delete a task
+      update <number>         - Update a task
+      update-status <spec>    - Bulk update task status and due dates
+      add                     - Add a new task
+      list                    - List all tasks
+      list [filter]           - List tasks with filters (same as gtasks list command)
+      search <query>          - Search tasks
+      back                    - Go back to previous command results
+      default                 - Go back to default listing
+      help                    - Show this help
+      quit/exit               - Exit interactive mode
     """
     use_google_tasks = ctx.obj.get('use_google_tasks', False)
     storage_backend = ctx.obj.get('storage_backend', 'sqlite')
@@ -578,6 +580,10 @@ def interactive(ctx, command):
                 # Import and use the update command handler
                 from gtasks_cli.commands.interactive_utils.update_commands import handle_update_command
                 handle_update_command(task_state, task_manager, command_parts, use_google_tasks)
+            elif cmd == 'update-status':
+                # Import and use the bulk update command handler
+                from gtasks_cli.commands.interactive_utils.bulk_update_commands import handle_bulk_update_command
+                handle_bulk_update_command(task_state, task_manager, command_parts, use_google_tasks)
             elif cmd == 'search':
                 if len(command_parts) < 2:
                     click.echo("Usage: search <query>")
@@ -644,6 +650,9 @@ def interactive(ctx, command):
                         show_delete_help()
                     elif subcommand == 'update':
                         show_update_help()
+                    elif subcommand == 'update-status':
+                        from gtasks_cli.commands.interactive_help import show_bulk_update_help
+                        show_bulk_update_help()
                     elif subcommand == 'add':
                         show_add_help()
                     elif subcommand == 'list':
