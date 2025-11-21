@@ -112,9 +112,19 @@ def _edit_task_in_editor(task: Task, task_manager) -> Optional[Task]:
         temp_file.write("# - Close the editor without saving to cancel\n\n")
         temp_file.write(f"Title: {task.title}\n\n")
         temp_file.write("Description:\n")
+        
+        # Combine description and notes for the editor content
+        editor_content = ""
         if task.description:
-            # Add the description with proper indentation
-            for line in task.description.split('\n'):
+            editor_content += task.description
+        if task.notes:
+            if editor_content:
+                editor_content += "\n"
+            editor_content += task.notes
+            
+        if editor_content:
+            # Add the content with proper indentation
+            for line in editor_content.split('\n'):
                 temp_file.write(f"{line}\n")
         temp_file.flush()
         
@@ -179,9 +189,6 @@ def _edit_task_in_editor(task: Task, task_manager) -> Optional[Task]:
                 # Editor was not closed successfully (e.g., killed)
                 return None
                 
-        except FileNotFoundError:
-            click.echo(f"Editor '{editor}' not found. Please set the EDITOR environment variable to a valid editor.")
-            return None
         except FileNotFoundError:
             click.echo(f"Editor '{editor}' not found. Please set the EDITOR environment variable to a valid editor.")
             return None
