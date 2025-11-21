@@ -5,6 +5,9 @@ Interactive mode for Google Tasks CLI
 
 import click
 import shlex
+import tempfile
+import os
+import subprocess
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import List
@@ -478,143 +481,22 @@ def interactive(ctx, command):
                         click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.tasks)}.")
                 except ValueError:
                     click.echo("Invalid task number. Please enter a valid integer.")
-            elif cmd == 'done':
-                if len(command_parts) < 2:
-                    click.echo("Usage: done <number>")
-                    continue
-                    
-                try:
-                    task_num = int(command_parts[1])
-                    task = task_state.get_task_by_number(task_num)
-                    if task:
-                        if task_manager.complete_task(task.id):
-                            click.echo(f"Task '{task.title}' marked as completed.")
-                            # Refresh task list - only show incomplete tasks
-                            tasks = task_manager.list_tasks()
-                            incomplete_tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
-                            # Add list_title to each task for grouping display (default to "Tasks" for local mode)
-                            for task in incomplete_tasks:
-                                if not hasattr(task, 'list_title') or not task.list_title:
-                                    task.list_title = "Tasks"
-                            display_tasks_grouped_by_list(incomplete_tasks)
-                            task_state.set_tasks(incomplete_tasks)
-                        else:
-                            click.echo("Failed to mark task as completed.")
-                    else:
-                        click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.tasks)}.")
-                except ValueError:
-                    click.echo("Invalid task number. Please enter a valid integer.")
-            elif cmd == 'delete':
-                if len(command_parts) < 2:
-                    click.echo("Usage: delete <task_number>")
-                    continue
-                    
-                try:
-                    task_num = int(command_parts[1])
-                    task = task_state.get_task_by_number(task_num)
-                    if task:
-                        confirm = click.confirm(f"Are you sure you want to delete task '{task.title}'?")
-                        if confirm:
-                            if task_manager.delete_task(task.id):
-                                click.echo(f"Task '{task.title}' deleted.")
-                                # Refresh task list - only show incomplete tasks
-                                if use_google_tasks:
-                                    # For Google Tasks, we need to get tasks grouped by their lists
-                                    client = GoogleTasksClient()
-                                    tasklists = client.list_tasklists()
-                                    
-                                    tasks = []
-                                    for tasklist in tasklists:
-                                        tasklist_id = tasklist['id']
-                                        tasklist_title = tasklist.get('title', 'Untitled List')
-                                        # Get all tasks and filter for this specific tasklist
-                                        all_tasks = task_manager.list_tasks()
-                                        list_tasks = [t for t in all_tasks if getattr(t, 'tasklist_id', None) == tasklist_id]
-                                        
-                                        # Filter for incomplete tasks
-                                        incomplete_tasks = [t for t in list_tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
-                                        
-                                        # Add list_title to each task for grouping display
-                                        for task_item in incomplete_tasks:
-                                            task_item.list_title = tasklist_title
-                                            
-                                        tasks.extend(incomplete_tasks)
-                                    
-                                    display_tasks_grouped_by_list(tasks)
-                                    task_state.set_tasks(tasks)
-                                else:
-                                    # For local mode
-                                    tasks = task_manager.list_tasks()
-                                    incomplete_tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
-                                    _display_numbered_tasks(incomplete_tasks)
-                                    task_state.set_tasks(incomplete_tasks)
-                            else:
-                                click.echo("Failed to delete task.")
-                    else:
-                        click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.tasks)}.")
-                except ValueError:
-                    click.echo("Invalid task number. Please enter a valid integer.")
             elif cmd == 'add':
-                # Collect task details
-                title = click.prompt("Task title")
-                description = click.prompt("Task description", default="")
-                if description == "":
-                    description = None
-                
-                # Add the task
-                task = task_manager.add_task(title=title, description=description)
-                if task:
-                    click.echo(f"Task '{title}' added successfully.")
-                    # Refresh task list - only show incomplete tasks and maintain grouped display
-                    tasks = task_manager.list_tasks()
-                    incomplete_tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
-
-                    # Add list_title to each task for grouping display (default to "Tasks" for local mode)
-                    for task in incomplete_tasks:
-                        if not hasattr(task, 'list_title') or not task.list_title:
-                            task.list_title = "Tasks"
-
-                    # Display tasks grouped by list names
-                    displayed_tasks = display_tasks_grouped_by_list(incomplete_tasks)
-                    task_state.set_tasks(displayed_tasks)
-                else:
-                    click.echo("Failed to add task.")
+                # Import and use the add command handler
+                from gtasks_cli.commands.interactive_utils.add_commands import handle_add_command
+                handle_add_command(task_state, task_manager, command_parts, use_google_tasks)
+            elif cmd == 'done':
+                # Import and use the done command handler
+                from gtasks_cli.commands.interactive_utils.done_commands import handle_done_command
+                handle_done_command(task_state, task_manager, command_parts, use_google_tasks)
+            elif cmd == 'delete':
+                # Import and use the delete command handler
+                from gtasks_cli.commands.interactive_utils.delete_commands import handle_delete_command
+                handle_delete_command(task_state, task_manager, command_parts, use_google_tasks)
             elif cmd == 'update':
-                if len(command_parts) < 2:
-                    click.echo("Usage: update <task_number>")
-                    continue
-                    
-                try:
-                    task_num = int(command_parts[1])
-                    task = task_state.get_task_by_number(task_num)
-                    if task:
-                        # Collect updated details
-                        title = click.prompt("Task title", default=task.title)
-                        description = click.prompt("Task description", default=task.description or "")
-                        if description == "":
-                            description = None
-                        
-                        # Update the task
-                        updated_task = task_manager.update_task(task.id, title=title, description=description)
-                        if updated_task:
-                            click.echo(f"Task '{title}' updated successfully.")
-                            # Refresh task list - only show incomplete tasks
-                            tasks = task_manager.list_tasks()
-                            incomplete_tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
-
-                            # Add list_title to each task for grouping display (default to "Tasks" for local mode)
-                            for task in incomplete_tasks:
-                                if not hasattr(task, 'list_title') or not task.list_title:
-                                    task.list_title = "Tasks"
-
-                            display_tasks_grouped_by_list(incomplete_tasks)
-                            task_state.set_tasks(incomplete_tasks)
-                        else:
-                            click.echo("Failed to update task.")
-                    else:
-                        click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.tasks)}.")
-                except ValueError:
-                    click.echo("Invalid task number. Please enter a valid integer.")
+                # Import and use the update command handler
+                from gtasks_cli.commands.interactive_utils.update_commands import handle_update_command
+                handle_update_command(task_state, task_manager, command_parts, use_google_tasks)
             elif cmd == 'search':
                 if len(command_parts) < 2:
                     click.echo("Usage: search <query>")
@@ -891,3 +773,104 @@ def _view_task_details(task):
     # Create and print the panel
     panel = Panel("\n".join(panel_content), title="Task Details", expand=False, border_style="bright_black")
     console.print(panel)
+def _edit_task_in_editor(task: Task, task_manager) -> Task:
+    """Edit a task in an external editor.
+    
+    Args:
+        task: The task to edit
+        task_manager: The task manager instance
+        
+    Returns:
+        Updated task if successful, None if cancelled or failed
+    """
+    # Create a temporary file with task content
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as temp_file:
+        # Write task content to the temporary file
+        temp_file.write(f"# Editing Task: {task.title}\n\n")
+        temp_file.write("## Instructions\n")
+        temp_file.write("# - Modify the title after the 'Title:' marker\n")
+        temp_file.write("# - Modify the description after the 'Description:' marker\n")
+        temp_file.write("# - Lines starting with '#' are comments and will be ignored\n")
+        temp_file.write("# - Save and exit the editor to apply changes\n")
+        temp_file.write("# - Close the editor without saving to cancel\n\n")
+        temp_file.write(f"Title: {task.title}\n\n")
+        temp_file.write("Description:\n")
+        if task.description:
+            # Add the description with proper indentation
+            for line in task.description.split('\n'):
+                temp_file.write(f"{line}\n")
+        temp_file.flush()
+        
+        # Get editor from environment or use default
+        editor = os.environ.get('EDITOR', 'vim')
+        
+        try:
+            # Open the file in the editor
+            result = subprocess.run([editor, temp_file.name])
+            
+            # If editor was closed successfully, read the updated content
+            if result.returncode == 0:
+                with open(temp_file.name, 'r') as updated_file:
+                    content = updated_file.read()
+                    
+                # Parse the updated content
+                lines = content.split('\n')
+                title = task.title  # Default to original title
+                description_lines = []
+                in_description = False
+                
+                for line in lines:
+                    # Skip comment lines
+                    if line.startswith('#'):
+                        continue
+                        
+                    # Check for title line
+                    if line.startswith('Title:'):
+                        title = line[6:].strip()  # Remove 'Title:' prefix
+                    # Check for description section
+                    elif line == 'Description:':
+                        in_description = True
+                    elif in_description:
+                        # Collect description lines
+                        description_lines.append(line)
+                
+                # Clean up description (remove trailing empty lines)
+                while description_lines and not description_lines[-1].strip():
+                    description_lines.pop()
+                    
+                description = '\n'.join(description_lines) if description_lines else None
+                
+                # Update the task
+                update_result = task_manager.update_task(
+                    task.id, 
+                    title=title, 
+                )
+                
+                if update_result:
+                    # If update was successful, retrieve and return the updated task
+                    updated_tasks = task_manager.list_tasks()
+                    for updated_task in updated_tasks:
+                        if updated_task.id == task.id:
+                            return updated_task
+                    # If we can't find the task, return None
+                    return None
+                else:
+                    # Update failed
+                    return None
+                
+            else:
+                # Editor was not closed successfully (e.g., killed)
+                return None
+                
+        except FileNotFoundError:
+            click.echo(f"Editor '{editor}' not found. Please set the EDITOR environment variable to a valid editor.")
+            return None
+        except Exception as e:
+            click.echo(f"Error editing task: {e}")
+            return None
+        finally:
+            # Clean up the temporary file
+            try:
+                os.unlink(temp_file.name)
+            except:
+                pass

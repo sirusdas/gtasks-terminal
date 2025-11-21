@@ -18,7 +18,8 @@ Interactive Mode Commands:
   view <number>     - View task details
   done <number>     - Mark task as completed
   delete <number>   - Delete a task
-  update <number>   - Update a task (not yet implemented)
+  update <number>   - Update a task
+  update <number> [--editor|-e] - Update a task using external editor
   add               - Add a new task
   list              - List all tasks
   list [filters]    - List tasks with filters (same as gtasks list command)
@@ -115,27 +116,39 @@ def show_update_help():
     console.print(Panel("[bold blue]Update Command Help[/bold blue]", expand=False))
     
     console.print("[bold]Description:[/bold]")
-    console.print("Update the details of an existing task including title and description.\n")
+    console.print("Update a task's title and description. You can either use interactive prompts")
+    console.print("or edit the task in an external editor.\n")
     
     console.print("[bold]Usage:[/bold]")
-    console.print("  update <task_number>\n")
+    console.print("  update <task_number>")
+    console.print("  update <task_number> [--editor|-e]\n")
     
     console.print("[bold]Arguments:[/bold]")
-    console.print("  task_number    The number of the task to update\n")
+    console.print("  task_number    The number of the task to update (as shown in the list)")
+    console.print("  --editor, -e   Use external editor to update the task\n")
     
-    console.print("[bold]Example:[/bold]")
-    console.print("  [green]# Update task number 4[/green]")
-    console.print("  update 4\n")
+    console.print("[bold]Examples:[/bold]")
+    console.print("  [green]# Update task number 3 with interactive prompts[/green]")
+    console.print("  update 3\n")
     
-    console.print("[bold]Process:[/bold]")
-    console.print("  1. You will be prompted to enter a new title (current title shown as default)")
-    console.print("  2. You will be prompted to enter a new description (current description shown as default)")
-    console.print("  3. Press [yellow]Enter[/yellow] to keep the current value")
-    console.print("  4. Enter an empty value to clear the description\n")
+    console.print("  [green]# Update task number 3 with external editor[/green]")
+    console.print("  update 3 --editor")
+    console.print("  update 3 -e\n")
+    
+    console.print("[bold]Editor Support:[/bold]")
+    console.print("The editor functionality allows you to edit tasks in your preferred text editor.")
+    console.print("To use this feature:")
+    console.print("  1. Set the EDITOR environment variable to your preferred editor (default: vim)")
+    console.print("  2. Use the --editor or -e flag with the update command")
+    console.print("  3. The task content will open in your editor")
+    console.print("  4. Modify the title and description as needed")
+    console.print("  5. Save and exit the editor to apply changes")
+    console.print("  6. Close the editor without saving to cancel\n")
     
     console.print("[bold]Notes:[/bold]")
-    console.print("  - Only title and description can be updated through this command")
-    console.print("  - For other updates (status, priority, etc.), use the appropriate commands")
+    console.print("  - The task number is based on the current displayed list")
+    console.print("  - Use the [yellow]list[/yellow] command to see task numbers")
+    console.print("  - Editor mode provides a more convenient way to edit longer descriptions")
 
 
 def show_add_help():

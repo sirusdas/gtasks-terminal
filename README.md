@@ -66,6 +66,12 @@ Documentation for sorting tasks:
 - Usage examples for both command line and interactive mode
 - Implementation details and best practices
 
+### 8. [Editor Feature](EDITOR_FEATURE.md)
+Documentation for editing tasks with external editors:
+- Using external editors like vim, nano, or VS Code to edit tasks
+- Configuring the EDITOR environment variable
+- Workflow and best practices
+
 ## Advanced Sync Feature
 
 The Google Tasks CLI now includes an Advanced Sync feature that implements a 4-step simplified synchronization approach to efficiently synchronize tasks between local storage and Google Tasks.
