@@ -8,6 +8,9 @@ import re
 from datetime import datetime
 from typing import List, Tuple, Optional
 from gtasks_cli.models.task import Task, TaskStatus
+from gtasks_cli.utils.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 
 def handle_bulk_update_command(task_state, task_manager, command_parts, use_google_tasks=False):

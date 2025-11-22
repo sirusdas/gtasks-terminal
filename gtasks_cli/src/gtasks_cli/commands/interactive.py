@@ -198,6 +198,17 @@ def _display_tasks_grouped_by_list(tasks: List[Task]) -> List[Task]:
                 # Truncate long descriptions
                 desc = task.description[:60] + "..." if len(task.description) > 60 else task.description
                 console.print(f"     📝 {desc}")
+                
+            # Display notes if available
+            if task.notes is not None:
+                notes_stripped = task.notes.strip()
+                if notes_stripped:
+                    # Truncate long notes and replace newlines with spaces for clean display
+                    notes = notes_stripped[:60] + "..." if len(notes_stripped) > 60 else notes_stripped
+                    notes = " ".join(notes.splitlines())
+                    # Using Rich console print with proper text handling
+                    note_text = Text(f"     📓 {notes}")
+                    console.print(note_text)
     
     # Summary
     console.print(f"\nTotal: {len(tasks)} task(s) across {len(tasks_by_list)} list(s)")
