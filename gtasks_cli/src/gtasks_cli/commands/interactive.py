@@ -203,9 +203,16 @@ def _display_tasks_grouped_by_list(tasks: List[Task]) -> List[Task]:
             if task.notes is not None:
                 notes_stripped = task.notes.strip()
                 if notes_stripped:
-                    # Truncate long notes and replace newlines with spaces for clean display
-                    notes = notes_stripped[:60] + "..." if len(notes_stripped) > 60 else notes_stripped
-                    notes = " ".join(notes.splitlines())
+                    # Split notes into lines
+                    note_lines = notes_stripped.splitlines()
+                    # Show at least 3 lines or up to 200 characters
+                    displayed_lines = note_lines[:3]  # Take up to 3 lines
+                    notes = "\n     📓 ".join(displayed_lines)  # Join with prefix for each line
+                    
+                    # If we have more than 200 characters, truncate and add ellipsis
+                    if len(notes) > 200:
+                        notes = notes[:200] + "..."
+                    
                     # Using Rich console print with proper text handling
                     note_text = Text(f"     📓 {notes}")
                     console.print(note_text)
