@@ -19,6 +19,7 @@ from gtasks_cli.reports.task_distribution_report import TaskDistributionReport
 from gtasks_cli.reports.task_completion_rate_report import TaskCompletionRateReport
 from gtasks_cli.reports.future_timeline_report import FutureTimelineReport
 from gtasks_cli.reports.timeline_report import TimelineReport
+from gtasks_cli.reports.organized_tasks_report import OrganizedTasksReport
 from gtasks_cli.utils.tag_extractor import extract_tags_from_task
 
 logger = setup_logger(__name__)
@@ -37,8 +38,10 @@ logger = setup_logger(__name__)
 @click.option('--days-ahead', type=int, default=30, help='Number of days ahead for future reports')
 @click.option('--tags', help='Filter tasks by tags (comma-separated)')
 @click.option('--with-all-tags', is_flag=True, help='Require all specified tags to be present (used with --tags)')
+@click.option('--only-title', is_flag=True, help='Show only task titles, no descriptions or notes')
+@click.option('--no-other-tasks', is_flag=True, help='Do not show Other Tasks (not matching any category)')
 @click.pass_context
-def generate_report(ctx, report_ids, list_reports, list_tags, email, export, output, days, start_date, end_date, days_ahead, tags, with_all_tags):
+def generate_report(ctx, report_ids, list_reports, list_tags, email, export, output, days, start_date, end_date, days_ahead, tags, with_all_tags, only_title, no_other_tasks):
     """Generate reports based on task data."""
     
     # Initialize report manager and register all reports
@@ -51,6 +54,7 @@ def generate_report(ctx, report_ids, list_reports, list_tags, email, export, out
     report_manager.register_report('rp6', TaskCompletionRateReport())
     report_manager.register_report('rp7', FutureTimelineReport())
     report_manager.register_report('rp8', TimelineReport())
+    report_manager.register_report('rp9', OrganizedTasksReport())
     
     # Handle list option
     if list_reports:
@@ -167,6 +171,9 @@ def generate_report(ctx, report_ids, list_reports, list_tags, email, export, out
                 kwargs['end_date'] = end_date
         elif report_id == 'rp7':  # Future timeline report
             kwargs['days_ahead'] = days_ahead
+        elif report_id == 'rp9':  # Organized tasks report
+            kwargs['only_title'] = only_title
+            kwargs['no_other_tasks'] = no_other_tasks
         
         # Generate the report
         try:
