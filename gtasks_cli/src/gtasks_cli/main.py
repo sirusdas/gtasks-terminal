@@ -19,6 +19,7 @@ from gtasks_cli.commands.interactive import interactive
 from gtasks_cli.commands.deduplicate import deduplicate
 from gtasks_cli.commands.account import account
 from gtasks_cli.commands.advanced_sync import advanced_sync
+from gtasks_cli.commands.generate_report import generate_report
 from gtasks_cli.utils.logger import setup_logger
 
 # Set up logger
@@ -79,6 +80,7 @@ cli.add_command(interactive)
 cli.add_command(deduplicate)
 cli.add_command(account)
 cli.add_command(advanced_sync)
+cli.add_command(generate_report)
 
 
 def main():

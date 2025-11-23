@@ -51,7 +51,8 @@ from gtasks_cli.commands.interactive_help import (
     show_update_help,
     show_add_help,
     show_list_help,
-    show_quit_help
+    show_bulk_update_help,
+    show_tags_help
 )
 
 # Import time filtering function
@@ -223,6 +224,22 @@ def _display_tasks_grouped_by_list(tasks: List[Task]) -> List[Task]:
     return tasks
 
 
+def show_quit_help():
+    """Show help for the quit/exit command"""
+    console.print(Panel("[bold blue]Quit/Exit Command Help[/bold blue]", expand=False))
+    
+    console.print("[bold]Description:[/bold]")
+    console.print("Exit the interactive mode and return to the command line.\n")
+    
+    console.print("[bold]Usage:[/bold]")
+    console.print("  quit")
+    console.print("  exit\n")
+    
+    console.print("[bold]Example:[/bold]")
+    console.print("  quit")
+    console.print("  This will exit the interactive mode.")
+
+
 @click.command()
 @click.argument('command', nargs=-1)
 @click.pass_context
@@ -238,6 +255,7 @@ def interactive(ctx, command):
     Examples:
       gtasks interactive -- list --status pending --filter this_week
       gtasks interactive -- search "important project"
+      gtasks interactive -- tags
     
     \b
     Commands in interactive mode:
@@ -250,6 +268,7 @@ def interactive(ctx, command):
       list                    - List all tasks
       list [filter]           - List tasks with filters (same as gtasks list command)
       search <query>          - Search tasks
+      tags                    - Filter tasks by tags
       back                    - Go back to previous command results
       default                 - Go back to default listing
       help                    - Show this help
@@ -289,10 +308,15 @@ def interactive(ctx, command):
             # Handle search command
             search_args = initial_command[6:].strip()  # Remove 'search' and get the rest
             tasks = handle_initial_search_command(task_manager, search_args, use_google_tasks)
+        elif initial_command.startswith('tags'):
+            # Handle tags command
+            from gtasks_cli.commands.interactive_utils.tag_commands import handle_tag_filtering_interactive_mode
+            handle_tag_filtering_interactive_mode(task_manager, use_google_tasks)
+            return  # Exit after tag filtering interactive mode
         else:
             # Invalid initial command
             click.echo(f"Invalid initial command: {initial_command}")
-            click.echo("Supported initial commands: list, search")
+            click.echo("Supported initial commands: list, search, tags")
             return
     else:
         # Get only pending/incomplete tasks by default
@@ -399,6 +423,11 @@ def interactive(ctx, command):
                         _display_tasks_grouped_by_list(tasks)
                         task_state.set_tasks(tasks)
                         task_state.push_command(previous_command)
+                    elif previous_command.startswith('tags'):
+                        from gtasks_cli.commands.interactive_utils.tag_commands import handle_tag_filtering_interactive_mode
+                        handle_tag_filtering_interactive_mode(task_manager, use_google_tasks)
+                        # After tag filtering mode, we need to refresh the task display
+                        _display_tasks_grouped_by_list(task_state.tasks)
                     else:
                         # For other commands, go back to default view
                         tasks = task_state.get_default_tasks()
@@ -618,6 +647,12 @@ def interactive(ctx, command):
                 else:
                     click.echo(f"No tasks found matching '{query}'.")
                     # Keep current tasks unchanged
+            elif cmd == 'tags':
+                # Handle tag filtering
+                from gtasks_cli.commands.interactive_utils.tag_commands import handle_tag_filtering_interactive_mode
+                handle_tag_filtering_interactive_mode(task_manager, use_google_tasks)
+                # After tag filtering mode, we need to refresh the task display
+                _display_tasks_grouped_by_list(task_state.tasks)
             elif cmd == 'help':
                 if len(command_parts) > 1:
                     subcommand = command_parts[1]
@@ -660,6 +695,29 @@ def interactive(ctx, command):
                         console.print("In interactive mode, simply type:")
                         console.print("  search <query>")
                         console.print("The results will be displayed and can be operated on using other commands.\n")
+                    elif subcommand == 'tags':
+                        console.print(Panel("[bold blue]Tags Command Help[/bold blue]", expand=False))
+                        
+                        console.print("[bold]Description:[/bold]")
+                        console.print("Filter tasks by tags extracted from task titles, descriptions, and notes.")
+                        console.print("Tags are identified as text within square brackets [tag].\n")
+                        
+                        console.print("[bold]Usage:[/bold]")
+                        console.print("  tags\n")
+                        
+                        console.print("[bold]Examples:[/bold]")
+                        console.print("  [green]# Enter tag selection mode[/green]")
+                        console.print("  tags\n")
+                        console.print("  Then select tags by number to filter tasks.\n")
+                        
+                        console.print("[bold]Interactive Mode:[/bold]")
+                        console.print("In tag selection mode, you can:")
+                        console.print("  - View all available tags in a numbered list")
+                        console.print("  - Select multiple tags by entering their numbers (e.g., 1,3,5)")
+                        console.print("  - Enter 'all' to select all tags")
+                        console.print("  - Operate on the filtered tasks with standard commands")
+                        console.print("  - Search within the current filtered tasks with the 'search' command")
+                        console.print("  - Search within the current filtered tasks with the 'search' command\n")
                     elif subcommand == 'view':
                         show_view_help()
                     elif subcommand == 'done':

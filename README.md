@@ -1,203 +1,140 @@
-# Google Tasks CLI - Project Planning Suite
+# Google Tasks CLI
 
-This repository contains comprehensive planning documents for the development of a powerful Google Tasks CLI application.
+A command-line interface for managing Google Tasks with enhanced features and functionality.
 
-## Documents Overview
+## Features
 
-### 1. [Project Structure](project_structure.md)
-Detailed specification of the intended project architecture, including:
-- Complete directory layout
-- Module organization and responsibilities
-- Design patterns to implement
-- Feature requirements and technical implementation details
-- Dependencies and libraries
-- Error handling strategy
-- Data models
-- CLI framework with Click
-- API client implementation
-- Local storage and caching
-- Filter engine implementation
-- Testing strategy
-- And much more...
+1. **Basic Task Management**: Add, list, update, and delete tasks
+2. **Advanced Filtering**: Filter tasks by status, priority, tags, and date ranges
+3. **Multi-Account Support**: Manage tasks across multiple Google accounts
+4. **Task Deduplication**: Automatically identify and remove duplicate tasks
+5. **Enhanced Tagging**: Extract and manage tags from task titles and descriptions
+6. **Interactive Mode**: Navigate tasks interactively with keyboard shortcuts
+7. **Reports Generation**: Generate comprehensive analytical reports on task activities
+8. **Advanced Sync**: Enhanced synchronization with tag processing and conflict resolution
 
-### 2. [Task Tracking](task_tracking.md)
-Living document to track implementation progress:
-- Comprehensive checklist of all features to implement
-- Organized by development phases
-- Completed tasks section
-- Pending tasks with priority and effort estimation
-- Regularly updated during development
+## Installation
 
-### 3. [Implementation Plan](implementation_plan.md)
-Detailed 10-week roadmap:
-- Weekly milestones with specific goals
-- Timeline summary
-- Risk management strategies
-- Success criteria definition
-- Phase-by-phase delivery expectations
+1. Clone the repository
+2. Install the required dependencies: `pip install -r requirements.txt`
+3. Run the CLI: `python -m gtasks_cli.main --help`
 
-### 4. [Technical Breakdown](technical_breakdown.md)
-In-depth technical specifications:
-- Component-level implementation details
-- Module dependencies and interactions
-- Security considerations
-- Performance optimizations
-- Cross-platform compatibility approaches
-- Testing strategies
+## Usage
 
-### 5. [Development Roadmap](development_roadmap.md)
-Master roadmap document:
-- Consolidated view of the entire project
-- Phase descriptions and deliverables
-- Technical requirements
-- Risk mitigation plans
-- Success metrics
-- Team roles and communication plan
+### Basic Commands
 
-### 6. [Advanced Filtering](ADVANCED_FILTERING.md)
-Documentation for advanced filtering capabilities:
-- Time-based filtering with specific date fields
-- Combining multiple filters for precise results
-- Best practices for different filtering scenarios
+- `gtasks list`: List tasks with optional filtering
+- `gtasks add`: Add a new task
+- `gtasks update`: Update an existing task
+- `gtasks delete`: Delete a task
+- `gtasks sync`: Synchronize tasks with Google Tasks
+- `gtasks advanced-sync`: Advanced synchronization with enhanced features
+- `gtasks interactive`: Enter interactive mode
+- `gtasks generate-report`: Generate analytical reports
 
-### 7. [Order By Feature](ORDER_BY_FEATURE.md)
-Documentation for sorting tasks:
-- Sorting by due date, creation date, modification date, priority, and title
-- Usage examples for both command line and interactive mode
-- Implementation details and best practices
+### Filtering Options
 
-### 8. [Editor Feature](EDITOR_FEATURE.md)
-Documentation for editing tasks with external editors:
-- Using external editors like vim, nano, or VS Code to edit tasks
-- Configuring the EDITOR environment variable
-- Workflow and best practices
+Tasks can be filtered using various criteria:
 
-## Advanced Sync Feature
+- `--status`: Filter by task status (pending, in_progress, completed, etc.)
+- `--priority`: Filter by task priority (low, medium, high, critical)
+- `--project`: Filter by project
+- `--filter`: Filter by time period (today, this_week, this_month, etc.)
+- `--search`: Search tasks by title, description, or notes
+- `--tags`: Filter by tags (comma-separated)
+- `--with-all-tags`: Require all specified tags to be present (used with --tags)
 
-The Google Tasks CLI now includes an Advanced Sync feature that implements a 4-step simplified synchronization approach to efficiently synchronize tasks between local storage and Google Tasks.
+### Tag Management
 
-### Benefits
+Tags can be added to tasks in two ways:
+1. Using the `--tags` option when adding or updating tasks
+2. Including tags directly in task titles or descriptions using square brackets, e.g., `[work]`, `[urgent]`
 
-1. **Reduced API Calls**: Only one initial API call to load all remote tasks instead of multiple calls
-2. **Improved Performance**: All comparisons and decisions are made using local data
-3. **Better Resource Usage**: Fewer network requests mean less bandwidth usage and lower chance of hitting rate limits
-4. **Simplified Logic**: Clear separation of concerns makes the sync process more predictable
+The system automatically extracts tags from square brackets in task titles and descriptions during synchronization.
 
-### Usage
+### Reports
 
+Generate comprehensive analytical reports on task activities:
+- Task completion trends
+- Pending and overdue tasks analysis
+- Task distribution by status, priority, and tags
+- Future timeline planning
+- And more...
+
+Use `gtasks generate-report --list` to see all available reports.
+
+Reports can be filtered by tags using `--tags` and `--with-all-tags` options.
+
+### Multi-Account Support
+
+Manage tasks across multiple Google accounts:
+- `gtasks account add`: Add a new account
+- `gtasks account list`: List all configured accounts
+- `gtasks account use`: Switch to a specific account
+- Use `--account` option with any command to specify the account
+
+## Examples
+
+List all pending tasks:
 ```bash
-# Bidirectional sync (default)
-gtasks advanced-sync
-
-# Push only
-gtasks advanced-sync --push
-
-# Pull only
-gtasks advanced-sync --pull
-
-# Specify account
-gtasks advanced-sync --account myaccount
+gtasks list --status pending
 ```
 
-For more details, see the [Advanced Sync documentation](ADVANCED_SYNC.md).
-
-## Search Functionality
-
-The Google Tasks CLI provides powerful search capabilities to help you find tasks quickly and efficiently.
-
-### Basic Search
-Search for tasks by providing a query string that will be matched against task titles, descriptions, and notes:
+Add a new urgent task with tags:
 ```bash
-gtasks search "meeting"
+gtasks add "Finish project [work] [urgent]" --priority high --due 2023-12-31
 ```
 
-### Multi-Search with OR Logic
-Search for tasks matching any of multiple terms using the pipe (`|`) separator:
+Search for tasks related to "meeting":
 ```bash
-gtasks search "meeting|project|review"
-```
-This will return tasks that contain either "meeting", "project", or "review".
-
-### Filtered Search
-Combine search with additional filters to narrow down results:
-
-#### Filter by Status
-```bash
-# Search for completed tasks containing "report"
-gtasks search "report" --status completed
-
-# Search for pending tasks containing "meeting"
-gtasks search "meeting" --status pending
+gtasks list --search "meeting"
 ```
 
-#### Filter by Priority
+Generate a report on completed tasks:
 ```bash
-# Search for high priority tasks containing "urgent"
-gtasks search "urgent" --priority high
-
-# Search for critical tasks containing "important"
-gtasks search "important" --priority critical
+gtasks generate-report rp1 --days 30
 ```
 
-#### Filter by Project
+Generate a report filtered by tags:
 ```bash
-# Search for tasks in a specific project
-gtasks search "task" --project "My Project"
+gtasks generate-report rp1 --tags "work,urgent" --with-all-tags
 ```
 
-#### Filter for Recurring Tasks
-```bash
-# Search for recurring tasks containing "weekly"
-gtasks search "weekly" --recurring
-```
-
-### Search in Interactive Mode
-The search functionality is also available in interactive mode:
+Enter interactive mode:
 ```bash
 gtasks interactive
-# Then within the interactive session:
-search "meeting"
-search "project|task|review"
 ```
 
-### Examples
-```bash
-# Find all tasks related to meetings
-gtasks search "meeting"
+## Advanced Features
 
-# Find high priority tasks related to reports
-gtasks search "report" --priority high
+### Advanced Sync
 
-# Find completed tasks related to projects
-gtasks search "project" --status completed
+The `gtasks advanced-sync` command provides enhanced synchronization capabilities:
+- Bidirectional sync with conflict resolution
+- Tag processing from task content
+- Duplicate detection and handling
+- Incremental sync for better performance
 
-# Find tasks matching any of these terms
-gtasks search "meeting|call|discussion"
+### Interactive Mode
 
-# Find recurring tasks related to weekly activities
-gtasks search "weekly" --recurring
+Interactive mode (`gtasks interactive`) provides a user-friendly interface for task management:
+- Navigate tasks with keyboard shortcuts
+- Perform batch operations
+- Apply filters dynamically
+- Edit tasks in external editors
 
-# Search using Google Tasks directly
-gtasks search -g "important"
-```
+## Configuration
 
-## Getting Started
+The CLI stores configuration and data in the `~/.gtasks` directory:
+- `credentials.json`: Google API credentials
+- `token.pickle`: Authentication tokens
+- `tasks.json`: Local task storage (when not using SQLite)
+- `accounts.json`: Multi-account configuration
 
-To begin implementation of the Google Tasks CLI:
+## Contributing
 
-1. Review the [Project Structure](project_structure.md) document to understand the intended architecture
-2. Follow the [Implementation Plan](implementation_plan.md) for a step-by-step development approach
-3. Refer to the [Technical Breakdown](technical_breakdown.md) for detailed implementation guidance
-4. Track progress using the [Task Tracking](task_tracking.md) document
-5. Consult the [Development Roadmap](development_roadmap.md) for overall direction
+Contributions are welcome! Please submit issues and pull requests on GitHub.
 
-## Next Steps
+## License
 
-The planning phase is complete. The next step is to begin implementation following the roadmap, starting with:
-
-1. Setting up the development environment
-2. Creating the basic project structure
-3. Implementing authentication and API integration
-4. Building the core CLI functionality
-
-Refer to Week 1 of the [Implementation Plan](implementation_plan.md) for detailed tasks.
+This project is licensed under the MIT License.

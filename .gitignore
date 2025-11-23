@@ -2,3 +2,4 @@ sirus-gtask-auth-client_secret_1083428062171-3q0nhncaicrq0o8ff6ktr35bpi9v11tv.ap
 *.pyc
 */__pycache__/*
 suresh_int_client_secret_907170957481-akgrvhj968mk5lkr2g3dt6p56qj2vv3f.apps.googleusercontent.com.json
+gtasks_cli/src/gtasks_cli/core/__pycache__/*

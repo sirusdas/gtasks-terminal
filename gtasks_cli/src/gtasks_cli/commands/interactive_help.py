@@ -3,6 +3,7 @@
 Help system for interactive mode commands
 """
 
+import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -29,6 +30,7 @@ def show_general_help():
     table.add_row("back", "Go back to previous command results")
     table.add_row("default", "Go back to default task listing")
     table.add_row("help", "Show this help message")
+    table.add_row("tags", "Filter tasks by tags")
     table.add_row("quit/exit", "Exit interactive mode")
     
     console.print(table)
@@ -46,6 +48,9 @@ def show_general_help():
     console.print("  list --status pending --priority high")
     console.print("  [green]# Search for tasks[/green]")
     console.print("  search meeting")
+    console.print("  [green]# List tasks by tag[/green]")
+    console.print("  tags work")
+    console.print("  tags personal --status pending")
 
 
 def show_update_help():
@@ -169,42 +174,56 @@ def show_list_help():
     console.print(Panel("[bold blue]List Command Help[/bold blue]", expand=False))
     
     console.print("[bold]Description:[/bold]")
-    console.print("List tasks with optional filters and sorting.\n")
+    console.print("List tasks with optional filtering and sorting options.\n")
     
     console.print("[bold]Usage:[/bold]")
-    console.print("  list [--status <status>] [--priority <priority>] [--project <project>] [--recurring]")
-    console.print("       [--filter <time_filter>] [--order-by <field>] [--search <query>]\n")
-    
-    console.print("[bold]Options:[/bold]")
-    console.print("  [yellow]--status[/yellow]      Filter by status (pending, in_progress, completed, waiting, deleted)")
-    console.print("  [yellow]--priority[/yellow]    Filter by priority (low, medium, high, critical)")
-    console.print("  [yellow]--project[/yellow]     Filter by project")
-    console.print("  [yellow]--recurring, -r[/yellow]  Show only recurring tasks")
-    console.print("  [yellow]--filter[/yellow]      Filter by time (today, this_week, this_month, etc.)")
-    console.print("  [yellow]--order-by, -o[/yellow]  Sort tasks by field (title, due_date, created_at, modified_at)")
-    console.print("  [yellow]--search[/yellow]      Search for tasks by query\n")
+    console.print("  list [filter]")
+    console.print("  list [--status <status>] [--priority <priority>] [--project <project>]")
+    console.print("  list [--recurring] [--filter <time_filter>] [--search <query>]")
+    console.print("  list [--order-by <field>]\n")
     
     console.print("[bold]Examples:[/bold]")
-    console.print("  [green]# List all tasks[/green]")
     console.print("  list")
-    console.print("  [green]# List pending high priority tasks[/green]")
-    console.print("  list --status pending --priority high")
-    console.print("  [green]# List tasks due this week, sorted by due date[/green]")
-    console.print("  list --filter this_week --order-by due_date")
+    console.print("  list work")
+    console.print("  list --status pending")
+    console.print("  list --priority high")
+    console.print("  list --filter this_week")
+    console.print("  list --search \"meeting\"")
+    console.print("  list --order-by due\n")
+    
+    console.print("[bold]Filter Options:[/bold]")
+    console.print("  [yellow]--status[/yellow]     Filter by status (pending, in_progress, completed, waiting, deleted)")
+    console.print("  [yellow]--priority[/yellow]   Filter by priority (low, medium, high, critical)")
+    console.print("  [yellow]--project[/yellow]    Filter by project")
+    console.print("  [yellow]--recurring[/yellow]  Show only recurring tasks")
+    console.print("  [yellow]--filter[/yellow]     Filter by time period (today, this_week, this_month, etc.)")
+    console.print("  [yellow]--search[/yellow]     Search by title, description or notes")
+    console.print("  [yellow]--order-by[/yellow]   Sort by field (due, created, modified, title)")
+    
+    console.print("\n[bold]Time Filters:[/bold]")
+    console.print("  today, this_week, this_month, last_month, last_3m, last_6m, last_year")
 
 
-def show_quit_help():
-    """Show help for the quit/exit command"""
-    console.print(Panel("[bold blue]Quit/Exit Command Help[/bold blue]", expand=False))
+def show_tags_help():
+    """Show help for the tags command"""
+    console.print(Panel("[bold blue]Tags Command Help[/bold blue]", expand=False))
     
     console.print("[bold]Description:[/bold]")
-    console.print("Exit the interactive mode.\n")
+    console.print("Filter tasks by tags. Tags are case-insensitive and can be combined with other filters.\n")
     
     console.print("[bold]Usage:[/bold]")
-    console.print("  quit")
-    console.print("  exit\n")
+    console.print("  tags <tag> [filters]\n")
     
     console.print("[bold]Examples:[/bold]")
-    console.print("  [green]# Exit interactive mode[/green]")
-    console.print("  quit")
-    console.print("  exit")
+    console.print("  [green]# List tasks with 'work' tag[/green]")
+    console.print("  tags work")
+    console.print("  [green]# List tasks with 'personal' tag and pending status[/green]")
+    console.print("  tags personal --status pending")
+    console.print("  [green]# List tasks with multiple tags[/green]")
+    console.print("  tags work family")
+    console.print("  [green]# List tasks with 'work' tag due this week[/green]")
+    console.print("  tags work --filter this_week")
+    
+    console.print("\n[bold]Note:[/bold]")
+    console.print("The tags command supports all the filters available in the list command.")
+    console.print("If multiple tags are provided, tasks must match all tags.")
