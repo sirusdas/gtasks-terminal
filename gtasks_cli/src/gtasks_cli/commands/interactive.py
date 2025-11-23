@@ -256,6 +256,7 @@ def interactive(ctx, command):
       gtasks interactive -- list --status pending --filter this_week
       gtasks interactive -- search "important project"
       gtasks interactive -- tags
+      gtasks interactive -- list --list-names
     
     \b
     Commands in interactive mode:
@@ -269,6 +270,7 @@ def interactive(ctx, command):
       list [filter]           - List tasks with filters (same as gtasks list command)
       search <query>          - Search tasks
       tags                    - Filter tasks by tags
+      list --list-names       - Filter tasks by list names
       back                    - Go back to previous command results
       default                 - Go back to default listing
       help                    - Show this help
@@ -303,7 +305,14 @@ def interactive(ctx, command):
         if initial_command.startswith('list'):
             # Handle list command with filters
             list_args = initial_command[4:].strip()  # Remove 'list' and get the rest
-            tasks = handle_initial_list_command(task_manager, list_args, use_google_tasks)
+            # Check if this is the special list --list-names command
+            if '--list-names' in list_args:
+                # Handle list names selection
+                from gtasks_cli.commands.interactive_utils.list_commands import handle_list_filtering_interactive_mode
+                handle_list_filtering_interactive_mode(task_manager, use_google_tasks)
+                return  # Exit after list filtering interactive mode
+            else:
+                tasks = handle_initial_list_command(task_manager, list_args, use_google_tasks)
         elif initial_command.startswith('search'):
             # Handle search command
             search_args = initial_command[6:].strip()  # Remove 'search' and get the rest
@@ -412,11 +421,18 @@ def interactive(ctx, command):
                 if previous_command:
                     # Re-execute the previous command
                     if previous_command.startswith('list'):
-                        list_args = previous_command[4:].strip()
-                        tasks = handle_initial_list_command(task_manager, list_args, use_google_tasks)
-                        _display_tasks_grouped_by_list(tasks)
-                        task_state.set_tasks(tasks)
-                        task_state.push_command(previous_command)
+                        # Check if this is the special list --list-names command
+                        if '--list-names' in previous_command:
+                            from gtasks_cli.commands.interactive_utils.list_commands import handle_list_filtering_interactive_mode
+                            handle_list_filtering_interactive_mode(task_manager, use_google_tasks)
+                            # After list filtering mode, we need to refresh the task display
+                            _display_tasks_grouped_by_list(task_state.tasks)
+                        else:
+                            list_args = previous_command[4:].strip()
+                            tasks = handle_initial_list_command(task_manager, list_args, use_google_tasks)
+                            _display_tasks_grouped_by_list(tasks)
+                            task_state.set_tasks(tasks)
+                            task_state.push_command(previous_command)
                     elif previous_command.startswith('search'):
                         search_args = previous_command[6:].strip()
                         tasks = handle_initial_search_command(task_manager, search_args, use_google_tasks)
@@ -458,6 +474,7 @@ def interactive(ctx, command):
                 time_filter = None
                 search_filter = None
                 order_by = None
+                list_names_flag = False  # Flag for --list-names option
 
                 # Parse arguments
                 i = 1
@@ -484,12 +501,25 @@ def interactive(ctx, command):
                             i += 2
                         elif part == '--search' and i + 1 < len(command_parts):
                             search_filter = command_parts[i + 1]
+                            i += 2
+                        elif part == '--list-names':
+                            list_names_flag = True
+                            i += 1
                         else:
                             i += 1
                     else:
                         # Positional argument (list filter)
                         list_filter = part
                         i += 1
+                
+                # Handle the special case of list --list-names
+                if list_names_flag:
+                    from gtasks_cli.commands.interactive_utils.list_commands import handle_list_filtering_interactive_mode
+                    handle_list_filtering_interactive_mode(task_manager, use_google_tasks)
+                    # After list filtering mode, we need to refresh the task display
+                    _display_tasks_grouped_by_list(task_state.tasks)
+                    task_state.push_command(command_input)
+                    continue
 
                 # Convert string filters to enum where needed
                 status_enum = TaskStatus(status_filter) if status_filter else None

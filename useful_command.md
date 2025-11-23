@@ -5,6 +5,7 @@ gtasks interactive -- list "My Tasks" --filter this_month:created_at --search "a
 
 gtasks interactive -- tags
 
+gtasks interactive -- list --list-names
 
 sqlite3 /Users/int/.gtasks/personal/tasks.db "SELECT COUNT(*) FROM tasks;"
 sqlite3 /Users/int/.gtasks/personal/tasks.db "SELECT COUNT(DISTINCT id) FROM tasks;"
