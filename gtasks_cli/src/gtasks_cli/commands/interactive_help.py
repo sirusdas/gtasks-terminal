@@ -83,7 +83,8 @@ def show_bulk_update_help():
     console.print("Bulk update multiple tasks' status and due dates in a single command.\n")
     
     console.print("[bold]Usage:[/bold]")
-    console.print("  update-status C[1,2,3], DT[1,2,3], DEL[4], P[5,6], DUE[7,8,9|21-09|10:10 PM]\n")
+    console.print("  update-status C[1,2,3], DT[1,2,3], DEL[4], P[5,6], DUE[7,8,9|21-09|10:10 PM]")
+    console.print("  update-status ALL[C], ALL[DT], ALL[DUE:TODAY], ALL[DUE:26-11]\n")
     
     console.print("[bold]Operations:[/bold]")
     console.print("  [yellow]C[task_numbers][/yellow]          Mark tasks as COMPLETED")
@@ -91,12 +92,14 @@ def show_bulk_update_help():
     console.print("  [yellow]DT[task_numbers|time][/yellow]   Set tasks due TODAY at specific time")
     console.print("  [yellow]DEL[task_numbers][/yellow]        Mark tasks as DELETED")
     console.print("  [yellow]P[task_numbers][/yellow]          Mark tasks as PENDING")
-    console.print("  [yellow]DUE[task_ids|date|time][/yellow] Set tasks due on specific date and time\n")
+    console.print("  [yellow]DUE[task_ids|date|time][/yellow] Set tasks due on specific date and time")
+    console.print("  [yellow]ALL[operation][/yellow]           Apply operation to ALL currently displayed tasks\n")
     
     console.print("[bold]Format Details:[/bold]")
     console.print("  [yellow]task_numbers[/yellow]   Comma-separated list of task numbers (e.g., 1,2,3)")
     console.print("  [yellow]time[/yellow]          Time in 12-hour format with AM/PM (e.g., 09:00 PM)")
-    console.print("  [yellow]date[/yellow]          Date in DD-MM format (e.g., 21-09)\n")
+    console.print("  [yellow]date[/yellow]          Date in DD-MM format (e.g., 21-09)")
+    console.print("  [yellow]ALL[][/yellow]         Apply to all displayed tasks (e.g., ALL[C], ALL[DUE:TODAY])\n")
     
     console.print("[bold]Examples:[/bold]")
     console.print("  [green]# Mark tasks 1,2,3 as completed[/green]")
@@ -105,6 +108,12 @@ def show_bulk_update_help():
     console.print("  update-status C[1,2], DEL[3]")
     console.print("  [green]# Set task 1 due today at 3:30 PM[/green]")
     console.print("  update-status DT[1|3:30 PM]")
+    console.print("  [green]# Mark ALL displayed tasks as completed[/green]")
+    console.print("  update-status ALL[C]")
+    console.print("  [green]# Set ALL displayed tasks due today[/green]")
+    console.print("  update-status ALL[DUE:TODAY]")
+    console.print("  [green]# Set ALL displayed tasks due on Nov 26[/green]")
+    console.print("  update-status ALL[DUE:26-11]")
     console.print("  [green]# Set tasks 1,2 as completed, task 3 due today, task 4 deleted, task 5 pending, task 6 due Sept 21 at 10:10 PM[/green]")
     console.print("  update-status C[1,2], DT[3], DEL[4], P[5], DUE[6|21-09|10:10 PM]")
 

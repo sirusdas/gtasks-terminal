@@ -5,7 +5,7 @@ Bulk update commands functionality for interactive mode
 
 import click
 import re
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Tuple, Optional
 from gtasks_cli.models.task import Task, TaskStatus
 from gtasks_cli.utils.logger import setup_logger
@@ -18,22 +18,26 @@ def handle_bulk_update_command(task_state, task_manager, command_parts, use_goog
     
     Command format:
     update-status C[1,2,3], DT[1,2,3], DEL[4], P[5,6], DUE[7,8,9|21-09|10:10 PM]
+    update-status ALL[C], ALL[DUE:TODAY], ALL[DUE:26-11]
     
     C = Completed
     DT = Due today, DT can also have [1,2,3|09:00 PM]
     DEL = Delete
     P = Pending
     DUE = Due on with task ids|due date|due time
+    ALL = Apply operation to all currently displayed tasks
     """
     
     if len(command_parts) < 2:
         click.echo("Usage: update-status C[1,2,3], DT[1,2,3], DEL[4], P[5,6], DUE[7,8,9|21-09|10:10 PM]")
+        click.echo("       update-status ALL[C], ALL[DUE:TODAY], ALL[DUE:26-11]")
         click.echo("Where:")
         click.echo("  C = Completed")
         click.echo("  DT = Due today (can also specify time: DT[1,2,3|09:00 PM])")
         click.echo("  DEL = Delete")
         click.echo("  P = Pending")
         click.echo("  DUE = Due on (DUE[task_ids|date|time])")
+        click.echo("  ALL = Apply to all currently displayed tasks")
         return
 
     # Join all parts after 'update-status' to form the command string
@@ -42,14 +46,14 @@ def handle_bulk_update_command(task_state, task_manager, command_parts, use_goog
     
     # Parse and process the command
     try:
-        updates = _parse_bulk_update_command(command_string)
+        updates = _parse_bulk_update_command(command_string, task_state)
         _execute_bulk_updates(task_state, task_manager, updates, use_google_tasks)
     except Exception as e:
         logger.error(f"Error processing bulk update command: {e}", exc_info=True)
         click.echo(f"Error processing bulk update command: {e}")
 
 
-def _parse_bulk_update_command(command_string: str) -> List[Tuple[str, dict]]:
+def _parse_bulk_update_command(command_string: str, task_state=None) -> List[Tuple[str, dict]]:
     """Parse the bulk update command string into a list of operations
     
     Returns:
@@ -69,7 +73,7 @@ def _parse_bulk_update_command(command_string: str) -> List[Tuple[str, dict]]:
             
         # Find operation type (uppercase letters)
         start = i
-        while i < len(command_string) and command_string[i].isupper():
+        while i < len(command_string) and command_string[i].isalpha() and command_string[i].isupper():
             i += 1
             
         if i == start:
@@ -140,6 +144,53 @@ def _parse_bulk_update_command(command_string: str) -> List[Tuple[str, dict]]:
                 "time": time_part.strip()
             }))
             
+        elif op_type == "ALL":  # Apply operation to all displayed tasks
+            # Parse the operation inside ALL[]
+            # e.g., ALL[C], ALL[DUE:TODAY], ALL[DUE:26-11]
+            op_data = op_data.strip()
+            
+            # Get all task numbers from current display
+            all_task_numbers = list(range(1, len(task_state.tasks) + 1)) if task_state else []
+            
+            if not all_task_numbers:
+                raise ValueError("No tasks currently displayed")
+                
+            if op_data.upper() == "C":
+                operations.append(("completed", {"task_numbers": all_task_numbers}))
+            elif op_data.upper() == "P":
+                operations.append(("pending", {"task_numbers": all_task_numbers}))
+            elif op_data.upper() == "DEL":
+                operations.append(("delete", {"task_numbers": all_task_numbers}))
+            elif op_data.upper().startswith("DUE:"):
+                # Handle due date operations
+                due_spec = op_data[4:]  # Remove "DUE:" prefix
+                if due_spec.upper() == "TODAY":
+                    operations.append(("due_today", {"task_numbers": all_task_numbers, "time": None}))
+                elif "-" in due_spec:
+                    # Format: DD-MM
+                    try:
+                        day, month = map(int, due_spec.split('-'))
+                        operations.append(("due_on_all", {
+                            "task_numbers": all_task_numbers,
+                            "date": f"{day:02d}-{month:02d}",
+                            "time": "11:59 PM"  # End of day by default
+                        }))
+                    except ValueError:
+                        raise ValueError(f"Invalid date format in ALL[DUE:{due_spec}]. Use DD-MM format.")
+                else:
+                    raise ValueError(f"Invalid DUE specification in ALL[{op_data}]. Use TODAY or DD-MM format.")
+            elif op_data.upper() == "DT":
+                operations.append(("due_today", {"task_numbers": all_task_numbers, "time": None}))
+            elif "|" in op_data:
+                # Handle DT with optional time like DT|09:00 PM
+                parts = op_data.split("|", 1)
+                if parts[0].upper() == "DT":
+                    operations.append(("due_today", {"task_numbers": all_task_numbers, "time": parts[1].strip()}))
+                else:
+                    raise ValueError(f"Invalid DT specification in ALL[{op_data}]. Use DT or DT|time.")
+            else:
+                raise ValueError(f"Unsupported operation in ALL[{op_data}]. Supported: C, P, DEL, DT, DUE:TODAY, DUE:DD-MM")
+            
         else:
             raise ValueError(f"Unknown operation type: {op_type}")
         
@@ -168,6 +219,17 @@ def _execute_bulk_updates(task_state, task_manager, operations: List[Tuple[str, 
     updated_count = 0
     error_count = 0
     
+    # Check if any operation uses ALL - if so, ask for confirmation
+    has_all_operation = any(len(op_data.get("task_numbers", [])) == len(task_state.tasks) 
+                           for _, op_data in operations)
+    
+    if has_all_operation:
+        # Count total tasks that would be affected
+        total_affected = sum(len(op_data["task_numbers"]) for _, op_data in operations)
+        if not click.confirm(f"You are about to update {total_affected} tasks. Do you want to continue?"):
+            click.echo("Operation cancelled.")
+            return
+    
     for op_type, op_data in operations:
         try:
             if op_type == "completed":
@@ -191,6 +253,12 @@ def _execute_bulk_updates(task_state, task_manager, operations: List[Tuple[str, 
                 click.echo(f"Marked {count} task(s) as pending")
                 
             elif op_type == "due_on":
+                count = _set_tasks_due_on(task_state, task_manager, op_data["task_numbers"], 
+                                         op_data["date"], op_data["time"], use_google_tasks)
+                updated_count += count
+                click.echo(f"Set due date for {count} task(s)")
+                
+            elif op_type == "due_on_all":
                 count = _set_tasks_due_on(task_state, task_manager, op_data["task_numbers"], 
                                          op_data["date"], op_data["time"], use_google_tasks)
                 updated_count += count
@@ -229,7 +297,7 @@ def _set_tasks_status(task_state, task_manager, task_numbers: List[int], status:
 def _set_tasks_due_today(task_state, task_manager, task_numbers: List[int], time_str: Optional[str], use_google_tasks: bool) -> int:
     """Set tasks due date to today"""
     count = 0
-    today = datetime.now().date()
+    today = date.today()
     
     # Parse time if provided
     due_datetime = None
