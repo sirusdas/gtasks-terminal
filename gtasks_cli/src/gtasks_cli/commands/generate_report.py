@@ -40,8 +40,9 @@ logger = setup_logger(__name__)
 @click.option('--with-all-tags', is_flag=True, help='Require all specified tags to be present (used with --tags)')
 @click.option('--only-title', is_flag=True, help='Show only task titles, no descriptions or notes')
 @click.option('--no-other-tasks', is_flag=True, help='Do not show Other Tasks (not matching any category)')
+@click.option('--only-pending', is_flag=True, help='Show only pending tasks, exclude completed and deleted tasks')
 @click.pass_context
-def generate_report(ctx, report_ids, list_reports, list_tags, email, export, output, days, start_date, end_date, days_ahead, tags, with_all_tags, only_title, no_other_tasks):
+def generate_report(ctx, report_ids, list_reports, list_tags, email, export, output, days, start_date, end_date, days_ahead, tags, with_all_tags, only_title, no_other_tasks, only_pending):
     """Generate reports based on task data."""
     
     # Initialize report manager and register all reports
@@ -136,6 +137,12 @@ def generate_report(ctx, report_ids, list_reports, list_tags, email, export, out
         click.echo("Error loading tasks for report generation.")
         return
     
+    # Filter tasks by pending status if specified
+    if only_pending:
+        from gtasks_cli.models.task import TaskStatus
+        tasks = [task for task in tasks if task.status == TaskStatus.PENDING]
+        logger.info(f"Filtered to {len(tasks)} pending tasks")
+    
     # Filter tasks by tags if specified
     if tag_list:
         from gtasks_cli.utils.tag_extractor import task_has_any_tag, task_has_all_tags
@@ -174,6 +181,7 @@ def generate_report(ctx, report_ids, list_reports, list_tags, email, export, out
         elif report_id == 'rp9':  # Organized tasks report
             kwargs['only_title'] = only_title
             kwargs['no_other_tasks'] = no_other_tasks
+            kwargs['only_pending'] = only_pending
         
         # Generate the report
         try:

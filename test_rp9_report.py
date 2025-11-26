@@ -156,6 +156,28 @@ def create_test_tasks():
             tags=[],
             tasklist_id="@default"
         ),
+        Task(
+            id="13",
+            title="Completed task for testing",
+            description="This task is already completed",
+            status=TaskStatus.COMPLETED,
+            priority=Priority.MEDIUM,
+            due=None,
+            created_at=today - timedelta(days=11),
+            tags=[],
+            tasklist_id="@default"
+        ),
+        Task(
+            id="14",
+            title="Deleted task for testing",
+            description="This task has been deleted",
+            status=TaskStatus.DELETED,
+            priority=Priority.LOW,
+            due=None,
+            created_at=today - timedelta(days=12),
+            tags=[],
+            tasklist_id="@default"
+        ),
     ]
     
     return tasks
@@ -172,7 +194,7 @@ def test_organized_tasks_report():
     # Show what tags we're looking for in tasks
     print("\nSample tasks and their content:")
     for i, task in enumerate(tasks[:5]):  # Show first 5 tasks
-        print(f"  Task {i+1}: {task.title}")
+        print(f"  Task {i+1}: {task.title} (Status: {task.status})")
     
     # Create report instance
     report = OrganizedTasksReport()
@@ -191,9 +213,10 @@ def test_organized_tasks_report():
         has_tag = report._has_any_tag(task, tags)
         print(f"  Task '{task.title}' has tag {tags}: {has_tag}")
     
-    # Generate report data
+    # Generate report data without filter
+    print("\n--- Generating report with all tasks ---")
     report_data = report.generate(tasks)
-    print(f"\nGenerated report with {report_data['total_tasks']} total tasks")
+    print(f"Generated report with {report_data['total_tasks']} total tasks")
     
     # Check categories
     categories = report_data['categories']
@@ -214,7 +237,33 @@ def test_organized_tasks_report():
     text_export = report.export(report_data, 'txt')
     print("\nText Export:")
     print("=" * 50)
-    print(text_export)
+    print(text_export[:1000] + "..." if len(text_export) > 1000 else text_export)
+    
+    # Generate report data with only_pending filter
+    print("\n--- Generating report with only pending tasks ---")
+    report_data_pending = report.generate(tasks, only_pending=True)
+    print(f"Generated report with {report_data_pending['total_tasks']} total tasks")
+    
+    # Check categories
+    categories_pending = report_data_pending['categories']
+    print(f"Found {len(categories_pending)} categories with tasks")
+    
+    for item in categories_pending:
+        if isinstance(item, tuple) and len(item) == 2:
+            category_key, category_data = item
+            task_count = len(category_data.get('tasks', []))
+            group_name = category_data.get('group', 'Unknown')
+            print(f"  {category_key} (Group: {group_name}): {task_count} tasks")
+    
+    # Check uncategorized tasks
+    uncategorized_pending = report_data_pending['uncategorized']
+    print(f"Uncategorized tasks: {len(uncategorized_pending)}")
+    
+    # Export to text format with only_pending filter
+    text_export_pending = report.export(report_data_pending, 'txt')
+    print("\nText Export (Only Pending):")
+    print("=" * 50)
+    print(text_export_pending[:1000] + "..." if len(text_export_pending) > 1000 else text_export_pending)
     
     # Export to CSV format
     csv_export = report.export(report_data, 'csv')

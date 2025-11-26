@@ -138,3 +138,10 @@ Contributions are welcome! Please submit issues and pull requests on GitHub.
 ## License
 
 This project is licensed under the MIT License.
+
+## Future Developments
+- [ ] Develop VS Code extension
+- [ ] Develop Browser extension
+- [ ] Integrate AI
+- [ ] Mobile App
+- [ ] Browser App

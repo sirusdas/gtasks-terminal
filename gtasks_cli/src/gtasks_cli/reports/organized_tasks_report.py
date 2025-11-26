@@ -207,6 +207,9 @@ class OrganizedTasksReport(BaseReport):
         Returns:
             Dict containing report data
         """
+        # Extract options
+        only_pending = kwargs.get("only_pending", False)
+        
         # Categorize tasks
         categorized_tasks = {}
         uncategorized_tasks = []
@@ -217,6 +220,10 @@ class OrganizedTasksReport(BaseReport):
         # Categorize tasks according to the exact group structure
         # For each task, we check all categories and place it in every matching category
         for original_task, clean_task in zip(tasks, clean_tasks):
+            # Skip non-pending tasks if only_pending is True
+            if only_pending and original_task.status != "pending":
+                continue
+                
             categorized = False
             # Iterate through all category groups and their categories
             # Check all categories to place task in every matching category
@@ -253,7 +260,8 @@ class OrganizedTasksReport(BaseReport):
             "uncategorized": self._sort_tasks_by_date(uncategorized_tasks),
             "total_tasks": len(clean_tasks),
             "only_title": kwargs.get("only_title", False),
-            "no_other_tasks": kwargs.get("no_other_tasks", False)
+            "no_other_tasks": kwargs.get("no_other_tasks", False),
+            "only_pending": only_pending
         }
     
     def export(self, data: Dict[str, Any], format: str = 'txt') -> str:
@@ -299,6 +307,7 @@ class OrganizedTasksReport(BaseReport):
         # Extract options
         only_title = data.get("only_title", False)
         no_other_tasks = data.get("no_other_tasks", False)
+        only_pending = data.get("only_pending", False)
         
         output = []
         output.append("=" * 60)
@@ -306,6 +315,8 @@ class OrganizedTasksReport(BaseReport):
         output.append("=" * 60)
         output.append(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         output.append(f"Total tasks: {data['total_tasks']}")
+        if only_pending:
+            output.append("Filter: Only pending tasks")
         output.append("")
         
         # Create a mapping of group names to their categories for ordered display
@@ -506,6 +517,7 @@ class OrganizedTasksReport(BaseReport):
         # Extract options
         only_title = data.get("only_title", False)
         no_other_tasks = data.get("no_other_tasks", False)
+        only_pending = data.get("only_pending", False)
         
         output = io.StringIO()
         writer = csv.writer(output)
@@ -515,6 +527,10 @@ class OrganizedTasksReport(BaseReport):
             writer.writerow(["Category Group", "Category Number", "Category Name", "Task Number", "Title", "Due Date"])
         else:
             writer.writerow(["Category Group", "Category Number", "Category Name", "Task Number", "Title", "Due Date", "Description", "Notes"])
+        
+        # Add a row indicating the filter if only_pending is True
+        if only_pending:
+            writer.writerow(["FILTER", "Only pending tasks", "", "", "", "", "", ""])
         
         # Write categorized tasks
         for item in data.get("categories", []):
