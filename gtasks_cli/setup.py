@@ -1,17 +1,28 @@
 from setuptools import setup, find_packages
+import os
 
-with open("README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
+# Read README.md
+readme_path = os.path.join(os.path.dirname(__file__), "README.md")
+if os.path.exists(readme_path):
+    with open(readme_path, "r", encoding="utf-8") as fh:
+        long_description = fh.read()
+else:
+    long_description = "A powerful CLI for managing Google Tasks"
 
-with open("requirements.txt", "r", encoding="utf-8") as fh:
-    requirements = fh.read().splitlines()
+# Read requirements.txt
+requirements_path = os.path.join(os.path.dirname(__file__), "requirements.txt")
+if os.path.exists(requirements_path):
+    with open(requirements_path, "r", encoding="utf-8") as fh:
+        requirements = fh.read().splitlines()
+else:
+    requirements = []
 
 setup(
     name="gtasks-cli",
     version="0.1.0",
     author="Google Tasks CLI Team",
     author_email="example@example.com",
-    description="A powerful CLI for managing Google Tasks",
+    description="A powerful command-line interface for managing Google Tasks",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/example/gtasks-cli",
@@ -36,4 +47,5 @@ setup(
             "gtasks=gtasks_cli.main:main",
         ],
     },
+    include_package_data=True,
 )

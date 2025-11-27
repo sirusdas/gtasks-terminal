@@ -1,10 +1,14 @@
 Metadata-Version: 2.4
 Name: gtasks-cli
 Version: 0.1.0
-Summary: A powerful CLI for managing Google Tasks
+Summary: A powerful command-line interface for managing Google Tasks with enhanced features and functionality which is secure and easy to use with advanced features.
 Home-page: https://github.com/example/gtasks-cli
 Author: Google Tasks CLI Team
-Author-email: example@example.com
+Author-email: Google Tasks CLI Team <example@example.com>
+License: MIT
+Project-URL: Homepage, https://github.com/example/gtasks-cli
+Project-URL: Bug Reports, https://github.com/example/gtasks-cli/issues
+Project-URL: Source, https://github.com/example/gtasks-cli
 Classifier: Development Status :: 3 - Alpha
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: MIT License
@@ -17,6 +21,7 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Requires-Python: >=3.7
 Description-Content-Type: text/markdown
+License-File: LICENSE
 Requires-Dist: click>=8.1.0
 Requires-Dist: google-auth-oauthlib>=1.0.0
 Requires-Dist: google-api-python-client>=2.0
@@ -33,15 +38,14 @@ Requires-Dist: requests>=2.31.0
 Requires-Dist: matplotlib>=3.7.0
 Requires-Dist: prompt-toolkit>=3.0.0
 Requires-Dist: colorama>=0.4.6
+Provides-Extra: dev
+Requires-Dist: pytest>=6.0; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: flake8; extra == "dev"
 Dynamic: author
-Dynamic: author-email
-Dynamic: classifier
-Dynamic: description
-Dynamic: description-content-type
 Dynamic: home-page
-Dynamic: requires-dist
+Dynamic: license-file
 Dynamic: requires-python
-Dynamic: summary
 
 # Google Tasks CLI
 
@@ -57,8 +61,19 @@ A powerful, feature-rich CLI application for Google Tasks management in Python.
 - Recurring tasks and dependencies
 - Offline mode with synchronization
 - Import/export functionality
+- [Optimized Advanced Sync](https://github.com/sirusdas/gtasks-terminal/blob/main/ADVANCED_SYNC_OPTIMIZATION.md) for improved performance
+- Multi-account support
+- Interactive mode with keyboard navigation
+- Task deduplication
+- Rich terminal UI with color coding
 
 ## Installation
+
+```bash
+pip install gtasks-cli
+```
+
+Or for development/local installation:
 
 ```bash
 pip install -r requirements.txt
@@ -66,14 +81,35 @@ pip install -r requirements.txt
 
 ## Usage
 
+After installation, you can use the `gtasks` command:
+
+```bash
+gtasks --help
+```
+
+For development, you can run directly:
+
 ```bash
 python -m gtasks_cli.main --help
 ```
 
-Or after installation:
+Common commands:
 
 ```bash
-gtasks --help
+# Enter interactive mode for a rich, keyboard-driven interface
+gtasks interactive
+
+# List tasks
+gtasks list
+
+# Add a new task
+gtasks add "Buy groceries" --due "tomorrow"
+
+# Mark task as done
+gtasks done <task-id>
+
+# Sync with Google Tasks
+gtasks sync
 ```
 
 ## Development

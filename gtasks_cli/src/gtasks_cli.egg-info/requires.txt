@@ -14,3 +14,8 @@ requests>=2.31.0
 matplotlib>=3.7.0
 prompt-toolkit>=3.0.0
 colorama>=0.4.6
+
+[dev]
+pytest>=6.0
+black
+flake8

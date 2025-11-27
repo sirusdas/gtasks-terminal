@@ -1,6 +1,13 @@
-# Google Tasks CLI
+# Google Tasks CLI Development
 
-A powerful, feature-rich CLI application for Google Tasks management in Python.
+This directory contains the source code for the Google Tasks CLI application. 
+
+For general usage, we recommend installing the package from PyPI:
+```bash
+pip install gtasks-cli
+```
+
+See the main project [README.md](../README.md) for more information on installation and usage.
 
 ## Features
 
@@ -12,21 +19,80 @@ A powerful, feature-rich CLI application for Google Tasks management in Python.
 - Recurring tasks and dependencies
 - Offline mode with synchronization
 - Import/export functionality
-- [Optimized Advanced Sync](../ADVANCED_SYNC_OPTIMIZATION.md) for improved performance
+- [Optimized Advanced Sync](https://github.com/sirusdas/gtasks-terminal/blob/main/ADVANCED_SYNC_OPTIMIZATION.md) for improved performance
+- Multi-account support
+- Interactive mode with keyboard navigation
+- Task deduplication
+- Rich terminal UI with color coding
 
-## Installation
+## Installation for Development
+
+To set up the development environment:
 
 ```bash
+# Clone the repository
+git clone <repository-url>
+cd gtasks_automation/gtasks_cli
+
+# Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Install in development mode
+pip install -e .
 ```
 
-## Usage
+## Running Tests
+
+Various test scripts are available in the root directory:
+
+```bash
+# Run a simple sync test
+python simple_sync_test.py
+
+# Run comprehensive duplication tests
+python comprehensive_dup_test.py
+```
+
+## Usage During Development
+
+During development, you can run the CLI directly:
 
 ```bash
 python -m gtasks_cli.main --help
 ```
 
-Or after installation:
+Common development commands:
+
+```bash
+# Enter interactive mode for a rich, keyboard-driven interface
+python -m gtasks_cli.main interactive
+
+# List tasks
+python -m gtasks_cli.main list
+
+# Add a new task
+python -m gtasks_cli.main add "Buy groceries" --due "tomorrow"
+
+# Mark task as done
+python -m gtasks_cli.main done <task-id>
+
+# Sync with Google Tasks
+python -m gtasks_cli.main sync
+```
+
+## Production Installation
+
+For production use, install the package from PyPI:
+
+```bash
+pip install gtasks-cli
+```
+
+Then use the `gtasks` command directly:
 
 ```bash
 gtasks --help
