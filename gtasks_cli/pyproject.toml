@@ -1,21 +1,20 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "gtasks-cli"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
     {name = "Google Tasks CLI Team", email = "example@example.com"},
 ]
 description = "A powerful command-line interface for managing Google Tasks with enhanced features and functionality which is secure and easy to use with advanced features."
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.7"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.7",
@@ -58,10 +57,5 @@ dev = [
     "flake8",
 ]
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["gtasks_cli*"]
-namespaces = false
+[tool.hatch.build.targets.wheel]
+packages = ["src/gtasks_cli"]

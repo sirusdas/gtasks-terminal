@@ -4,10 +4,9 @@ A powerful command-line interface for managing Google Tasks with enhanced featur
 
 [![GitHub](https://img.shields.io/github/license/sirusdas/gtasks-terminal)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.7%2B-blue)](https://www.python.org/)
-[![PyPI](https://img.shields.io/pypi/v/gtasks-cli)](https://pypi.org/project/gtasks-cli/)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/gtasks-cli)](https://pypi.org/project/gtasks-cli/)
 [![GitHub last commit](https://img.shields.io/github/last-commit/sirusdas/gtasks-terminal)](https://github.com/sirusdas/gtasks-terminal/commits)
-[![GitHub issues](https://img.shields.io/github/issues/sirusdas/gtasks-terminal)](https://github.com/sirusdas/gtasks-terminal/issues)
+[![PyPI](https://img.shields.io/pypi/v/gtasks-cli)](https://pypi.org/project/gtasks-cli/)
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/gtasks-cli)](https://pypi.org/project/gtasks-cli/)
 
 ## 🌟 Features
 
@@ -26,23 +25,21 @@ Google Tasks CLI provides a comprehensive set of features for power users who pr
 
 ## 📦 Installation
 
-### Option 1: Install from PyPI (Recommended)
+### Prerequisites
+- Python 3.7 or higher
+- A Google account with Google Tasks enabled
 
-The easiest way to install Google Tasks CLI is from PyPI:
+### Quick Installation (Recommended)
+
+Install directly from PyPI:
 
 ```bash
 pip install gtasks-cli
 ```
 
-This will install the latest stable version and make the `gtasks` command available in your terminal. Visit our [PyPI project page](https://pypi.org/project/gtasks-cli/) for more information.
+This is the easiest and recommended way to install Google Tasks CLI. The latest version is 0.1.1.
 
-### Option 2: Manual Installation for Development
-
-#### Prerequisites
-- Python 3.7 or higher
-- A Google account with Google Tasks enabled
-
-#### Quick Setup
+### Manual Setup (Development)
 
 1. Clone the repository:
 ```bash
@@ -112,37 +109,50 @@ To connect additional accounts:
 ```bash
 # Add a new account (will prompt for authentication)
 gtasks account add --name work
+
+# List all configured accounts
+gtasks account list
+
+# Switch to a specific account
+gtasks account use work
+
+# Remove an account
+gtasks account remove work
 ```
 
 ### Switching Between Accounts
 
-You can switch between accounts in several ways:
+Switching between accounts is effortless:
 
-1. **Command-line option**: Use the `--account` flag:
+1. **Via Command Line**: Use `gtasks account use <account_name>` to switch
+2. **In Interactive Mode**: Use the `switch-account` command
+3. **Per-Command Basis**: Use the `--account` option with any command:
    ```bash
-   gtasks list --account work
+   gtasks list --account work --status pending
    ```
 
-2. **Environment variable**: Set the default account:
-   ```bash
-   export GTASKS_DEFAULT_ACCOUNT=work
-   ```
+### Account Benefits
 
-3. **Configuration setting**: Set a global default:
-   ```bash
-   gtasks account set-default --name work
-   ```
+- **Complete Isolation**: Tasks from different accounts are kept completely separate
+- **Easy Switching**: Toggle between accounts with a single command
+- **Per-Command Selection**: Run individual commands against specific accounts
+- **Secure Storage**: Each account's credentials are securely stored separately
 
-For more detailed instructions, see [MULTI_ACCOUNT.md](gtasks_cli/MULTI_ACCOUNT.md).
+Detailed instructions for multi-account management are available in [MULTI_ACCOUNT.md](gtasks_cli/MULTI_ACCOUNT.md).
 
-## 📚 Comprehensive Documentation
+## ▶️ Usage
 
-### Core Features
-- [INSTALLATION.md](INSTALLATION.md) - Complete installation and setup guide
-- [README.md](README.md) - Main project overview (this file)
-- [STRUCTURE.md](STRUCTURE.md) - Project structure and organization explanation
-- [MULTI_ACCOUNT.md](gtasks_cli/MULTI_ACCOUNT.md) - Multi-account management guide
-- [MIGRATION_PLAN.md](gtasks_cli/MIGRATION_PLAN.md) - Migration from JSON to SQLite storage
+After installation, you can use the `gtasks` command:
+
+```bash
+gtasks --help
+```
+
+For first-time setup, you'll need to authenticate with your Google account:
+
+```bash
+gtasks auth
+```
 
 ### Advanced Features
 - [ADVANCED_FILTERING.md](ADVANCED_FILTERING.md) - Advanced task filtering capabilities
@@ -171,10 +181,19 @@ For more detailed instructions, see [MULTI_ACCOUNT.md](gtasks_cli/MULTI_ACCOUNT.
 - [ENVIRONMENT.md](ENVIRONMENT.md) - Environment setup instructions
 - [config/default_config.yaml](gtasks_cli/config/default_config.yaml) - Default configuration
 
-## 🎯 Detailed Feature Overview
+## 📚 Documentation
 
-### Advanced Filtering
-Filter tasks using various criteria including time-based filters with specific date fields:
+- [Installation Guide](INSTALLATION.md)
+- [Environment Setup](ENVIRONMENT.md)
+- [Reports Feature](REPORTS_FEATURE.md)
+- [Advanced Sync](ADVANCED_SYNC.md)
+- [Organized Tasks Report](ORGANIZED_TASKS_REPORT.md)
+- [Task Recovery Guide](TASK_RECOVERY_GUIDE.md)
+- [Editor Feature](EDITOR_FEATURE.md)
+- [Advanced Filtering](ADVANCED_FILTERING.md)
+- [Order By Feature](ORDER_BY_FEATURE.md)
+- [STRUCTURE.md](STRUCTURE.md) - Project structure and organization explanation
+- [MULTI_ACCOUNT.md](gtasks_cli/MULTI_ACCOUNT.md) - Multi-account management guide
 ```bash
 # Filter tasks due this week
 gtasks interactive -- list "My Tasks" --filter this_week:created_at --search "apple|Tuku" --order-by title
@@ -230,16 +249,32 @@ The CLI stores configuration and data in the `~/.gtasks` directory:
 - `tasks.json`: Local task storage (when not using SQLite)
 - `accounts.json`: Multi-account configuration
 
-## 📊 Example Reports
+## 🚀 Advanced Features
 
-### Task Completion Report (rp1)
-Provides a summary of completed tasks over a specified period.
+### Interactive Mode
+Navigate tasks interactively with keyboard shortcuts:
+```bash
+gtasks interactive
+```
 
-### Pending Tasks Report (rp2)
-Lists all pending tasks with their due dates.
+### Reports Generation
+Generate comprehensive analytical reports:
+```bash
+gtasks generate-report
+```
 
-### Organized Tasks Report (rp9)
-Organizes tasks according to priority and functional categories with tags removed for clean email delivery.
+### Task Deduplication
+Automatically identify and remove duplicate tasks:
+```bash
+gtasks deduplicate
+```
+
+### Multi-Account Support
+Manage tasks across multiple Google accounts:
+```bash
+gtasks account --help
+```
+
 
 ## 🤝 Contributing
 
@@ -316,34 +351,16 @@ Your privacy and security are paramount. Here's how Google Tasks CLI protects yo
 
 You retain complete control over your data at all times.
 
-## 📞 Support
 
-Need help or have questions? We're here for you:
+## 🛠️ Development
 
-### Self-Help Resources
-1. Check the existing documentation
-2. Search through open and closed issues
-3. Review the comprehensive guide in [INSTALLATION.md](INSTALLATION.md)
+### Building and Publishing
+For information on building and publishing the package to PyPI, see [PYPI_UPLOAD.md](gtasks_cli/PYPI_UPLOAD.md).
 
-### Community Support
-- **GitHub Issues**: Open a new issue with a detailed description of your problem
-- **Feature Requests**: Submit ideas for new features
-- **Bug Reports**: Report any issues you encounter with detailed reproduction steps
+### Project Structure
+See [STRUCTURE.md](STRUCTURE.md) for details about the project architecture.
 
-### Direct Contact
-- **Email**: [Your Email] (if applicable)
-- **Discussion Forums**: [Link to forums if any] (if applicable)
-
-We strive to respond to all inquiries within 48 hours.
-
-## 🚀 Future Developments
-
-- [ ] Develop VS Code extension
-- [ ] Develop Browser extension
-- [ ] Integrate AI
-- [ ] Mobile App
-- [ ] Browser App
-- [ ] Develop a python package
-- [ ] GitHub Action
+### Contributing
+Contributions are welcome! Please read our contributing guidelines before submitting pull requests.
 
 See [development_roadmap.md](development_roadmap.md) for a complete roadmap.
