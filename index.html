@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gtasks-terminal - Advanced Google Tasks CLI</title>
+    <meta name="description" content="A powerful command-line tool for advanced Google Tasks management with features like deduplication, synchronization, reporting, and interactive task management.">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .terminal-window {
+            background: #1a1a1a;
+            border-radius: 8px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        .feature-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        .code-block {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-terminal text-2xl text-indigo-600 mr-3"></i>
+                    <span class="text-xl font-bold text-gray-900">gtasks-terminal</span>
+                </div>
+                <div class="hidden md:flex space-x-8">
+                    <a href="#features" class="text-gray-700 hover:text-indigo-600 transition">Features</a>
+                    <a href="#installation" class="text-gray-700 hover:text-indigo-600 transition">Installation</a>
+                    <a href="#usage" class="text-gray-700 hover:text-indigo-600 transition">Usage</a>
+                    <a href="#documentation" class="text-gray-700 hover:text-indigo-600 transition">Docs</a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="https://github.com/sirusdas/gtasks-terminal" class="text-gray-700 hover:text-indigo-600 transition">
+                        <i class="fab fa-github text-xl"></i>
+                    </a>
+                    <a href="https://pypi.org/project/gtasks-terminal/" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition">
+                        Install from PyPI
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+            <div class="text-center">
+                <h1 class="text-5xl md:text-6xl font-bold mb-6">
+                    Advanced Google Tasks CLI
+                </h1>
+                <p class="text-xl md:text-2xl mb-8 text-indigo-100 max-w-3xl mx-auto">
+                    A powerful command-line tool for managing Google Tasks with enhanced features like deduplication, synchronization, reporting, and interactive task management.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <a href="#installation" class="bg-white text-indigo-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition">
+                        Get Started
+                    </a>
+                    <a href="https://github.com/sirusdas/gtasks-terminal" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-indigo-600 transition">
+                        View on GitHub
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Terminal Demo -->
+    <section class="py-16 bg-gray-900">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="terminal-window p-6">
+                <div class="flex items-center mb-4">
+                    <div class="flex space-x-2">
+                        <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                        <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                        <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                    </div>
+                    <span class="ml-4 text-gray-400 mono text-sm">gtasks-terminal</span>
+                </div>
+                <div class="mono text-green-400 text-sm">
+                    <div class="mb-2">$ gtasks interactive</div>
+                    <div class="mb-2 text-gray-300">🚀 Entering interactive mode...</div>
+                    <div class="mb-2 text-blue-400">┌─────────────────────────────────────────────────────────────┐</div>
+                    <div class="mb-2 text-blue-400">│</div>
+                    <div class="mb-2 text-blue-400">│  Google Tasks CLI - Interactive Mode                       │</div>
+                    <div class="mb-2 text-blue-400">│                                                           │</div>
+                    <div class="mb-2 text-blue-400">│  [1] 📋 View Tasks (12 pending, 3 completed)             │</div>
+                    <div class="mb-2 text-blue-400">│  [2] ➕ Add New Task                                     │</div>
+                    <div class="mb-2 text-blue-400">│  [3] 🔄 Sync with Google                                 │</div>
+                    <div class="mb-2 text-blue-400">│  [4] 📊 Generate Report                                  │</div>
+                    <div class="mb-2 text-blue-400">│  [5] 🏷️  Manage Tags                                     │</div>
+                    <div class="mb-2 text-blue-400">│  [6] 👥 Switch Account (current: personal)               │</div>
+                    <div class="mb-2 text-blue-400">│                                                           │</div>
+                    <div class="mb-2 text-blue-400">│  [q] Quit                                                │</div>
+                    <div class="mb-2 text-blue-400">└─────────────────────────────────────────────────────────────┘</div>
+                    <div class="text-yellow-400">Select option: </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20 bg-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-bold mb-4 gradient-text">Powerful Features</h2>
+                <p class="text-xl text-gray-600 max-w-2xl mx-auto">
+                    Everything you need to manage your Google Tasks efficiently from the command line
+                </p>
+            </div>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Basic Task Management -->
+                <div class="feature-card bg-gray-50 p-6 rounded-xl">
+                    <div class="text-indigo-600 mb-4">
+                        <i class="fas fa-tasks text-3xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3">Basic Task Management</h3>
+                    <p class="text-gray-600">Add, list, update, and delete tasks with a simple and intuitive command interface.</p>
+                </div>
+
+                <!-- Advanced Filtering -->
+                <div class="feature-card bg-gray-50 p-6 rounded-xl">
+                    <div class="text-indigo-600 mb-4">
+                        <i class="fas fa-filter text-3xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3">Advanced Filtering</h3>
+                    <p class="text-gray-600">Filter tasks by status, priority, tags, and date ranges with powerful query options.</p>
+                </div>
+
+                <!-- Multi-Account Support -->
+                <div class="feature-card bg-gray-50 p-6 rounded-xl">
+                    <div class="text-indigo-600 mb-4">
+                        <i class="fas fa-users text-3xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3">Multi-Account Support</h3>
+                    <p class="text-gray-600">Manage tasks across multiple Google accounts seamlessly with easy switching.</p>
+                </div>
+
+                <!-- Task Deduplication -->
+                <div class="feature-card bg-gray-50 p-6 rounded-xl">
+                    <div class="text-indigo-600 mb-4">
+                        <i class="fas fa-clone text-3xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3">Task Deduplication</h3>
+                    <p class="text-gray-600">Automatically identify and remove duplicate tasks to keep your lists clean.</p>
+                </div>
+
+                <!-- Interactive Mode -->
+                <div class="feature-card bg-gray-50 p-6 rounded-xl">
+                    <div class="text-indigo-600 mb-4">
+                        <i class="fas fa-keyboard text-3xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3">Interactive Mode</h3>
+                    <p class="text-gray-600">Navigate tasks interactively with keyboard shortcuts in a rich terminal interface.</p>
+                </div>
+
+                <!-- Reports Generation -->
+                <div class="feature-card bg-gray-50 p-6 rounded-xl">
+                    <div class="text-indigo-600 mb-4">
+                        <i class="fas fa-chart-bar text-3xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3">Reports Generation</h3>
+                    <p class="text-gray-600">Generate comprehensive analytical reports on task activities and productivity.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Installation Section -->
+    <section id="installation" class="py-20 bg-gray-50">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-bold mb-4">Quick Installation</h2>
+                <p class="text-xl text-gray-600">Get started in minutes with PyPI installation</p>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-8">
+                <h3 class="text-2xl font-semibold mb-6">Install from PyPI (Recommended)</h3>
+                
+                <div class="code-block p-4 mb-6">
+                    <code class="mono text-green-400 text-sm">
+pip install gtasks-terminal
+                    </code>
+                </div>
+
+                <h4 class="text-lg font-semibold mb-4">Prerequisites</h4>
+                <ul class="list-disc list-inside text-gray-700 mb-6 space-y-2">
+                    <li>Python 3.7 or higher</li>
+                    <li>A Google account with Google Tasks enabled</li>
+                    <li>Google Cloud Project with Tasks API enabled</li>
+                </ul>
+
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+                    <div class="flex">
+                        <i class="fas fa-info-circle text-yellow-400 mt-1 mr-3"></i>
+                        <div>
+                            <p class="text-yellow-800">
+                                <strong>Authentication Required:</strong> You'll need to set up OAuth 2.0 credentials. 
+                                See the <a href="https://github.com/sirusdas/gtasks-terminal/blob/main/INSTALLATION.md" class="underline">installation guide</a> for detailed instructions.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 class="text-lg font-semibold mb-4">Development Setup</h4>
+                <div class="code-block p-4">
+                    <code class="mono text-gray-300 text-sm">
+# Clone the repository<br>
+git clone https://github.com/sirusdas/gtasks-terminal.git<br>
+cd gtasks-terminal<br><br>
+# Set up virtual environment<br>
+python3 -m venv venv<br>
+source venv/bin/activate  # On Windows: venv\Scripts\activate<br><br>
+# Install dependencies<br>
+cd gtasks_cli<br>
+pip install -r requirements.txt<br><br>
+# Install in development mode<br>
+pip install -e .
+                    </code>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Usage Examples -->
+    <section id="usage" class="py-20 bg-white">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-bold mb-4">Usage Examples</h2>
+                <p class="text-xl text-gray-600">See gtasks-terminal in action</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- Basic Commands -->
+                <div class="bg-gray-50 rounded-xl p-6">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center">
+                        <i class="fas fa-terminal text-indigo-600 mr-3"></i>
+                        Basic Commands
+                    </h3>
+                    <div class="space-y-4">
+                        <div class="code-block p-4">
+                            <code class="mono text-sm text-gray-300">
+# Enter interactive mode<br>
+gtasks interactive<br><br>
+# List all tasks<br>
+gtasks list<br><br>
+# Add a new task<br>
+gtasks add "Complete project report" --due tomorrow --priority high<br><br>
+# Sync with Google<br>
+gtasks advanced-sync
+                            </code>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced Filtering -->
+                <div class="bg-gray-50 rounded-xl p-6">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center">
+                        <i class="fas fa-filter text-indigo-600 mr-3"></i>
+                        Advanced Filtering
+                    </h3>
+                    <div class="space-y-4">
+                        <div class="code-block p-4">
+                            <code class="mono text-sm text-gray-300">
+# Filter by status and priority<br>
+gtasks list --status pending --priority high<br><br>
+# Filter by date range<br>
+gtasks list --filter this_week:due_date<br><br>
+# Search with regex<br>
+gtasks list --search "project|meeting"<br><br>
+# Combine filters<br>
+gtasks list --status pending --tags work --order-by due_date
+                            </code>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Multi-Account -->
+                <div class="bg-gray-50 rounded-xl p-6">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center">
+                        <i class="fas fa-users text-indigo-600 mr-3"></i>
+                        Multi-Account Management
+                    </h3>
+                    <div class="space-y-4">
+                        <div class="code-block p-4">
+                            <code class="mono text-sm text-gray-300">
+# Add a new account<br>
+gtasks account add --name work<br><br>
+# List all accounts<br>
+gtasks account list<br><br>
+# Switch account<br>
+gtasks account use work<br><br>
+# Use specific account for command<br>
+gtasks list --account work --status pending
+                            </code>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reports -->
+                <div class="bg-gray-50 rounded-xl p-6">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center">
+                        <i class="fas fa-chart-bar text-indigo-600 mr-3"></i>
+                        Reports Generation
+                    </h3>
+                    <div class="space-y-4">
+                        <div class="code-block p-4">
+                            <code class="mono text-sm text-gray-300">
+# Generate completion report<br>
+gtasks generate-report rp1 --days 30<br><br>
+# List available reports<br>
+gtasks generate-report --list<br><br>
+# Organized tasks report<br>
+gtasks generate-report rp9<br><br>
+# Export report<br>
+gtasks generate-report rp1 --format json --output report.json
+                            </code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Documentation -->
+    <section id="documentation" class="py-20 bg-gray-50">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-bold mb-4">Comprehensive Documentation</h2>
+                <p class="text-xl text-gray-600">Everything you need to master gtasks-terminal</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <a href="https://github.com/sirusdas/gtasks-terminal/blob/main/INSTALLATION.md" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition">
+                    <i class="fas fa-download text-indigo-600 text-2xl mb-3"></i>
+                    <h3 class="font-semibold mb-2">Installation Guide</h3>
+                    <p class="text-gray-600 text-sm">Complete setup instructions and prerequisites</p>
+                </a>
+
+                <a href="https://github.com/sirusdas/gtasks-terminal/blob/main/ADVANCED_FILTERING.md" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition">
+                    <i class="fas fa-search text-indigo-600 text-2xl mb-3"></i>
+                    <h3 class="font-semibold mb-2">Advanced Filtering</h3>
+                    <p class="text-gray-600 text-sm">Master the powerful filtering capabilities</p>
+                </a>
+
+                <a href="https://github.com/sirusdas/gtasks-terminal/blob/main/gtasks_cli/MULTI_ACCOUNT.md" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition">
+                    <i class="fas fa-user-friends text-indigo-600 text-2xl mb-3"></i>
+                    <h3 class="font-semibold mb-2">Multi-Account Guide</h3>
+                    <p class="text-gray-600 text-sm">Manage multiple Google accounts seamlessly</p>
+                </a>
+
+                <a href="https://github.com/sirusdas/gtasks-terminal/blob/main/REPORTS_FEATURE.md" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition">
+                    <i class="fas fa-chart-line text-indigo-600 text-2xl mb-3"></i>
+                    <h3 class="font-semibold mb-2">Reports Feature</h3>
+                    <p class="text-gray-600 text-sm">Generate comprehensive task analytics</p>
+                </a>
+
+                <a href="https://github.com/sirusdas/gtasks-terminal/blob/main/ADVANCED_SYNC.md" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition">
+                    <i class="fas fa-sync text-indigo-600 text-2xl mb-3"></i>
+                    <h3 class="font-semibold mb-2">Advanced Sync</h3>
+                    <p class="text-gray-600 text-sm">Enhanced synchronization with conflict resolution</p>
+                </a>
+
+                <a href="https://github.com/sirusdas/gtasks-terminal/blob/main/TASK_RECOVERY_GUIDE.md" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition">
+                    <i class="fas fa-undo text-indigo-600 text-2xl mb-3"></i>
+                    <h3 class="font-semibold mb-2">Task Recovery</h3>
+                    <p class="text-gray-600 text-sm">Backup and restore functionality</p>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Security & Privacy -->
+    <section class="py-16 bg-indigo-900 text-white">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <i class="fas fa-shield-alt text-4xl mb-6 text-indigo-300"></i>
+            <h2 class="text-3xl font-bold mb-6">Security & Privacy First</h2>
+            <p class="text-xl text-indigo-100 mb-8">
+                Your data stays private. Always.
+            </p>
+            <div class="grid md:grid-cols-3 gap-8 text-left">
+                <div>
+                    <h3 class="font-semibold mb-2">Zero Data Collection</h3>
+                    <p class="text-indigo-200 text-sm">We don't collect any personal data or usage statistics</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold mb-2">Local Processing</h3>
+                    <p class="text-indigo-200 text-sm">All data processing happens on your machine</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold mb-2">Secure Authentication</h3>
+                    <p class="text-indigo-200 text-sm">Industry-standard OAuth 2.0 with local token storage</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="py-20 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h2 class="text-4xl font-bold mb-6">Ready to Supercharge Your Task Management?</h2>
+            <p class="text-xl mb-8 text-indigo-100">
+                Join thousands of developers and productivity enthusiasts who trust gtasks-terminal for their Google Tasks management.
+            </p>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <a href="https://pypi.org/project/gtasks-terminal/" class="bg-white text-indigo-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition">
+                    Install Now
+                </a>
+                <a href="https://github.com/sirusdas/gtasks-terminal" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-indigo-600 transition">
+                    View Source Code
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-gray-300 py-12">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-4 gap-8">
+                <div>
+                    <div class="flex items-center mb-4">
+                        <i class="fas fa-terminal text-2xl text-indigo-400 mr-3"></i>
+                        <span class="text-xl font-bold text-white">gtasks-terminal</span>
+                    </div>
+                    <p class="text-sm">Advanced Google Tasks CLI for power users who prefer the terminal.</p>
+                </div>
+                
+                <div>
+                    <h3 class="font-semibold text-white mb-4">Quick Links</h3>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="#features" class="hover:text-indigo-400 transition">Features</a></li>
+                        <li><a href="#installation" class="hover:text-indigo-400 transition">Installation</a></li>
+                        <li><a href="#usage" class="hover:text-indigo-400 transition">Usage</a></li>
+                        <li><a href="#documentation" class="hover:text-indigo-400 transition">Documentation</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h3 class="font-semibold text-white mb-4">Resources</h3>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="https://github.com/sirusdas/gtasks-terminal" class="hover:text-indigo-400 transition">GitHub Repository</a></li>
+                        <li><a href="https://pypi.org/project/gtasks-terminal/" class="hover:text-indigo-400 transition">PyPI Package</a></li>
+                        <li><a href="https://github.com/sirusdas/gtasks-terminal/issues" class="hover:text-indigo-400 transition">Issue Tracker</a></li>
+                        <li><a href="https://github.com/sirusdas/gtasks-terminal/blob/main/CONTRIBUTING.md" class="hover:text-indigo-400 transition">Contributing</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h3 class="font-semibold text-white mb-4">Connect</h3>
+                    <div class="flex space-x-4">
+                        <a href="https://github.com/sirusdas/gtasks-terminal" class="text-gray-400 hover:text-indigo-400 transition">
+                            <i class="fab fa-github text-xl"></i>
+                        </a>
+                        <a href="#" class="text-gray-400 hover:text-indigo-400 transition">
+                            <i class="fab fa-twitter text-xl"></i>
+                        </a>
+                        <a href="#" class="text-gray-400 hover:text-indigo-400 transition">
+                            <i class="fab fa-linkedin text-xl"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="border-t border-gray-800 mt-8 pt-8 text-center text-sm">
+                <p>&copy; 2024 gtasks-terminal. Open source project under MIT License.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Add scroll effect to navigation
+        window.addEventListener('scroll', function() {
+            const nav = document.querySelector('nav');
+            if (window.scrollY > 100) {
+                nav.classList.add('shadow-md');
+            } else {
+                nav.classList.remove('shadow-md');
+            }
+        });
+
+        // Terminal typing effect
+        const terminalLines = [
+            '$ gtasks interactive',
+            '🚀 Entering interactive mode...',
+            '┌─────────────────────────────────────────────────────────────┐',
+            '│  Google Tasks CLI - Interactive Mode                       │',
+            '│                                                           │',
+            '│  [1] 📋 View Tasks (12 pending, 3 completed)             │',
+            '│  [2] ➕ Add New Task                                     │',
+            '│  [3] 🔄 Sync with Google                                 │',
+            '│  [4] 📊 Generate Report                                  │',
+            '│  [5] 🏷️  Manage Tags                                     │',
+            '│  [6] 👥 Switch Account (current: personal)               │',
+            '│                                                           │',
+            '│  [q] Quit                                                │',
+            '└─────────────────────────────────────────────────────────────┘',
+            'Select option: '
+        ];
+
+        let currentLine = 0;
+        const terminalElement = document.querySelector('.terminal-window .mono');
+
+        function typeTerminal() {
+            if (currentLine < terminalLines.length) {
+                const line = document.createElement('div');
+                line.className = 'mb-2';
+                line.style.opacity = '0';
+                terminalElement.appendChild(line);
+                
+                let charIndex = 0;
+                const typeChar = () => {
+                    if (charIndex < terminalLines[currentLine].length) {
+                        line.innerHTML += terminalLines[currentLine][charIndex];
+                        charIndex++;
+                        setTimeout(typeChar, 30);
+                    } else {
+                        line.style.opacity = '1';
+                        currentLine++;
+                        setTimeout(typeTerminal, 200);
+                    }
+                };
+                
+                // Color coding for different line types
+                if (terminalLines[currentLine].startsWith('$')) {
+                    line.className += ' text-green-400';
+                } else if (terminalLines[currentLine].includes('┌') || terminalLines[currentLine].includes('│') || terminalLines[currentLine].includes('└')) {
+                    line.className += ' text-blue-400';
+                } else if (terminalLines[currentLine].includes('Select option:')) {
+                    line.className += ' text-yellow-400';
+                } else {
+                    line.className += ' text-gray-300';
+                }
+                
+                typeChar();
+            }
+        }
+
+        // Start terminal animation when page loads
+        window.addEventListener('load', () => {
+            setTimeout(typeTerminal, 1000);
+        });
+    </script>
+</body>
+</html>
