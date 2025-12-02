@@ -37,7 +37,7 @@ Install directly from PyPI:
 pip install gtasks-cli
 ```
 
-This is the easiest and recommended way to install Google Tasks CLI. The latest version is 0.1.1.
+This is the easiest and recommended way to install Google Tasks CLI. The latest version is 0.1.2.
 
 ### Manual Setup (Development)
 
