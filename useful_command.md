@@ -12,6 +12,10 @@ gtasks generate-report rp9 --email test@test.com
 gtasks generate-report rp9 --only-title --no-other-tasks
 gtasks generate-report rp9 --only-title --no-other-tasks  --email test@test.com
 
+gtasks interactive -- list --filter this_week:created_at --search "--em:[***]|--ex:[cr]"
+
+gtasks interactive -- list --filter this_week:created_at --tags "--em:[***]|--ex:[cr]"
+
 sqlite3 /Users/int/.gtasks/personal/tasks.db "SELECT COUNT(*) FROM tasks;"
 sqlite3 /Users/int/.gtasks/personal/tasks.db "SELECT COUNT(DISTINCT id) FROM tasks;"
 sqlite3 /Users/int/.gtasks/personal/tasks.db "SELECT title, COUNT(*) as count FROM tasks GROUP BY title HAVING COUNT(*) > 1 ORDER BY count DESC
