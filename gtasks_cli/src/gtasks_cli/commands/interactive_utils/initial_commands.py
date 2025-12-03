@@ -26,6 +26,7 @@ def handle_initial_list_command(task_manager, list_args, use_google_tasks):
     time_filter = None
     search_term = None
     project_filter = None
+    tags_filter = None
     order_by = None
     
     i = 0
@@ -65,6 +66,12 @@ def handle_initial_list_command(task_manager, list_args, use_google_tasks):
             i += 1
         elif arg.startswith('--project='):
             project_filter = arg.split('=', 1)[1]
+            i += 1
+        elif arg in ['--tags', '-t'] and i + 1 < len(args):
+            tags_filter = args[i + 1]
+            i += 2
+        elif arg.startswith('--tags='):
+            tags_filter = arg.split('=', 1)[1]
             i += 1
         else:
             # Treat as list filter if it's the first argument and not a flag
@@ -124,16 +131,8 @@ def handle_initial_list_command(task_manager, list_args, use_google_tasks):
         tasks = _filter_tasks_by_time(tasks, time_filter)
     
     if search_term:
-        # Support OR logic with pipe separator
-        if '|' in search_term:
-            search_terms = [term.strip().lower() for term in search_term.split('|')]
-            tasks = [t for t in tasks if any(term in t.title.lower() or 
-                     (t.description and term in t.description.lower()) or
-                     (t.notes and term in t.notes.lower()) for term in search_terms)]
-        else:
-            tasks = [t for t in tasks if search_term.lower() in t.title.lower() or 
-                     (t.description and search_term.lower() in t.description.lower()) or
-                     (t.notes and search_term.lower() in t.notes.lower())]
+        from gtasks_cli.commands.interactive_utils.search import apply_search_filter
+        tasks = apply_search_filter(tasks, search_term)
 
     # Process order_by parameter
     order_by = None
@@ -172,6 +171,10 @@ def handle_initial_list_command(task_manager, list_args, use_google_tasks):
     
     if project_filter:
         tasks = [t for t in tasks if t.project and project_filter.lower() in t.project.lower()]
+
+    if tags_filter:
+        from gtasks_cli.commands.interactive_utils.search import apply_tag_filter
+        tasks = apply_tag_filter(tasks, tags_filter)
     
     # Add list_title for grouping display
     if use_google_tasks:
@@ -204,13 +207,9 @@ def handle_initial_search_command(task_manager, search_args, use_google_tasks):
         tasks = task_manager.list_tasks()
     
     # Filter tasks by search term
-    filtered_tasks = []
-    for task in tasks:
-        # Check in title, description, and notes
-        if (search_term.lower() in task.title.lower() or
-            (task.description and search_term.lower() in task.description.lower()) or
-            (task.notes and search_term.lower() in task.notes.lower())):
-            filtered_tasks.append(task)
+    # Filter tasks by search term
+    from gtasks_cli.commands.interactive_utils.search import apply_search_filter
+    filtered_tasks = apply_search_filter(tasks, search_term)
 
     # Process order_by parameter
     order_by = None

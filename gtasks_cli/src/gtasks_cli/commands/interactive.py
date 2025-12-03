@@ -474,6 +474,7 @@ def interactive(ctx, command):
                 time_filter = None
                 search_filter = None
                 order_by = None
+                tags_filter = None
                 list_names_flag = False  # Flag for --list-names option
 
                 # Parse arguments
@@ -505,6 +506,9 @@ def interactive(ctx, command):
                         elif part == '--list-names':
                             list_names_flag = True
                             i += 1
+                        elif part in ['--tags', '-t'] and i + 1 < len(command_parts):
+                            tags_filter = command_parts[i + 1]
+                            i += 2
                         else:
                             i += 1
                     else:
@@ -567,14 +571,19 @@ def interactive(ctx, command):
                             tasks = [t for t in tasks if t.project == project_filter]
 
                         if recurring_filter:
-                            tasks = [t for t in tasks if t.is_recurring]
+                           from gtasks_cli.commands.interactive_utils.search import apply_search_filter
+                           tasks = [t for t in tasks if t.is_recurring]
 
                         if time_filter:
                             tasks = _filter_tasks_by_time(tasks, time_filter)
 
                         if search_filter:
-                            tasks = [t for t in tasks if search_filter.lower() in t.title.lower() or 
-                                    (t.description and search_filter.lower() in t.description.lower())]
+                            tasks = apply_search_filter(tasks, search_filter)
+                        
+                        if tags_filter:
+                            from gtasks_cli.commands.interactive_utils.search import apply_tag_filter
+                            tasks = apply_tag_filter(tasks, tags_filter)
+                        
                         # Add list_title to each task for grouping display
                         for task in tasks:
                             if not hasattr(task, 'list_title') or not task.list_title:
@@ -602,17 +611,14 @@ def interactive(ctx, command):
                     
                     # Apply search filter if provided
                     if search_filter:
-                        # Support OR logic with pipe separator
-                        if '|' in search_filter:
-                            search_terms = [term.strip().lower() for term in search_filter.split('|')]
-                            all_tasks = [t for t in all_tasks if any(term in t.title.lower() or 
-                                       (t.description and term in t.description.lower()) or
-                                       (t.notes and term in t.notes.lower()) for term in search_terms)]
-                        else:
-                            all_tasks = [t for t in all_tasks if search_filter.lower() in t.title.lower() or 
-                                       (t.description and search_filter.lower() in t.description.lower()) or
-                                       (t.notes and search_filter.lower() in t.notes.lower())]
+                        # Support enhanced search with exclusion and exact matching
+                        all_tasks = apply_search_filter(all_tasks, search_filter)
                     
+                    # Apply tags filter if provided
+                    if tags_filter:
+                        from gtasks_cli.commands.interactive_utils.search import apply_tag_filter
+                        all_tasks = apply_tag_filter(all_tasks, tags_filter)
+
                     # Apply sorting if requested
                     if order_by:
                         from gtasks_cli.commands.list import _sort_tasks
@@ -667,8 +673,10 @@ def interactive(ctx, command):
                     continue
                     
                 query = " ".join(command_parts[1:])
-                # Use list_tasks with search parameter instead of non-existent search_tasks method
-                search_results = task_manager.list_tasks(search=query)
+                # Get all tasks first and apply advanced search filter locally
+                all_tasks = task_manager.list_tasks()
+                from gtasks_cli.commands.interactive_utils.search import apply_search_filter
+                search_results = apply_search_filter(all_tasks, query)
                 if search_results:
                     click.echo(f"\nSearch results for '{query}':")
                     display_tasks_grouped_by_list(search_results)
@@ -784,3 +792,6 @@ def _view_task_details(task: Task):
     """View detailed information about a task"""
     # Use the imported function for consistency
     view_task_details(task)
+
+
+

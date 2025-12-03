@@ -236,3 +236,37 @@ def show_tags_help():
     console.print("\n[bold]Note:[/bold]")
     console.print("The tags command supports all the filters available in the list command.")
     console.print("If multiple tags are provided, tasks must match all tags.")
+
+
+def show_search_help():
+    """Show help for the search command"""
+    console.print(Panel("[bold blue]Search Command Help[/bold blue]", expand=False))
+    
+    console.print("[bold]Description:[/bold]")
+    console.print("Search for tasks by title, description, or notes.\n")
+    
+    console.print("[bold]Usage:[/bold]")
+    console.print("  search <query>\n")
+    
+    console.print("[bold]Examples:[/bold]")
+    console.print("  [green]# Search for tasks containing 'meeting'[/green]")
+    console.print("  search meeting")
+    console.print("  [green]# Search for tasks containing 'report' or 'presentation'[/green]")
+    console.print("  search report|presentation")
+    console.print("  [green]# Search in combination with other commands[/green]")
+    console.print("  list --search \"meeting\" --status pending")
+    console.print("  list --search \"report|presentation\" --priority high\n")
+                        
+    console.print("[bold]Advanced Search Features:[/bold]")
+    console.print("1. [yellow]Exclusion Search[/yellow]: Prefix your search term with '-' to exclude tasks containing that term")
+    console.print("   Example: search \"-meeting\" - finds tasks that do NOT contain 'meeting'")
+    console.print("2. [yellow]Exact Search[/yellow]: Wrap your search term in double quotes for exact matching")
+    console.print("   Example: search \"\"important task\"\" - finds tasks with the exact title/description 'important task'")
+    console.print("3. [yellow]Special Term Syntax[/yellow]: Use prefixes within search terms for advanced matching")
+    console.print("   [yellow]--em:<term>[/yellow] - Exact match for the specified term")
+    console.print("   Example: search \"--em:apple\" - finds tasks with exact match for 'apple'")
+    console.print("   [yellow]--ex:<term>[/yellow] - Exclude tasks containing the specified term")
+    console.print("   Example: search \"--ex:banana\" - excludes tasks containing 'banana'")
+    console.print("   Combine with OR logic: search \"--em:apple|--em:mango|--ex:rotten\"")
+    console.print("4. [yellow]Combined Search[/yellow]: Use pipe (|) for OR logic with multiple terms")
+    console.print("   Example: search \"work|-personal\" - finds tasks with 'work' but not 'personal'\n")
