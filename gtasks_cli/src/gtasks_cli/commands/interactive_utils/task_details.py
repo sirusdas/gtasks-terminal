@@ -5,6 +5,7 @@ Module for viewing task details in interactive mode
 from gtasks_cli.models.task import TaskStatus, Priority
 from rich.console import Console
 from rich.panel import Panel
+from rich.markup import escape
 
 # Initialize Rich console for colored output
 console = Console()
@@ -16,7 +17,7 @@ def view_task_details(task):
     panel_content = []
     
     # Add basic task info
-    panel_content.append(f"[bold]{task.title}[/bold]")
+    panel_content.append(f"[bold]{escape(task.title)}[/bold]")
     panel_content.append(f"ID: {task.id}")
     
     # Add description
@@ -29,12 +30,12 @@ def view_task_details(task):
         
         # Split description into lines for proper alignment
         desc_lines = desc.split('\n')
-        formatted_desc = "\n".join([f"    {line}" for line in desc_lines])
+        formatted_desc = "\n".join([f"    {escape(line)}" for line in desc_lines])
         panel_content.append(f"[italic white]📝 {formatted_desc}[/italic white]")
     
     # Add notes
     if task.notes:
-        panel_content.append(f"📌 Notes: {task.notes}")
+        panel_content.append(f"📌 Notes: {escape(task.notes)}")
     
     # Add due date
     if task.due:

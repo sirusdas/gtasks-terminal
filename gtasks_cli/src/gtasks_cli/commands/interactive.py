@@ -265,6 +265,7 @@ def interactive(ctx, command):
       delete <number>         - Delete a task
       update <number>         - Update a task
       update-status <spec>    - Bulk update task status and due dates
+      update-tags <spec>      - Bulk update task tags
       add                     - Add a new task
       list                    - List all tasks
       list [filter]           - List tasks with filters (same as gtasks list command)
@@ -400,8 +401,22 @@ def interactive(ctx, command):
             if not command_input:
                 continue
             
-            # Check if this is a piped command (contains |)
-            if '|' in command_input:
+            # Check if this is a piped command (contains | outside of square brackets)
+            # We need to distinguish between command pipes like "search foo | view"
+            # and syntax pipes like "update-tags ADD[1|tag]"
+            def has_command_pipe(cmd: str) -> bool:
+                """Check if command has a pipe outside of square brackets."""
+                depth = 0
+                for char in cmd:
+                    if char == '[':
+                        depth += 1
+                    elif char == ']':
+                        depth -= 1
+                    elif char == '|' and depth == 0:
+                        return True
+                return False
+            
+            if has_command_pipe(command_input):
                 from gtasks_cli.commands.interactive_utils.piped_commands import handle_piped_command
                 if handle_piped_command(command_input, task_state, task_manager, use_google_tasks):
                     continue
@@ -703,6 +718,10 @@ def interactive(ctx, command):
                 # Import and use the bulk update command handler
                 from gtasks_cli.commands.interactive_utils.bulk_update_commands import handle_bulk_update_command
                 handle_bulk_update_command(task_state, task_manager, command_parts, use_google_tasks)
+            elif cmd == 'update-tags':
+                # Import and use the update tags command handler
+                from gtasks_cli.commands.interactive_utils.update_tags_commands import handle_update_tags_command
+                handle_update_tags_command(task_state, task_manager, command_parts, use_google_tasks)
             elif cmd == 'search':
                 if len(command_parts) < 2:
                     click.echo("Usage: search <query>")

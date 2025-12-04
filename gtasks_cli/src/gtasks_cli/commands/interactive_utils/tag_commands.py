@@ -210,13 +210,14 @@ def _enter_tag_filtered_interactive_mode(tasks: List[Task], task_manager, use_go
         from gtasks_cli.commands.interactive_utils.update_commands import handle_update_command
         from gtasks_cli.commands.interactive_utils.add_commands import handle_add_command
         from gtasks_cli.commands.interactive_utils.bulk_update_commands import handle_bulk_update_command
+        from gtasks_cli.commands.interactive_utils.update_tags_commands import handle_update_tags_command
         
         # Keep a reference to the original tasks for search operations
         original_tasks = tasks
         
         # Command loop
         while True:
-            click.echo("\nEnter command (view <num>, done <num>, delete <num>, update <num>, add, update-status <spec>, search <query>, back, quit):")
+            click.echo("\nEnter command (view <num>, done <num>, delete <num>, update <num>, add, update-status <spec>, update-tags <spec>, search <query>, back, quit):")
             user_input = click.prompt("Command", type=str, default="", show_default=False).strip()
             
             if not user_input:
@@ -350,8 +351,26 @@ def _enter_tag_filtered_interactive_mode(tasks: List[Task], task_manager, use_go
                 original_tasks = tasks  # Reset original tasks to the new selection
                 if not tasks:
                     break
+            elif cmd == 'update-tags':
+                # Create a temporary task_state-like object
+                class TempTaskState:
+                    def __init__(self, tasks_list):
+                        self.tasks = tasks_list
+                    
+                    def get_task_by_number(self, number):
+                        if 1 <= number <= len(self.tasks):
+                            return self.tasks[number - 1]
+                        return None
+                
+                temp_state = TempTaskState(tasks)
+                handle_update_tags_command(temp_state, task_manager, ['update-tags'] + parts[1:], use_google_tasks)
+                # Refresh task list after updating tags
+                tasks = handle_tags_command(task_manager, use_google_tasks)
+                original_tasks = tasks  # Reset original tasks to the new selection
+                if not tasks:
+                    break
             else:
-                click.echo(f"Unknown command: {cmd}. Available commands: view, done, delete, update, add, update-status, search, back, quit")
+                click.echo(f"Unknown command: {cmd}. Available commands: view, done, delete, update, add, update-status, update-tags, search, back, quit")
                 
     except Exception as e:
         logger.error(f"Error in _enter_tag_filtered_interactive_mode: {e}")
