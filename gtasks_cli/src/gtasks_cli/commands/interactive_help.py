@@ -199,7 +199,25 @@ def show_list_help():
     console.print("  list --filter this_week")
     console.print("  list --search \"meeting\"")
     console.print("  list --order-by due\n")
-    
+                        
+    console.print("[bold]Time Filtering:[/bold]")
+    console.print("You can filter tasks by time periods using the --filter option:")
+    console.print("  [yellow]today[/yellow]          - Tasks for today")
+    console.print("  [yellow]this_week[/yellow]      - Tasks for this week")
+    console.print("  [yellow]this_month[/yellow]     - Tasks for this month")
+    console.print("  [yellow]last_month[/yellow]     - Tasks from last month")
+    console.print("  [yellow]last_3m[/yellow]        - Tasks from the last 3 months")
+    console.print("  [yellow]last_6m[/yellow]        - Tasks from the last 6 months")
+    console.print("  [yellow]last_year[/yellow]      - Tasks from the last year")
+    console.print("  [yellow]DDMMYYYY[/yellow]       - Tasks for a specific date (e.g., 25122023)")
+    console.print("  [yellow]DDMMYYYY-DDMMYYYY[/yellow] - Tasks within a date range (e.g., 01122023-31122023)\n")
+                        
+    console.print("You can also specify which date field to filter on by appending ':<field>' to the filter:")
+    console.print("  [yellow]this_week:due_date[/yellow]     - Tasks due this week")
+    console.print("  [yellow]this_month:created_at[/yellow]  - Tasks created this month")
+    console.print("  [yellow]25122023:modified_at[/yellow]   - Tasks modified on Dec 25, 2023")
+    console.print("Available date fields: [yellow]due_date[/yellow], [yellow]created_at[/yellow], [yellow]modified_at[/yellow]\n")
+
     console.print("[bold]Filter Options:[/bold]")
     console.print("  [yellow]--status[/yellow]     Filter by status (pending, in_progress, completed, waiting, deleted)")
     console.print("  [yellow]--priority[/yellow]   Filter by priority (low, medium, high, critical)")
@@ -209,31 +227,9 @@ def show_list_help():
     console.print("  [yellow]--search[/yellow]     Search by title, description or notes")
     console.print("  [yellow]--order-by[/yellow]   Sort by field (due, created, modified, title)")
     
-    console.print("\n[bold]Time Filtering:[/bold]")
-    console.print("Use the [yellow]--filter[/yellow] option to filter tasks by time periods or specific dates:")
-    console.print("  [yellow]Predefined periods:[/yellow] today, this_week, this_month, last_month, last_3m, last_6m, last_year")
-    console.print("  [yellow]Custom date:[/yellow] ddmmyyyy (e.g., 25122025 for Dec 25, 2025)")
-    console.print("  [yellow]Date range:[/yellow] ddmmyyyy-ddmmyyyy (e.g., 01122025-31122025 for Dec 1-31, 2025)")
-    console.print("  [yellow]Field-specific:[/yellow] Add :field_name to filter on specific fields (due_date, created_at, modified_at)")
-    console.print("  Examples:")
-    console.print("    list --filter 25122025              # Tasks for Dec 25, 2025")
-    console.print("    list --filter 01122025-31122025     # Tasks for December 2025")
-    console.print("    list --filter 25122025:due_date     # Tasks due on Dec 25, 2025")
-    console.print("    list --filter this_week:created_at  # Tasks created this week\n")
-                        
-    console.print("[bold]Advanced Search Features:[/bold]")
-    console.print("1. [yellow]Exclusion Search[/yellow]: Prefix your search term with '-' to exclude tasks containing that term")
-    console.print("   Example: search \"-meeting\" - finds tasks that do NOT contain 'meeting'")
-    console.print("2. [yellow]Exact Search[/yellow]: Wrap your search term in double quotes for exact matching")
-    console.print("   Example: search \"\"important task\"\" - finds tasks with the exact title/description 'important task'")
-    console.print("3. [yellow]Special Term Syntax[/yellow]: Use prefixes within search terms for advanced matching")
-    console.print("   [yellow]--em:<term>[/yellow] - Exact match for the specified term")
-    console.print("   Example: search \"--em:apple\" - finds tasks with exact match for 'apple'")
-    console.print("   [yellow]--ex:<term>[/yellow] - Exclude tasks containing the specified term")
-    console.print("   Example: search \"--ex:banana\" - excludes tasks containing 'banana'")
-    console.print("   Combine with OR logic: search \"--em:apple|--em:mango|--ex:rotten\"")
-    console.print("4. [yellow]Combined Search[/yellow]: Use pipe (|) for OR logic with multiple terms")
-    console.print("   Example: search \"work|-personal\" - finds tasks with 'work' but not 'personal'\n")
+    console.print("\n[bold]Time Filters:[/bold]")
+    console.print("  today, this_week, this_month, last_month, last_3m, last_6m, last_year")
+
 
 def show_tags_help():
     """Show help for the tags command"""

@@ -641,18 +641,48 @@ def interactive(ctx, command):
                     task_state.push_command(command_input)
             elif cmd == 'view':
                 if len(command_parts) < 2:
-                    click.echo("Usage: view <number>")
+                    click.echo("Usage: view <number>[,<number>,...] or view all")
                     continue
-                    
+
+                # Handle "view all" command
+                if command_parts[1].lower() == 'all':
+                    # View all tasks in the current result set
+                    if not task_state.tasks:
+                        click.echo("No tasks to display.")
+                        continue
+
+                    for i, task in enumerate(task_state.tasks, 1):
+                        console.print(f"\n[bold underline]Task #{i} of {len(task_state.tasks)}:[/bold underline]")
+                        _view_task_details(task)
+                    continue
+
+                # Handle multiple task IDs
+                task_numbers_str = command_parts[1]
+                task_numbers = []
+
+                # Parse comma-separated task numbers
                 try:
-                    task_num = int(command_parts[1])
+                    task_numbers = [int(num.strip()) for num in task_numbers_str.split(',') if num.strip()]
+                except ValueError:
+                    click.echo("Invalid task number(s). Please enter valid integers separated by commas, or 'all' to view all tasks.")
+                    continue
+
+                if not task_numbers:
+                    click.echo("No valid task numbers provided.")
+                    continue
+
+                # Validate task numbers
+                invalid_numbers = [num for num in task_numbers if not task_state.get_task_by_number(num)]
+                if invalid_numbers:
+                    click.echo(f"Invalid task number(s): {', '.join(map(str, invalid_numbers))}. Please enter numbers between 1 and {len(task_state.tasks)}.")
+                    continue
+
+                # View each requested task
+                for task_num in task_numbers:
                     task = task_state.get_task_by_number(task_num)
                     if task:
+                        console.print(f"\n[bold underline]Task #{task_num}:[/bold underline]")
                         _view_task_details(task)
-                    else:
-                        click.echo(f"Invalid task number. Please enter a number between 1 and {len(task_state.tasks)}.")
-                except ValueError:
-                    click.echo("Invalid task number. Please enter a valid integer.")
             elif cmd == 'add':
                 # Import and use the add command handler
                 from gtasks_cli.commands.interactive_utils.add_commands import handle_add_command

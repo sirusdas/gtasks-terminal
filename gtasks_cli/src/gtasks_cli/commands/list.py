@@ -155,6 +155,10 @@ def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
         period = filter_type
         date_field = None  # Will use all date fields
     
+    # Check if period is a custom date or date range in DDMMYYYY format
+    if _is_custom_date_format(period):
+        return _filter_tasks_by_custom_date(tasks, period, date_field)
+    
     def _task_in_time_period(task: Task, start_time, end_time, specific_field=None) -> bool:
         """Check if a task falls within the specified time period based on specified or all date fields"""
         # If a specific field is requested, only check that field
@@ -181,44 +185,6 @@ def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
             return True
             
         return False
-    
-    # Handle custom date format (ddmmyyyy) or date range (ddmmyyyy-ddmmyyyy)
-    if period.isdigit() and len(period) == 8:  # Single date in ddmmyyyy format
-        try:
-            day = int(period[:2])
-            month = int(period[2:4])
-            year = int(period[4:])
-            target_date = datetime(year, month, day)
-            start_of_day = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_of_day = start_of_day + timedelta(days=1)
-            return [t for t in tasks if _task_in_time_period(t, start_of_day, end_of_day, date_field)]
-        except (ValueError, TypeError):
-            # Fall back to default behavior if date parsing fails
-            pass
-    
-    elif '-' in period and len(period.split('-')[0]) == 8 and len(period.split('-')[1]) == 8:
-        # Date range in ddmmyyyy-ddmmyyyy format
-        try:
-            start_part, end_part = period.split('-')
-            
-            # Parse start date
-            start_day = int(start_part[:2])
-            start_month = int(start_part[2:4])
-            start_year = int(start_part[4:])
-            start_date = datetime(start_year, start_month, start_day)
-            start_of_range = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            
-            # Parse end date
-            end_day = int(end_part[:2])
-            end_month = int(end_part[2:4])
-            end_year = int(end_part[4:])
-            end_date = datetime(end_year, end_month, end_day)
-            end_of_range = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
-            
-            return [t for t in tasks if _task_in_time_period(t, start_of_range, end_of_range, date_field)]
-        except (ValueError, TypeError, IndexError):
-            # Fall back to default behavior if date parsing fails
-            pass
     
     if period == 'today':
         start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -261,6 +227,88 @@ def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
         return [t for t in tasks if _task_in_time_period(t, start_date, now, date_field)]
     
     return tasks
+
+
+def _is_custom_date_format(period: str) -> bool:
+    """Check if the period string represents a custom date or date range in DDMMYYYY format"""
+    # Check for single date format: DDMMYYYY
+    if len(period) == 8 and period.isdigit():
+        return True
+    
+    # Check for date range format: DDMMYYYY-DDMMYYYY
+    if '-' in period and len(period.split('-')) == 2:
+        start_date, end_date = period.split('-')
+        if len(start_date) == 8 and len(end_date) == 8 and start_date.isdigit() and end_date.isdigit():
+            return True
+    
+    return False
+
+
+def _parse_date_string(date_str: str) -> datetime:
+    """Parse DDMMYYYY format date string into datetime object"""
+    if len(date_str) != 8 or not date_str.isdigit():
+        raise ValueError("Date must be in DDMMYYYY format")
+    
+    day = int(date_str[0:2])
+    month = int(date_str[2:4])
+    year = int(date_str[4:8])
+    
+    return datetime(year, month, day)
+
+
+def _filter_tasks_by_custom_date(tasks: List[Task], period: str, date_field: str = None) -> List[Task]:
+    """Filter tasks by custom date or date range in DDMMYYYY format"""
+    def _task_matches_date(task: Task, start_date: datetime, end_date: datetime, specific_field: str = None) -> bool:
+        """Check if a task falls within the specified date range based on specified or all date fields"""
+        # If a specific field is requested, only check that field
+        if specific_field:
+            if specific_field == 'due_date' and task.due:
+                task_date = _normalize_datetime(task.due).date()
+                return start_date.date() <= task_date <= end_date.date()
+            elif specific_field == 'created_at' and task.created_at:
+                task_date = _normalize_datetime(task.created_at).date()
+                return start_date.date() <= task_date <= end_date.date()
+            elif specific_field == 'modified_at' and task.modified_at:
+                task_date = _normalize_datetime(task.modified_at).date()
+                return start_date.date() <= task_date <= end_date.date()
+            return False
+            
+        # Otherwise check all date fields
+        # Check due date
+        if task.due:
+            task_date = _normalize_datetime(task.due).date()
+            if start_date.date() <= task_date <= end_date.date():
+                return True
+        
+        # Check created date
+        if task.created_at:
+            task_date = _normalize_datetime(task.created_at).date()
+            if start_date.date() <= task_date <= end_date.date():
+                return True
+            
+        # Check modified date
+        if task.modified_at:
+            task_date = _normalize_datetime(task.modified_at).date()
+            if start_date.date() <= task_date <= end_date.date():
+                return True
+            
+        return False
+    
+    # Handle date range format: DDMMYYYY-DDMMYYYY
+    if '-' in period:
+        start_date_str, end_date_str = period.split('-')
+        start_date = _parse_date_string(start_date_str)
+        end_date = _parse_date_string(end_date_str)
+        # Set time to start of start day and end of end day
+        start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    else:
+        # Handle single date format: DDMMYYYY
+        target_date = _parse_date_string(period)
+        start_date = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    return [t for t in tasks if _task_matches_date(t, start_date, end_date, date_field)]
 
 
 def _sort_tasks(tasks: List[Task], sort_field: str) -> List[Task]:
@@ -352,8 +400,8 @@ task_state = TaskState()
                    '"this_week:created_at", or "this_month:modified_at". '
                    'Supported periods: today, this_week, this_month, last_month, '
                    'last_3m, last_6m, last_year. '
-                   'You can also specify a specific date in ddmmyyyy format (e.g., "25122025") '
-                   'or a date range in ddmmyyyy-ddmmyyyy format (e.g., "01122025-31122025").')
+                   'Custom date formats: DDMMYYYY for a specific date or '
+                   'DDMMYYYY-DDMMYYYY for a date range.')
 @click.option('--order-by', '-o', 'order_by',
               type=click.Choice(['due', 'created', 'modified', 'priority', 'title']),
               help='Order tasks by field (due, created, modified, priority, title)')
