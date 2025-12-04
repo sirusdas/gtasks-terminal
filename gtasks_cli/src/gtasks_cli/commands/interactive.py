@@ -266,6 +266,7 @@ def interactive(ctx, command):
       update <number>         - Update a task
       update-status <spec>    - Bulk update task status and due dates
       update-tags <spec>      - Bulk update task tags
+      undo                    - Undo the last operation
       add                     - Add a new task
       list                    - List all tasks
       list [filter]           - List tasks with filters (same as gtasks list command)
@@ -722,6 +723,17 @@ def interactive(ctx, command):
                 # Import and use the update tags command handler
                 from gtasks_cli.commands.interactive_utils.update_tags_commands import handle_update_tags_command
                 handle_update_tags_command(task_state, task_manager, command_parts, use_google_tasks)
+            elif cmd == 'undo':
+                from gtasks_cli.commands.interactive_utils.undo_manager import undo_manager
+                op = undo_manager.pop_undo()
+                if op:
+                    click.echo(f"Undoing: {op.description}")
+                    if op.undo_func():
+                        click.echo("Undo successful.")
+                    else:
+                        click.echo("Undo failed.")
+                else:
+                    click.echo("Nothing to undo.")
             elif cmd == 'search':
                 if len(command_parts) < 2:
                     click.echo("Usage: search <query>")

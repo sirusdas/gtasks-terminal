@@ -27,6 +27,23 @@ def handle_add_command(task_state, task_manager, command_parts, use_google_tasks
     added_task = task_manager.add_task(task)
     if added_task:
         click.echo(f"Task '{added_task.title}' added successfully.")
+        
+        # Register undo operation
+        from gtasks_cli.commands.interactive_utils.undo_manager import undo_manager
+        
+        def undo_add():
+            try:
+                task_manager.delete_task(added_task.id)
+                return True
+            except Exception as e:
+                click.echo(f"Undo add failed: {e}")
+                return False
+
+        undo_manager.push_operation(
+            description=f"Add task '{added_task.title}'",
+            undo_func=undo_add
+        )
+        
         # Instead of refreshing the whole list, just add the new task to current view
         _add_task_to_state(task_state, added_task)
     else:

@@ -17,10 +17,33 @@ def handle_done_command(task_state, task_manager, command_parts, use_google_task
         task_num = int(command_parts[1])
         task = task_state.get_task_by_number(task_num)
         if task:
+            # Capture original status and completed_at
+            original_status = task.status
+            original_completed_at = getattr(task, 'completed_at', None)
+            
             # Mark task as completed
             success = task_manager.update_task(task.id, status=TaskStatus.COMPLETED)
             if success:
                 click.echo(f"Task '{task.title}' marked as completed.")
+                
+                # Register undo operation
+                from gtasks_cli.commands.interactive_utils.undo_manager import undo_manager
+                
+                def undo_done():
+                    try:
+                        # Restore status and completed_at
+                        task_manager.update_task(task.id, status=original_status, completed_at=original_completed_at)
+                        return True
+                    except Exception as e:
+                        # logger is not imported in done_commands.py, so we should import it or just print
+                        click.echo(f"Undo done failed: {e}")
+                        return False
+
+                undo_manager.push_operation(
+                    description=f"Mark task '{task.title}' as done",
+                    undo_func=undo_done
+                )
+                
                 # Instead of refreshing the whole list, just remove the task from current view
                 _remove_task_from_state(task_state, task.id)
             else:

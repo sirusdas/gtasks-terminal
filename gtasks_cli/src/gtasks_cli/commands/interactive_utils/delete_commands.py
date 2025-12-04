@@ -23,9 +23,30 @@ def handle_delete_command(task_state, task_manager, command_parts, use_google_ta
             # Confirm deletion
             confirm = click.confirm(f"Are you sure you want to delete task '{task.title}'?")
             if confirm:
+                # Capture original status for undo
+                original_status = task.status
+                
                 success = task_manager.delete_task(task.id)
                 if success:
                     click.echo(f"Task '{task.title}' deleted successfully.")
+                    
+                    # Register undo operation
+                    from gtasks_cli.commands.interactive_utils.undo_manager import undo_manager
+                    
+                    def undo_delete():
+                        try:
+                            # Restore status (undelete)
+                            task_manager.update_task(task.id, status=original_status)
+                            return True
+                        except Exception as e:
+                            logger.error(f"Undo delete failed: {e}")
+                            return False
+
+                    undo_manager.push_operation(
+                        description=f"Delete task '{task.title}'",
+                        undo_func=undo_delete
+                    )
+                    
                     # Instead of refreshing the whole list, just remove the task from current view
                     _remove_task_from_state(task_state, task.id)
                 else:

@@ -119,6 +119,7 @@ def handle_update_tags_command(task_state, task_manager, command_parts, use_goog
         
     updated_count = 0
     changes_log = []  # Track changes for feedback
+    undo_data = [] # List of (task_id, original_notes) for undo
     
     with click.progressbar(task_updates.items(), label="Updating tags", length=len(task_updates)) as bar:
         for tid, ops_list in bar:
@@ -155,6 +156,8 @@ def handle_update_tags_command(task_state, task_manager, command_parts, use_goog
                     task.notes = current_notes
                     logger.debug(f"After update, task.notes='{task.notes}'")
                     updated_count += 1
+                    undo_data.append((task.id, original_notes))
+                    
                     task_num = task_state.get_number_by_task_id(task.id) if task_state else "?"
                     task_title = task.title[:40] + "..." if len(task.title) > 40 else task.title
                     changes_log.append(f"  Task #{task_num} ({task_title}): {', '.join(task_changes)}")
@@ -162,6 +165,36 @@ def handle_update_tags_command(task_state, task_manager, command_parts, use_goog
                 except Exception as e:
                     logger.error(f"Failed to update task {task.id}: {e}")
                     click.echo(f"\nFailed to update task {task.title}: {e}")
+
+    # Register undo operation if changes were made
+    if undo_data:
+        from gtasks_cli.commands.interactive_utils.undo_manager import undo_manager
+        
+        def undo_func():
+            success_count = 0
+            for tid, notes in undo_data:
+                try:
+                    # Update database
+                    task_manager.update_task(tid, notes=notes)
+                    # Update in-memory task if available in current state
+                    if task_state:
+                        # We need to find the task in the current state
+                        # It might be different from the one we have a reference to if state changed
+                        for t in task_state.tasks:
+                            if t.id == tid:
+                                t.notes = notes
+                                break
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"Undo failed for task {tid}: {e}")
+            
+            click.echo(f"Undid tag updates for {success_count} tasks.")
+            return success_count > 0
+
+        undo_manager.push_operation(
+            description=f"Update tags for {len(undo_data)} tasks",
+            undo_func=undo_func
+        )
 
     click.echo(f"\nUpdated tags for {updated_count} tasks:")
     for change in changes_log:

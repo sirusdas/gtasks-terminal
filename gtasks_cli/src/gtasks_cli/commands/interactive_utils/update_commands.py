@@ -27,9 +27,36 @@ def handle_update_command(task_state, task_manager, command_parts, use_google_ta
         if task:
             if use_editor:
                 # Use external editor for editing task
+                # Capture original state
+                original_title = task.title
+                original_description = task.description
+                
                 updated_task = _edit_task_in_editor(task, task_manager)
                 if updated_task:
                     click.echo(f"Task '{updated_task.title}' updated successfully with editor.")
+                    
+                    # Register undo operation
+                    from gtasks_cli.commands.interactive_utils.undo_manager import undo_manager
+                    
+                    def undo_editor_update():
+                        try:
+                            task_manager.update_task(task.id, title=original_title, description=original_description)
+                            # Update in-memory task
+                            for t in task_state.tasks:
+                                if t.id == task.id:
+                                    t.title = original_title
+                                    t.description = original_description
+                                    break
+                            return True
+                        except Exception as e:
+                            logger.error(f"Undo editor update failed: {e}")
+                            return False
+
+                    undo_manager.push_operation(
+                        description=f"Update task '{original_title}' (editor)",
+                        undo_func=undo_editor_update
+                    )
+                    
                     # Refresh the specific task in the task list instead of full refresh
                     _update_single_task_in_state(task_state, updated_task)
                 else:
@@ -41,10 +68,37 @@ def handle_update_command(task_state, task_manager, command_parts, use_google_ta
                 if description == "":
                     description = None
                 
+                # Capture original state
+                original_title = task.title
+                original_description = task.description
+                
                 # Update the task
                 update_success = task_manager.update_task(task.id, title=title, description=description)
                 if update_success:
                     click.echo(f"Task '{title}' updated successfully.")
+                    
+                    # Register undo operation
+                    from gtasks_cli.commands.interactive_utils.undo_manager import undo_manager
+                    
+                    def undo_update():
+                        try:
+                            task_manager.update_task(task.id, title=original_title, description=original_description)
+                            # Update in-memory task
+                            for t in task_state.tasks:
+                                if t.id == task.id:
+                                    t.title = original_title
+                                    t.description = original_description
+                                    break
+                            return True
+                        except Exception as e:
+                            logger.error(f"Undo update failed: {e}")
+                            return False
+
+                    undo_manager.push_operation(
+                        description=f"Update task '{original_title}'",
+                        undo_func=undo_update
+                    )
+
                     # Just update the specific task in our current view instead of refreshing everything
                     # Get the updated task and update it in place
                     updated_tasks = task_manager.list_tasks()
