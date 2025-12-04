@@ -281,6 +281,7 @@ def interactive(ctx, command):
     use_google_tasks = ctx.obj.get('use_google_tasks', False)
     storage_backend = ctx.obj.get('storage_backend', 'sqlite')
     account_name = ctx.obj.get('account_name', None)
+    cli_auto_save = ctx.obj.get('auto_save', None)
     logger.info(f"Starting interactive mode {'(Google Tasks)' if use_google_tasks else '(Local)'}")
     
     # Import here to avoid issues with module loading
@@ -293,6 +294,9 @@ def interactive(ctx, command):
         storage_backend=storage_backend,
         account_name=account_name
     )
+    
+    # Store CLI auto-save option in task_manager for access by interactive utils
+    task_manager.cli_auto_save = cli_auto_save
     
     # Parse initial command if provided
     initial_command = None

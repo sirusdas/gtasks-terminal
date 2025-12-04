@@ -18,6 +18,8 @@ gtasks interactive -- list --filter this_week:created_at --tags "--em:[***]|--ex
 
 gtasks interactive -- list "My Tasks" --filter this_month:created_at --search "apple|Tuku" --order-by title | view
 
+gtasks config set sync.auto_save true
+
 gtasks list --filter 25122023:due_date
 gtasks list --filter 01122023-31122023:created_at
 gtasks interactive -- list --filter 25122023:modified_at

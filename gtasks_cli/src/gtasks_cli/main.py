@@ -20,6 +20,7 @@ from gtasks_cli.commands.deduplicate import deduplicate
 from gtasks_cli.commands.account import account
 from gtasks_cli.commands.advanced_sync import advanced_sync
 from gtasks_cli.commands.generate_report import generate_report
+from gtasks_cli.commands.config import config
 from gtasks_cli.utils.logger import setup_logger
 
 # Set up logger
@@ -31,12 +32,14 @@ logger = setup_logger(__name__)
 @click.option('--storage', '-s', type=click.Choice(['json', 'sqlite']), default='sqlite', 
               help='Storage backend to use (json or sqlite)')
 @click.option('--account', '-a', help='Account name for multi-account support')
+@click.option('--auto-save/--no-auto-save', default=None, help='Enable/disable auto-save to Google Tasks')
 @click.pass_context
-def cli(ctx, google, storage, account):
+def cli(ctx, google, storage, account, auto_save):
     """Google Tasks CLI - A powerful command line interface for managing tasks."""
     ctx.ensure_object(dict)
     ctx.obj['use_google_tasks'] = google
     ctx.obj['storage_backend'] = storage
+    ctx.obj['auto_save'] = auto_save
     
     # Determine the account to use
     if account:
@@ -81,6 +84,7 @@ cli.add_command(deduplicate)
 cli.add_command(account)
 cli.add_command(advanced_sync)
 cli.add_command(generate_report)
+cli.add_command(config)
 
 
 def main():

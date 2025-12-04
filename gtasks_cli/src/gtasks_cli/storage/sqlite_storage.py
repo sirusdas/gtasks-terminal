@@ -289,3 +289,26 @@ class SQLiteStorage:
         except sqlite3.Error as e:
             logger.error(f"Error clearing tasks from database: {e}")
             raise
+
+    def delete_task(self, task_id: str) -> bool:
+        """
+        Delete a task from the database.
+        
+        Args:
+            task_id: ID of the task to delete
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            with sqlite3.connect(self.storage_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+                # Cascade delete should handle task_lists, but let's be safe
+                cursor.execute('DELETE FROM task_lists WHERE task_id = ?', (task_id,))
+                conn.commit()
+                logger.debug(f"Deleted task {task_id} from database")
+                return True
+        except sqlite3.Error as e:
+            logger.error(f"Error deleting task {task_id} from database: {e}")
+            return False

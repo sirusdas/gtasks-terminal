@@ -5,6 +5,7 @@ Task management for the Google Tasks CLI application.
 from typing import List, Optional
 from datetime import datetime
 import traceback
+import uuid
 from gtasks_cli.models.task import Task, Priority, TaskStatus
 from gtasks_cli.storage.local_storage import LocalStorage
 from gtasks_cli.storage.sqlite_storage import SQLiteStorage
@@ -40,11 +41,16 @@ class TaskManager:
         
         logger.debug(f"TaskManager initialized with use_google_tasks={use_google_tasks}, storage_backend={storage_backend}, account_name={account_name}")
         
-        # Initialize Google Tasks client if needed
+        # Always initialize Google Tasks client for auto-save support
+        # Even in local mode, we may need it for auto-save functionality
+        self.google_client = GoogleTasksClient(account_name=account_name)
+        
+        # Initialize sync manager if using Google Tasks directly
         if use_google_tasks:
-            self.google_client = GoogleTasksClient(account_name=account_name)
             self.sync_manager = SyncManager(self.storage, self.google_client)
-            logger.info(f"Google Tasks client initialized for account: {account_name or 'default'}")
+            logger.info(f"Google Tasks mode enabled for account: {account_name or 'default'}")
+        else:
+            logger.info(f"Local mode with auto-save support for account: {account_name or 'default'}")
     
     def create_task(self, title: str, description: Optional[str] = None, 
                    due: Optional[str] = None, priority: Priority = Priority.MEDIUM,

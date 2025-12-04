@@ -1099,3 +1099,112 @@ class AdvancedSyncManager:
         
         # Use the simplified sync approach with pull_only flag
         return self.sync(push_only=False, pull_only=True)
+
+    def sync_single_task(self, task: Task, operation: str, old_task_id: str = None) -> bool:
+        """
+        Sync a single task immediately with Google Tasks.
+        
+        Args:
+            task: The task to sync
+            operation: The operation performed ('create', 'update', 'delete')
+            old_task_id: The original local ID of the task (required for 'create' operation if ID changes)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            logger.info(f"Auto-saving task '{task.title}' (Operation: {operation})")
+            
+            # Connect to Google Tasks
+            if not self.google_client.connect():
+                logger.error("Failed to connect to Google Tasks")
+                return False
+            
+            # Load sync metadata if not already loaded
+            if not self.sync_metadata:
+                self.sync_metadata = self._load_sync_metadata()
+            
+            local_task_versions = self.sync_metadata.get("local_task_versions", {})
+            google_task_versions = self.sync_metadata.get("google_task_versions", {})
+            
+            success = False
+            
+            if operation == 'create':
+                # Create task in Google Tasks
+                # We pass an empty set for signatures as we don't have them loaded efficiently here
+                # and we assume the user wants to create this specific task.
+                new_task = self.google_client.create_task(task, set())
+                
+                if new_task:
+                    logger.info(f"Auto-saved new task to Google: {task.title} (ID: {new_task.id})")
+                    
+                    # If ID changed (which it likely did from UUID to Google ID)
+                    if task.id != new_task.id:
+                        # Delete the old task from local storage
+                        if old_task_id:
+                            self.local_storage.delete_task(old_task_id)
+                        else:
+                            # If old_task_id not provided, try to delete by current task.id (which might be the UUID)
+                            self.local_storage.delete_task(task.id)
+                            
+                        # Update local task object with new ID and other fields from Google
+                        task.id = new_task.id
+                        if not hasattr(task, 'tasklist_id') or not task.tasklist_id:
+                            task.tasklist_id = new_task.tasklist_id
+                            
+                        # Save the updated task to local storage
+                        # We use save_tasks which upserts
+                        self.local_storage.save_tasks([task.model_dump()])
+                        
+                        # Update list mapping if needed
+                        if hasattr(task, 'tasklist_id') and task.tasklist_id:
+                            list_title = self.google_client.get_tasklist_title(task.tasklist_id)
+                            if list_title:
+                                self.local_storage.save_list_mapping({task.id: list_title})
+                                
+                    success = True
+                    
+            elif operation == 'update':
+                updated_task = self.google_client.update_task(task, task.tasklist_id)
+                if updated_task:
+                    logger.info(f"Auto-saved updated task to Google: {task.title}")
+                    success = True
+                    
+            elif operation == 'delete':
+                # For delete, we need the tasklist_id. If it's missing, we can't delete from Google efficiently
+                if hasattr(task, 'tasklist_id') and task.tasklist_id:
+                    if self.google_client.delete_task(task.id, task.tasklist_id):
+                        logger.info(f"Auto-saved deleted task from Google: {task.title}")
+                        success = True
+                else:
+                    logger.warning(f"Cannot auto-save delete for task '{task.title}': Missing tasklist_id")
+                    # If it doesn't have a tasklist_id, maybe it was never synced?
+                    # In that case, success = True effectively (nothing to delete remotely)
+                    success = True
+            
+            if success:
+                # Update metadata
+                if operation == 'delete':
+                    if task.id in local_task_versions:
+                        del local_task_versions[task.id]
+                    if task.id in google_task_versions:
+                        del google_task_versions[task.id]
+                else:
+                    # Calculate new version
+                    version = self._create_task_version(task)
+                    local_task_versions[task.id] = version
+                    google_task_versions[task.id] = version
+                
+                self.sync_metadata["local_task_versions"] = local_task_versions
+                self.sync_metadata["google_task_versions"] = google_task_versions
+                self.sync_metadata["last_sync"] = datetime.utcnow().isoformat()
+                self._save_sync_metadata()
+                
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error during auto-save: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
+        
+        return False

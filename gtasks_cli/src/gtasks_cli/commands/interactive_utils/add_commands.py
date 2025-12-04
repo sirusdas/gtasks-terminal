@@ -28,6 +28,26 @@ def handle_add_command(task_state, task_manager, command_parts, use_google_tasks
     if added_task:
         click.echo(f"Task '{added_task.title}' added successfully.")
         
+        # Check for auto-save (CLI option overrides config)
+        from gtasks_cli.storage.config_manager import ConfigManager
+        config_manager = ConfigManager(account_name=task_manager.account_name)
+        cli_auto_save = getattr(task_manager, 'cli_auto_save', None)
+        
+        # Use CLI option if provided, otherwise use config
+        if cli_auto_save is not None:
+            auto_save = cli_auto_save
+        else:
+            auto_save = config_manager.get('sync.auto_save', False)
+        
+        if not use_google_tasks and auto_save:
+            from gtasks_cli.integrations.advanced_sync_manager import AdvancedSyncManager
+            click.echo("Auto-saving to Google Tasks...")
+            sync_manager = AdvancedSyncManager(task_manager.storage, task_manager.google_client)
+            if sync_manager.sync_single_task(added_task, 'create', old_task_id=added_task.id):
+                 click.echo("✅ Auto-saved to Google Tasks")
+            else:
+                 click.echo("⚠️ Failed to auto-save to Google Tasks")
+        
         # Register undo operation
         from gtasks_cli.commands.interactive_utils.undo_manager import undo_manager
         
