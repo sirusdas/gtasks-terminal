@@ -209,9 +209,31 @@ def show_list_help():
     console.print("  [yellow]--search[/yellow]     Search by title, description or notes")
     console.print("  [yellow]--order-by[/yellow]   Sort by field (due, created, modified, title)")
     
-    console.print("\n[bold]Time Filters:[/bold]")
-    console.print("  today, this_week, this_month, last_month, last_3m, last_6m, last_year")
-
+    console.print("\n[bold]Time Filtering:[/bold]")
+    console.print("Use the [yellow]--filter[/yellow] option to filter tasks by time periods or specific dates:")
+    console.print("  [yellow]Predefined periods:[/yellow] today, this_week, this_month, last_month, last_3m, last_6m, last_year")
+    console.print("  [yellow]Custom date:[/yellow] ddmmyyyy (e.g., 25122025 for Dec 25, 2025)")
+    console.print("  [yellow]Date range:[/yellow] ddmmyyyy-ddmmyyyy (e.g., 01122025-31122025 for Dec 1-31, 2025)")
+    console.print("  [yellow]Field-specific:[/yellow] Add :field_name to filter on specific fields (due_date, created_at, modified_at)")
+    console.print("  Examples:")
+    console.print("    list --filter 25122025              # Tasks for Dec 25, 2025")
+    console.print("    list --filter 01122025-31122025     # Tasks for December 2025")
+    console.print("    list --filter 25122025:due_date     # Tasks due on Dec 25, 2025")
+    console.print("    list --filter this_week:created_at  # Tasks created this week\n")
+                        
+    console.print("[bold]Advanced Search Features:[/bold]")
+    console.print("1. [yellow]Exclusion Search[/yellow]: Prefix your search term with '-' to exclude tasks containing that term")
+    console.print("   Example: search \"-meeting\" - finds tasks that do NOT contain 'meeting'")
+    console.print("2. [yellow]Exact Search[/yellow]: Wrap your search term in double quotes for exact matching")
+    console.print("   Example: search \"\"important task\"\" - finds tasks with the exact title/description 'important task'")
+    console.print("3. [yellow]Special Term Syntax[/yellow]: Use prefixes within search terms for advanced matching")
+    console.print("   [yellow]--em:<term>[/yellow] - Exact match for the specified term")
+    console.print("   Example: search \"--em:apple\" - finds tasks with exact match for 'apple'")
+    console.print("   [yellow]--ex:<term>[/yellow] - Exclude tasks containing the specified term")
+    console.print("   Example: search \"--ex:banana\" - excludes tasks containing 'banana'")
+    console.print("   Combine with OR logic: search \"--em:apple|--em:mango|--ex:rotten\"")
+    console.print("4. [yellow]Combined Search[/yellow]: Use pipe (|) for OR logic with multiple terms")
+    console.print("   Example: search \"work|-personal\" - finds tasks with 'work' but not 'personal'\n")
 
 def show_tags_help():
     """Show help for the tags command"""

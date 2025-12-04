@@ -182,6 +182,44 @@ def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
             
         return False
     
+    # Handle custom date format (ddmmyyyy) or date range (ddmmyyyy-ddmmyyyy)
+    if period.isdigit() and len(period) == 8:  # Single date in ddmmyyyy format
+        try:
+            day = int(period[:2])
+            month = int(period[2:4])
+            year = int(period[4:])
+            target_date = datetime(year, month, day)
+            start_of_day = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_of_day = start_of_day + timedelta(days=1)
+            return [t for t in tasks if _task_in_time_period(t, start_of_day, end_of_day, date_field)]
+        except (ValueError, TypeError):
+            # Fall back to default behavior if date parsing fails
+            pass
+    
+    elif '-' in period and len(period.split('-')[0]) == 8 and len(period.split('-')[1]) == 8:
+        # Date range in ddmmyyyy-ddmmyyyy format
+        try:
+            start_part, end_part = period.split('-')
+            
+            # Parse start date
+            start_day = int(start_part[:2])
+            start_month = int(start_part[2:4])
+            start_year = int(start_part[4:])
+            start_date = datetime(start_year, start_month, start_day)
+            start_of_range = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # Parse end date
+            end_day = int(end_part[:2])
+            end_month = int(end_part[2:4])
+            end_year = int(end_part[4:])
+            end_date = datetime(end_year, end_month, end_day)
+            end_of_range = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+            
+            return [t for t in tasks if _task_in_time_period(t, start_of_range, end_of_range, date_field)]
+        except (ValueError, TypeError, IndexError):
+            # Fall back to default behavior if date parsing fails
+            pass
+    
     if period == 'today':
         start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = start_of_day + timedelta(days=1)
@@ -313,7 +351,9 @@ task_state = TaskState()
                    'To filter by a specific date field, use "this_month:due_date", '
                    '"this_week:created_at", or "this_month:modified_at". '
                    'Supported periods: today, this_week, this_month, last_month, '
-                   'last_3m, last_6m, last_year.')
+                   'last_3m, last_6m, last_year. '
+                   'You can also specify a specific date in ddmmyyyy format (e.g., "25122025") '
+                   'or a date range in ddmmyyyy-ddmmyyyy format (e.g., "01122025-31122025").')
 @click.option('--order-by', '-o', 'order_by',
               type=click.Choice(['due', 'created', 'modified', 'priority', 'title']),
               help='Order tasks by field (due, created, modified, priority, title)')

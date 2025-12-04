@@ -399,6 +399,12 @@ def interactive(ctx, command):
                 
             if not command_input:
                 continue
+            
+            # Check if this is a piped command (contains |)
+            if '|' in command_input:
+                from gtasks_cli.commands.interactive_utils.piped_commands import handle_piped_command
+                if handle_piped_command(command_input, task_state, task_manager, use_google_tasks):
+                    continue
                 
             # Parse command with shlex to handle quotes properly
             try:
