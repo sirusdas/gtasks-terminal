@@ -98,6 +98,9 @@ Then use the `gtasks` command directly:
 gtasks --help
 ```
 
+## TODO
+- [ ] auto-sync on update/add/delete
+
 ## Development
 
 This project follows a modular architecture with clear separation of concerns:

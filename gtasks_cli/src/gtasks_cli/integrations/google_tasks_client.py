@@ -618,8 +618,18 @@ class GoogleTasksClient:
         if task.id:
             google_task['id'] = task.id
             
+        # Handle notes field - combine description and notes (similar to create_task)
+        notes_content = ""
         if task.description:
-            google_task['notes'] = task.description
+            notes_content = task.description
+        if task.notes is not None:  # Check for None specifically to allow empty strings
+            if notes_content:
+                notes_content += "\n" + task.notes
+            else:
+                notes_content = task.notes
+                
+        if notes_content:
+            google_task['notes'] = notes_content
             
         if task.due:
             # Handle due dates properly
