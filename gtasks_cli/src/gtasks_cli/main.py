@@ -21,6 +21,8 @@ from gtasks_cli.commands.account import account
 from gtasks_cli.commands.advanced_sync import advanced_sync
 from gtasks_cli.commands.generate_report import generate_report
 from gtasks_cli.commands.config import config
+from gtasks_cli.commands.ai import ai
+from gtasks_cli.commands.mcp import mcp
 from gtasks_cli.utils.logger import setup_logger
 
 # Set up logger
@@ -85,6 +87,8 @@ cli.add_command(account)
 cli.add_command(advanced_sync)
 cli.add_command(generate_report)
 cli.add_command(config)
+cli.add_command(ai)
+cli.add_command(mcp)
 
 
 def main():

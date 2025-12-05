@@ -241,6 +241,32 @@ The `gtasks advanced-sync` command provides enhanced synchronization capabilitie
 - Duplicate detection and handling
 - Incremental sync for better performance
 
+## 🤖 AI & MCP Integration
+
+### AI Assistant
+Enable AI capabilities to manage your tasks with natural language:
+
+```bash
+# Configure your AI provider (OpenAI, Anthropic, Gemini)
+gtasks ai config --key provider --value openai
+gtasks ai config --key api_key --value sk-...
+gtasks ai config --key model --value gpt-4o
+
+# Ask the AI to perform actions
+gtasks ai ask "Add a task to buy milk tomorrow at 5pm with high priority"
+gtasks ai ask "List my high priority tasks due this week"
+```
+
+### MCP Server
+Expose `gtasks` as a tool for external AI agents (like Claude Desktop):
+
+```bash
+# Start the MCP server
+gtasks mcp
+```
+
+This allows you to connect `gtasks` to any MCP-compliant client.
+
 ## 🛠️ Configuration
 
 The CLI stores configuration and data in the `~/.gtasks` directory:
