@@ -12,6 +12,16 @@ from gtasks_cli.models.task import Task
 from gtasks_cli.utils.tag_extractor import extract_tags_from_task
 from gtasks_cli.commands.interactive_utils.display import display_tasks_grouped_by_list
 from gtasks_cli.commands.interactive_utils.task_details import view_task_details
+import os
+
+# Try to import prompt_toolkit for enhanced command line experience
+try:
+    from prompt_toolkit import prompt
+    from prompt_toolkit.history import FileHistory, InMemoryHistory
+    from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+    HAS_PROMPT_TOOLKIT = True
+except ImportError:
+    HAS_PROMPT_TOOLKIT = False
 
 logger = setup_logger(__name__)
 
@@ -215,10 +225,28 @@ def _enter_tag_filtered_interactive_mode(tasks: List[Task], task_manager, use_go
         # Keep a reference to the original tasks for search operations
         original_tasks = tasks
         
+        # Command history for prompt_toolkit
+        if HAS_PROMPT_TOOLKIT:
+            history_file = os.path.expanduser("~/.gtasks_history")
+            try:
+                history = FileHistory(history_file)
+            except Exception as e:
+                logger.warning(f"Could not create history file at {history_file}: {e}. Using in-memory history.")
+                history = InMemoryHistory()
+
         # Command loop
         while True:
             click.echo("\nEnter command (view <num>, done <num>, delete <num>, update <num>, add, update-status <spec>, update-tags <spec>, search <query>, back, quit):")
-            user_input = click.prompt("Command", type=str, default="", show_default=False).strip()
+            
+            # Use prompt_toolkit for better command line experience if available
+            if HAS_PROMPT_TOOLKIT:
+                user_input = prompt(
+                    "Command: ",
+                    history=history if HAS_PROMPT_TOOLKIT else None,
+                    auto_suggest=AutoSuggestFromHistory() if HAS_PROMPT_TOOLKIT else None
+                ).strip()
+            else:
+                user_input = click.prompt("Command", type=str, default="", show_default=False).strip()
             
             if not user_input:
                 continue

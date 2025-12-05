@@ -4,6 +4,7 @@ List selection commands for interactive mode
 """
 
 import click
+import os
 from typing import List, Dict, Any
 from collections import defaultdict
 
@@ -171,7 +172,7 @@ def _enter_list_filtered_interactive_mode(tasks: List[Task], task_manager, use_g
     # Try to import prompt_toolkit for enhanced command line experience
     try:
         from prompt_toolkit import prompt
-        from prompt_toolkit.history import InMemoryHistory
+        from prompt_toolkit.history import FileHistory, InMemoryHistory
         from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
         HAS_PROMPT_TOOLKIT = True
     except ImportError:
@@ -197,7 +198,12 @@ def _enter_list_filtered_interactive_mode(tasks: List[Task], task_manager, use_g
     
     # Command history for prompt_toolkit
     if HAS_PROMPT_TOOLKIT:
-        history = InMemoryHistory()
+        history_file = os.path.expanduser("~/.gtasks_history")
+        try:
+            history = FileHistory(history_file)
+        except Exception as e:
+            logger.warning(f"Could not create history file at {history_file}: {e}. Using in-memory history.")
+            history = InMemoryHistory()
     
     click.echo("\n" + "="*50)
     click.echo("Entering list-filtered interactive mode")

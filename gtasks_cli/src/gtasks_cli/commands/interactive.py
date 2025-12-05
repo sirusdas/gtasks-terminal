@@ -29,7 +29,7 @@ logger = setup_logger(__name__)
 # Try to import prompt_toolkit for better command line experience
 try:
     from prompt_toolkit import prompt
-    from prompt_toolkit.history import InMemoryHistory
+    from prompt_toolkit.history import FileHistory, InMemoryHistory
     from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
     HAS_PROMPT_TOOLKIT = True
 except ImportError:
@@ -388,7 +388,12 @@ def interactive(ctx, command):
     
     # Command history for prompt_toolkit
     if HAS_PROMPT_TOOLKIT:
-        history = InMemoryHistory()
+        history_file = os.path.expanduser("~/.gtasks_history")
+        try:
+            history = FileHistory(history_file)
+        except Exception as e:
+            logger.warning(f"Could not create history file at {history_file}: {e}. Using in-memory history.")
+            history = InMemoryHistory()
     
     # Enter interactive loop
     while True:
