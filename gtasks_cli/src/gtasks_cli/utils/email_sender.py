@@ -1,7 +1,11 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 import os
+import re
+from datetime import datetime
 from gtasks_cli.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -15,14 +19,157 @@ class EmailSender:
         self.smtp_server = "smtp.gmail.com"
         self.smtp_port = 587
 
-    def send_email(self, to_email: str, subject: str, body: str):
+    def _strip_ansi_codes(self, text: str) -> str:
+        """Remove ANSI color codes from text."""
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        return ansi_escape.sub('', text)
+
+    def _is_tag_only_note(self, note: str) -> bool:
+        """Check if note contains only tags like [tag1][tag2]."""
+        if not note:
+            return False
+        # Remove all [tag] patterns and check if anything remains
+        cleaned = re.sub(r'\[.*?\]', '', note).strip()
+        return len(cleaned) == 0
+
+    def _convert_report_to_html(self, plain_text: str) -> str:
+        """Convert plain text report to beautiful HTML email."""
+        # Strip ANSI codes first
+        text = self._strip_ansi_codes(plain_text)
+        
+        # Parse the report structure
+        lines = text.split('\n')
+        html_body = []
+        
+        in_section = False
+        current_section = ""
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Main title (first line with ===)
+            if '=' * 20 in line and not html_body:
+                continue
+            elif stripped and not html_body and '=' not in line:
+                html_body.append(f'<h1 style="color: #1a1a1a; margin: 0 0 8px 0; font-size: 22px; font-weight: 700;">{stripped}</h1>')
+            elif '=' * 20 in line:
+                continue
+            
+            # Metadata (Generated at, Total Tasks)
+            elif stripped.startswith('Generated at:'):
+                date_str = stripped.replace('Generated at:', '').strip()
+                try:
+                    dt = datetime.fromisoformat(date_str)
+                    formatted_date = dt.strftime('%b %d, %Y at %I:%M %p')
+                    html_body.append(f'<div style="color: #666; font-size: 13px; margin-bottom: 4px;">📅 {formatted_date}</div>')
+                except:
+                    html_body.append(f'<div style="color: #666; font-size: 13px; margin-bottom: 4px;">📅 {stripped.replace("Generated at:", "").strip()}</div>')
+            elif stripped.startswith('Total Tasks:'):
+                count = stripped.replace('Total Tasks:', '').strip()
+                html_body.append(f'<div style="color: #666; font-size: 13px; margin-bottom: 20px;">📊 <strong>{count}</strong> tasks</div>')
+            elif '-' * 20 in line:
+                continue
+            
+            # Section headers (SECTION 1, SECTION 2, etc.)
+            elif stripped.startswith('SECTION'):
+                if in_section:
+                    html_body.append('</div>')
+                in_section = True
+                current_section = stripped
+                section_color = '#2563eb' if '1' in stripped else '#7c3aed' if '2' in stripped else '#dc2626'
+                html_body.append(f'''
+                <div style="margin: 24px 0 16px 0; padding: 12px 16px; background: {section_color}; border-radius: 6px;">
+                    <h2 style="color: white; margin: 0; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">{stripped}</h2>
+                </div>
+                <div style="margin-bottom: 20px;">
+                ''')
+            
+            # List/Tag/Group headers
+            elif stripped.startswith('LIST:') or stripped.startswith('TAG:') or stripped.startswith('GROUP:'):
+                prefix = stripped.split(':')[0]
+                name = ':'.join(stripped.split(':')[1:]).strip()
+                icon = '📋' if prefix == 'LIST' else '🏷️' if prefix == 'TAG' else '📁'
+                html_body.append(f'''
+                <div style="margin: 16px 0 8px 0; padding: 8px 12px; background: #f3f4f6; border-left: 3px solid #6b7280; border-radius: 4px;">
+                    <div style="color: #374151; font-size: 14px; font-weight: 600;">{icon} {name}</div>
+                </div>
+                ''')
+            
+            # Task items
+            elif stripped.startswith('Task:'):
+                # Parse task status and title
+                task_line = stripped.replace('Task:', '').strip()
+                is_completed = '[x]' in task_line or '[X]' in task_line
+                
+                # Remove status marker
+                task_title = re.sub(r'\[[ xX]\]\s*', '', task_line)
+                
+                status_icon = '✅' if is_completed else '⏳'
+                status_color = '#10b981' if is_completed else '#f59e0b'
+                text_decoration = 'line-through' if is_completed else 'none'
+                opacity = '0.7' if is_completed else '1'
+                
+                html_body.append(f'''
+                <div style="margin: 8px 0; padding: 10px 12px; background: white; border-left: 3px solid {status_color}; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                    <div style="display: flex; align-items: start; gap: 8px;">
+                        <span style="flex-shrink: 0; font-size: 16px;">{status_icon}</span>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="color: #1f2937; font-size: 14px; font-weight: 500; text-decoration: {text_decoration}; opacity: {opacity}; word-wrap: break-word;">{task_title}</div>
+                ''')
+            
+            # Task details (Details, Notes, Due, Created, Modified)
+            elif stripped.startswith('Details:') or stripped.startswith('Notes:') or stripped.startswith('Due:') or stripped.startswith('Created:') or stripped.startswith('Modified:'):
+                prefix = stripped.split(':')[0]
+                content = ':'.join(stripped.split(':')[1:]).strip()
+                
+                # Skip tag-only notes
+                if prefix == 'Notes' and self._is_tag_only_note(content):
+                    continue
+                
+                icon_map = {
+                    'Details': '📝',
+                    'Notes': '💬',
+                    'Due': '📅',
+                    'Created': '🆕',
+                    'Modified': '✏️'
+                }
+                icon = icon_map.get(prefix, '•')
+                
+                color = '#dc2626' if prefix == 'Due' else '#6b7280'
+                font_weight = '500' if prefix == 'Due' else '400'
+                
+                html_body.append(f'''
+                            <div style="margin-top: 6px; color: {color}; font-size: 12px; font-weight: {font_weight}; display: flex; align-items: start; gap: 4px;">
+                                <span style="flex-shrink: 0;">{icon}</span>
+                                <span style="word-wrap: break-word; flex: 1; min-width: 0;">{content}</span>
+                            </div>
+                ''')
+            
+            # Close task div on empty line after task details
+            elif not stripped and html_body and '<div style="margin: 8px 0; padding: 10px 12px;' in ''.join(html_body[-10:]):
+                html_body.append('                        </div>')
+                html_body.append('                    </div>')
+                html_body.append('                </div>')
+            
+            # No tags/groups found message
+            elif '(No tags found' in stripped or '(No groups found' in stripped:
+                html_body.append(f'<div style="color: #9ca3af; font-style: italic; font-size: 13px; margin: 12px 0; padding: 8px;">{stripped}</div>')
+        
+        # Close any open section
+        if in_section:
+            html_body.append('</div>')
+        
+        return '\n'.join(html_body)
+
+    def send_email(self, to_email: str, subject: str, body: str, html: bool = True):
         """
-        Send an email.
+        Send an email with optional HTML formatting.
         
         Args:
             to_email: Recipient email address
             subject: Email subject
-            body: Email body content
+            body: Email body content (plain text or will be converted to HTML)
+            html: Whether to send as HTML email (default: True)
         """
         if not self.email_address or not self.password:
             logger.warning("Email credentials not found. Set GTASKS_EMAIL_USER and GTASKS_EMAIL_PASSWORD environment variables.")
@@ -30,12 +177,61 @@ class EmailSender:
             return False
 
         try:
-            msg = MIMEMultipart()
+            msg = MIMEMultipart('alternative')
             msg['From'] = self.email_address
             msg['To'] = to_email
             msg['Subject'] = subject
 
-            msg.attach(MIMEText(body, 'plain'))
+            # Create plain text version (strip ANSI codes)
+            plain_text = self._strip_ansi_codes(body)
+            
+            # Attach plain text version
+            msg.attach(MIMEText(plain_text, 'plain'))
+            
+            # If HTML is enabled, create and attach HTML version
+            if html:
+                html_content = self._convert_report_to_html(body)
+                
+                # Wrap in full HTML template
+                html_email = f'''
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{subject}</title>
+    <style>
+        @media only screen and (max-width: 600px) {{
+            .container {{ padding: 12px !important; }}
+            .header {{ padding: 12px !important; }}
+        }}
+    </style>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.5; color: #1f2937; background-color: #f9fafb;">
+    <div class="container" style="width: 100%; max-width: 100%; padding: 16px; box-sizing: border-box;">
+        <div style="background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 1200px; margin: 0 auto;">
+            <div class="header" style="border-bottom: 2px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 20px;">
+                <div style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); color: white; padding: 6px 14px; border-radius: 5px; font-weight: 600; font-size: 13px;">
+                    📊 GTasks Report
+                </div>
+            </div>
+            
+            {html_content}
+            
+            <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center;">
+                <div style="color: #9ca3af; font-size: 11px; margin: 4px 0;">
+                    Generated by GTasks CLI
+                </div>
+                <div style="color: #d1d5db; font-size: 10px; margin: 4px 0;">
+                    This is an automated email. Please do not reply.
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+                '''
+                msg.attach(MIMEText(html_email, 'html'))
 
             server = smtplib.SMTP(self.smtp_server, self.smtp_port)
             server.starttls()

@@ -514,6 +514,18 @@ class CustomFilteredReport(BaseReport):
                         details.append(c(f"  Due: {due_date}", WARNING))
                     except:
                         pass
+                if task.get('created_at'):
+                    try:
+                        created_date = datetime.fromisoformat(task['created_at']).strftime('%Y-%m-%d %H:%M')
+                        details.append(c(f"  Created: {created_date}", DIM))
+                    except:
+                        pass
+                if task.get('modified_at'):
+                    try:
+                        modified_date = datetime.fromisoformat(task['modified_at']).strftime('%Y-%m-%d %H:%M')
+                        details.append(c(f"  Modified: {modified_date}", DIM))
+                    except:
+                        pass
                 
                 if details:
                     lines.extend(details)
@@ -579,6 +591,24 @@ class CustomFilteredReport(BaseReport):
                     details.append(c(f"  Details: {task['description']}", DIM))
                 if task.get('notes'):
                     details.append(c(f"  Notes: {task['notes']}", DIM))
+                if task.get('due'):
+                    try:
+                        due_date = datetime.fromisoformat(task['due']).strftime('%Y-%m-%d')
+                        details.append(c(f"  Due: {due_date}", WARNING))
+                    except:
+                        pass
+                if task.get('created_at'):
+                    try:
+                        created_date = datetime.fromisoformat(task['created_at']).strftime('%Y-%m-%d %H:%M')
+                        details.append(c(f"  Created: {created_date}", DIM))
+                    except:
+                        pass
+                if task.get('modified_at'):
+                    try:
+                        modified_date = datetime.fromisoformat(task['modified_at']).strftime('%Y-%m-%d %H:%M')
+                        details.append(c(f"  Modified: {modified_date}", DIM))
+                    except:
+                        pass
                 
                 if details:
                     lines.extend(details)
@@ -615,6 +645,24 @@ class CustomFilteredReport(BaseReport):
                         details.append(c(f"  Details: {task['description']}", DIM))
                     if task.get('notes'):
                         details.append(c(f"  Notes: {task['notes']}", DIM))
+                    if task.get('due'):
+                        try:
+                            due_date = datetime.fromisoformat(task['due']).strftime('%Y-%m-%d')
+                            details.append(c(f"  Due: {due_date}", WARNING))
+                        except:
+                            pass
+                    if task.get('created_at'):
+                        try:
+                            created_date = datetime.fromisoformat(task['created_at']).strftime('%Y-%m-%d %H:%M')
+                            details.append(c(f"  Created: {created_date}", DIM))
+                        except:
+                            pass
+                    if task.get('modified_at'):
+                        try:
+                            modified_date = datetime.fromisoformat(task['modified_at']).strftime('%Y-%m-%d %H:%M')
+                            details.append(c(f"  Modified: {modified_date}", DIM))
+                        except:
+                            pass
                     
                     if details:
                         lines.extend(details)
