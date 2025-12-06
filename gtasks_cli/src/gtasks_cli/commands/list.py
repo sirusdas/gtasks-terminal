@@ -39,8 +39,15 @@ def display_tasks_grouped_by_list(tasks: List[Task]):
             # Format due date
             due_str = _format_due_date(task.due)
             
+            # Format created and modified dates
+            dates_str = ""
+            if task.created_at:
+                dates_str += f" [C:{task.created_at.strftime('%Y-%m-%d')}]"
+            if task.modified_at:
+                dates_str += f" [M:{task.modified_at.strftime('%Y-%m-%d')}]"
+            
             # Build the task line
-            task_line = f"{i:2d}. {priority_icon} {task.title}{due_str}"
+            task_line = f"{i:2d}. {priority_icon} {task.title}{due_str}{dates_str}"
             
             # Color code task status
             task_color = _get_status_color(task.status)

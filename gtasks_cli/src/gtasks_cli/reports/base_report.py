@@ -41,7 +41,7 @@ class BaseReport(ABC):
         pass
     
     @abstractmethod
-    def export(self, data: Dict[str, Any], format: str = 'txt') -> str:
+    def export(self, data: Dict[str, Any], format: str = 'txt', **kwargs) -> str:
         """
         Export the report in the specified format.
         
@@ -124,7 +124,7 @@ class ReportManager:
             logger.error(f"Error generating report '{report_id}': {e}")
             return None
     
-    def export_report(self, report_id: str, data: Dict[str, Any], format: str = 'txt') -> Optional[str]:
+    def export_report(self, report_id: str, data: Dict[str, Any], format: str = 'txt', **kwargs) -> Optional[str]:
         """
         Export a report in the specified format.
         
@@ -143,7 +143,7 @@ class ReportManager:
         
         try:
             logger.info(f"Exporting report: {report.name} in {format} format")
-            return report.export(data, format)
+            return report.export(data, format, **kwargs)
         except Exception as e:
             logger.error(f"Error exporting report '{report_id}': {e}")
             return None

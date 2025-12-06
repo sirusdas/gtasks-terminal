@@ -20,7 +20,9 @@ from gtasks_cli.reports.task_completion_rate_report import TaskCompletionRateRep
 from gtasks_cli.reports.future_timeline_report import FutureTimelineReport
 from gtasks_cli.reports.timeline_report import TimelineReport
 from gtasks_cli.reports.organized_tasks_report import OrganizedTasksReport
+from gtasks_cli.reports.custom_filtered_report import CustomFilteredReport
 from gtasks_cli.utils.tag_extractor import extract_tags_from_task
+from gtasks_cli.utils.email_sender import EmailSender
 
 logger = setup_logger(__name__)
 
@@ -41,8 +43,13 @@ logger = setup_logger(__name__)
 @click.option('--only-title', is_flag=True, help='Show only task titles, no descriptions or notes')
 @click.option('--no-other-tasks', is_flag=True, help='Do not show Other Tasks (not matching any category)')
 @click.option('--only-pending', is_flag=True, help='Show only pending tasks, exclude completed and deleted tasks')
+@click.option('--filter', 'filter_str', help='Dynamic filter string (e.g., this_week:created_at)')
+@click.option('--order-by', 'order_by', help='Field to order by (e.g., modified_at)')
+@click.option('--output-tags', 'output_tags', help='Filter tags for output display (e.g., em:****,aa|ex:my,p,m)')
+@click.option('--output-lists', 'output_lists', help='Filter lists for output display (e.g., em:List1,List2|ex:List3)')
+@click.option('--output-tasks', 'output_tasks', help='Filter tasks for output display (e.g., em:Task1|ex:Task2)')
 @click.pass_context
-def generate_report(ctx, report_ids, list_reports, list_tags, email, export, output, days, start_date, end_date, days_ahead, tags, with_all_tags, only_title, no_other_tasks, only_pending):
+def generate_report(ctx, report_ids, list_reports, list_tags, email, export, output, days, start_date, end_date, days_ahead, tags, with_all_tags, only_title, no_other_tasks, only_pending, filter_str, order_by, output_tags, output_lists, output_tasks):
     """Generate reports based on task data."""
     
     # Initialize report manager and register all reports
@@ -56,6 +63,7 @@ def generate_report(ctx, report_ids, list_reports, list_tags, email, export, out
     report_manager.register_report('rp7', FutureTimelineReport())
     report_manager.register_report('rp8', TimelineReport())
     report_manager.register_report('rp9', OrganizedTasksReport())
+    report_manager.register_report('rp10', CustomFilteredReport())
     
     # Handle list option
     if list_reports:
@@ -113,8 +121,13 @@ def generate_report(ctx, report_ids, list_reports, list_tags, email, export, out
     
     # Parse tags if provided
     tag_list = []
+    is_complex_tag_filter = False
     if tags:
-        tag_list = [tag.strip() for tag in tags.split(',')]
+        # Check for complex filter indicators: pipe separator or em/ex/group prefixes
+        if '|' in tags or 'em:' in tags or 'ex:' in tags or 'group:' in tags:
+            is_complex_tag_filter = True
+        else:
+            tag_list = [tag.strip() for tag in tags.split(',')]
     
     # Get storage backend from context
     storage_backend = ctx.obj.get('storage_backend', 'json')
@@ -143,8 +156,8 @@ def generate_report(ctx, report_ids, list_reports, list_tags, email, export, out
         tasks = [task for task in tasks if task.status == TaskStatus.PENDING]
         logger.info(f"Filtered to {len(tasks)} pending tasks")
     
-    # Filter tasks by tags if specified
-    if tag_list:
+    # Filter tasks by tags if specified (only for simple tag filtering)
+    if tag_list and not is_complex_tag_filter:
         from gtasks_cli.utils.tag_extractor import task_has_any_tag, task_has_all_tags
         filtered_tasks = []
         if with_all_tags:
@@ -182,11 +195,22 @@ def generate_report(ctx, report_ids, list_reports, list_tags, email, export, out
             kwargs['only_title'] = only_title
             kwargs['no_other_tasks'] = no_other_tasks
             kwargs['only_pending'] = only_pending
+        elif report_id == 'rp10': # Custom Filtered Report
+            kwargs['filter_str'] = filter_str
+            kwargs['tags_filter'] = tags if is_complex_tag_filter else None
+            kwargs['order_by'] = order_by
+            kwargs['output_tags'] = output_tags
+            kwargs['output_lists'] = output_lists
+            kwargs['output_tasks'] = output_tasks
         
         # Generate the report
         try:
             report_data = report_manager.generate_report(report_id, tasks, **kwargs)
-            exported_report = report_manager.export_report(report_id, report_data, export)
+            
+            # Determine if we should use color
+            use_color = not output
+            
+            exported_report = report_manager.export_report(report_id, report_data, export, color=use_color)
             
             # Output the report
             if output:
@@ -198,6 +222,19 @@ def generate_report(ctx, report_ids, list_reports, list_tags, email, export, out
                 click.echo(f"REPORT: {report_id}")
                 click.echo(f"{'='*60}")
                 click.echo(exported_report)
+            
+            # Send email if requested
+            if email:
+                click.echo(f"Sending report {report_id} to {email}...")
+                sender = EmailSender()
+                subject = f"GTasks Report: {report_id}"
+                if isinstance(report_data, dict) and 'title' in report_data:
+                    subject = report_data['title']
+                
+                if sender.send_email(email, subject, exported_report):
+                    click.echo(f"Report sent to {email}")
+                else:
+                    click.echo(f"Failed to send email to {email}")
         except Exception as e:
             logger.error(f"Error generating report '{report_id}': {e}")
             click.echo(f"Failed to generate report: {report_id}")

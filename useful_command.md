@@ -28,3 +28,14 @@ sqlite3 /Users/int/.gtasks/personal/tasks.db "SELECT COUNT(*) FROM tasks;"
 sqlite3 /Users/int/.gtasks/personal/tasks.db "SELECT COUNT(DISTINCT id) FROM tasks;"
 sqlite3 /Users/int/.gtasks/personal/tasks.db "SELECT title, COUNT(*) as count FROM tasks GROUP BY title HAVING COUNT(*) > 1 ORDER BY count DESC
  LIMIT 10;"
+
+ --------------- USEFUL REPORTS COMMANDS ---------------
+
+ gtasks generate-report rp10 --filter this_week:created_at --tags "--em:[***]|--ex:[cr]" --output-tags "em:***|ex:my" --output-lists "ex:My Tasks" --output-tasks "ex:Tracker"
+
+
+gtasks generate-report rp10 --filter past3weeks:created_at --tags "--em:[***]|--ex:[cr]" --output-tags "em:***|ex:my" --output-lists "ex:My Tasks,Raju Da" --output-tasks "ex:Tracker"
+
+gtasks generate-report rp10 --filter past3weeks:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending
+
+gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending

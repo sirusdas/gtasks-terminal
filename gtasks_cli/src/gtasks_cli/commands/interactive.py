@@ -179,8 +179,15 @@ def _display_tasks_grouped_by_list(tasks: List[Task]) -> List[Task]:
                     logger.debug(f"Error formatting due date: {e}")
                     due_str = ""
             
+            # Format created and modified dates
+            dates_str = ""
+            if task.created_at:
+                dates_str += f" [dim]C:{task.created_at.strftime('%Y-%m-%d')}[/dim]"
+            if task.modified_at:
+                dates_str += f" [dim]M:{task.modified_at.strftime('%Y-%m-%d')}[/dim]"
+            
             # Build the task line
-            task_line = f"{global_index:2d}. {priority_icon} {task.title}{due_str}"
+            task_line = f"{global_index:2d}. {priority_icon} {task.title}{due_str}{dates_str}"
             
             # Color code task status
             status_colors = {

@@ -41,6 +41,8 @@ def display_tasks_grouped_by_list(tasks: List[Task]) -> None:
         table.add_column("Due Date", min_width=12)
         table.add_column("Priority", min_width=8)
         table.add_column("Status", min_width=12)
+        table.add_column("Created", style="dim", min_width=10)
+        table.add_column("Modified", style="dim", min_width=10)
         
         # Add tasks to table
         for task in list_tasks:
@@ -105,7 +107,9 @@ def display_tasks_grouped_by_list(tasks: List[Task]) -> None:
                 task_title,
                 due_date_str,
                 priority_str,
-                status_str
+                status_str,
+                task.created_at.strftime('%Y-%m-%d') if task.created_at else "",
+                task.modified_at.strftime('%Y-%m-%d') if task.modified_at else ""
             )
         
         console.print(table)
@@ -213,6 +217,12 @@ def display_tasks_compact(tasks: List[Task]) -> None:
                 'deleted': 'red'
             }
             metadata_parts.append(f"[{status_colors.get(status_value, 'white')}]{status_value.replace('_', ' ').title()}[/{status_colors.get(status_value, 'white')}]")
+            
+            # Created and Modified
+            if task.created_at:
+                metadata_parts.append(f"[dim]C:{task.created_at.strftime('%Y-%m-%d')}[/dim]")
+            if task.modified_at:
+                metadata_parts.append(f"[dim]M:{task.modified_at.strftime('%Y-%m-%d')}[/dim]")
             
             # Combine metadata
             metadata_line = " | ".join(metadata_parts)
@@ -326,6 +336,12 @@ def display_tasks_with_details(tasks: List[Task]) -> None:
                 'deleted': 'red'
             }
             metadata_parts.append(f"[{status_colors.get(status_value, 'white')}]{status_value.replace('_', ' ').title()}[/{status_colors.get(status_value, 'white')}]")
+            
+            # Created and Modified
+            if task.created_at:
+                metadata_parts.append(f"[dim]Created: {task.created_at.strftime('%Y-%m-%d')}[/dim]")
+            if task.modified_at:
+                metadata_parts.append(f"[dim]Modified: {task.modified_at.strftime('%Y-%m-%d')}[/dim]")
             
             # Combine metadata
             metadata_line = " | ".join(metadata_parts)
