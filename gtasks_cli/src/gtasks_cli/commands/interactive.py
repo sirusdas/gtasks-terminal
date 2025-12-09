@@ -179,8 +179,12 @@ def _display_tasks_grouped_by_list(tasks: List[Task]) -> List[Task]:
                     logger.debug(f"Error formatting due date: {e}")
                     due_str = ""
             
-            # Format created and modified dates
+            # Format created, modified, and due dates
             dates_str = ""
+            if task.due:
+                due_date_str = task.due.strftime('%Y-%m-%d') if hasattr(task.due, 'strftime') else str(task.due)[:10]
+                dates_str += f" [dim]D:{due_date_str}[/dim]"
+            
             if task.created_at:
                 dates_str += f" [dim]C:{task.created_at.strftime('%Y-%m-%d')}[/dim]"
             if task.modified_at:

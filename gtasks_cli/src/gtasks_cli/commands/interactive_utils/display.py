@@ -98,8 +98,12 @@ def display_tasks_grouped_by_list(tasks, start_number=1):
             if task.is_recurring:
                 recurring_info = " [green]🔁[/green]"
             
-            # Format created and modified dates
+            # Format created, modified, and due dates
             dates_info = ""
+            if task.due:
+                due_str = task.due.strftime('%Y-%m-%d') if hasattr(task.due, 'strftime') else str(task.due)[:10]
+                dates_info += f" [dim]D:{due_str}[/dim]"
+            
             if task.created_at:
                 created_str = task.created_at.strftime('%Y-%m-%d')
                 dates_info += f" [dim]C:{created_str}[/dim]"

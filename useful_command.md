@@ -38,4 +38,17 @@ gtasks generate-report rp10 --filter past3weeks:created_at --tags "--em:[***]|--
 
 gtasks generate-report rp10 --filter past3weeks:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending
 
-gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending
+gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
+
+gtasks generate-report rp10 --filter yesterday:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
+
+gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc" --email prasenjitk.deb@intglobal.com
+
+------------ Suresh Commands --------------
+gtasks generate-report rp10 --filter past2weeks:created_at --tags "my|--ex:cr" --output-tags "--ex:tp1,R,PH|--group:1[my,***,urgent],2[prod]" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
+
+gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc" --email suresh.das@intglobal.com
+
+
+gtasks interactive -- list --filter today:created_at --search "[prasen" --order-by "due_date:desc"
+gtasks interactive -- list --filter 08122025:due_date --search "[prasen" --order-by "due_date:desc"

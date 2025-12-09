@@ -24,13 +24,28 @@ class EmailSender:
         ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
         return ansi_escape.sub('', text)
 
-    def _is_tag_only_note(self, note: str) -> bool:
-        """Check if note contains only tags like [tag1][tag2]."""
+    def _clean_note_tags(self, note: str) -> str:
+        """Remove tags from notes intelligently.
+        
+        - If note contains only tags like [tag1][tag2], return empty string
+        - If note has tags at the end after content, remove only the trailing tags
+        - Otherwise, keep the note as-is
+        """
         if not note:
-            return False
-        # Remove all [tag] patterns and check if anything remains
+            return ""
+        
+        # Check if note contains only tags (and whitespace)
         cleaned = re.sub(r'\[.*?\]', '', note).strip()
-        return len(cleaned) == 0
+        if len(cleaned) == 0:
+            # Note contains only tags, remove entirely
+            return ""
+        
+        # Remove trailing tags (tags at the end after newlines or content)
+        # Pattern: match tags at the end of the string, possibly after newlines
+        # This handles cases like "content\n\n[tag1][tag2]" or "content [tag1][tag2]"
+        note_cleaned = re.sub(r'\s*(\[.*?\]\s*)+$', '', note).strip()
+        
+        return note_cleaned if note_cleaned else ""
 
     def _convert_report_to_html(self, plain_text: str) -> str:
         """Convert plain text report to beautiful HTML email."""
@@ -43,16 +58,44 @@ class EmailSender:
         
         in_section = False
         current_section = ""
+        in_task = False
+        collecting_notes = False
+        notes_buffer = []
         
-        for line in lines:
+        def close_current_task():
+            nonlocal in_task, notes_buffer
+            if in_task:
+                if notes_buffer:
+                    notes_text = '\n'.join(notes_buffer)
+                    notes_cleaned = self._clean_note_tags(notes_text)
+                    if notes_cleaned:
+                        html_body.append(f'''
+                        <div style="margin-top: 6px; color: #6b7280; font-size: 12px; display: flex; align-items: start; gap: 4px;">
+                            <span style="flex-shrink: 0;">💬</span>
+                            <span style="word-wrap: break-word; flex: 1; min-width: 0; white-space: pre-wrap;">{notes_cleaned}</span>
+                        </div>
+                        ''')
+                    notes_buffer = []
+                html_body.append('                        </div>')
+                html_body.append('                    </div>')
+                html_body.append('                </div>')
+                in_task = False
+
+        i = 0
+        while i < len(lines):
+            line = lines[i]
             stripped = line.strip()
             
             # Main title (first line with ===)
             if '=' * 20 in line and not html_body:
+                i += 1
                 continue
             elif stripped and not html_body and '=' not in line:
                 html_body.append(f'<h1 style="color: #1a1a1a; margin: 0 0 8px 0; font-size: 22px; font-weight: 700;">{stripped}</h1>')
+                i += 1
+                continue
             elif '=' * 20 in line:
+                i += 1
                 continue
             
             # Metadata (Generated at, Total Tasks)
@@ -64,14 +107,20 @@ class EmailSender:
                     html_body.append(f'<div style="color: #666; font-size: 13px; margin-bottom: 4px;">📅 {formatted_date}</div>')
                 except:
                     html_body.append(f'<div style="color: #666; font-size: 13px; margin-bottom: 4px;">📅 {stripped.replace("Generated at:", "").strip()}</div>')
+                i += 1
+                continue
             elif stripped.startswith('Total Tasks:'):
                 count = stripped.replace('Total Tasks:', '').strip()
                 html_body.append(f'<div style="color: #666; font-size: 13px; margin-bottom: 20px;">📊 <strong>{count}</strong> tasks</div>')
+                i += 1
+                continue
             elif '-' * 20 in line:
+                i += 1
                 continue
             
             # Section headers (SECTION 1, SECTION 2, etc.)
             elif stripped.startswith('SECTION'):
+                close_current_task()
                 if in_section:
                     html_body.append('</div>')
                 in_section = True
@@ -83,9 +132,12 @@ class EmailSender:
                 </div>
                 <div style="margin-bottom: 20px;">
                 ''')
+                i += 1
+                continue
             
             # List/Tag/Group headers
             elif stripped.startswith('LIST:') or stripped.startswith('TAG:') or stripped.startswith('GROUP:'):
+                close_current_task()
                 prefix = stripped.split(':')[0]
                 name = ':'.join(stripped.split(':')[1:]).strip()
                 icon = '📋' if prefix == 'LIST' else '🏷️' if prefix == 'TAG' else '📁'
@@ -94,9 +146,13 @@ class EmailSender:
                     <div style="color: #374151; font-size: 14px; font-weight: 600;">{icon} {name}</div>
                 </div>
                 ''')
+                i += 1
+                continue
             
             # Task items
             elif stripped.startswith('Task:'):
+                close_current_task()
+                
                 # Parse task status and title
                 task_line = stripped.replace('Task:', '').strip()
                 is_completed = '[x]' in task_line or '[X]' in task_line
@@ -104,56 +160,73 @@ class EmailSender:
                 # Remove status marker
                 task_title = re.sub(r'\[[ xX]\]\s*', '', task_line)
                 
+                # Look ahead for dates on next line
+                dates_str = ""
+                if i + 1 < len(lines) and lines[i + 1].strip().startswith('📅'):
+                    next_line = lines[i + 1].strip()
+                    if '|' in next_line:
+                        dates_part, notes_part = next_line.split('|', 1)
+                        dates_str = dates_part.replace('📅', '').strip()
+                        # Start collecting notes from this line
+                        notes_buffer = [notes_part.strip()] if notes_part.strip() else []
+                        collecting_notes = True
+                        i += 1  # Skip the date/notes line since we processed it
+                    else:
+                        dates_str = next_line.replace('📅', '').strip()
+                        collecting_notes = False
+                        i += 1  # Skip the dates line
+                
                 status_icon = '✅' if is_completed else '⏳'
                 status_color = '#10b981' if is_completed else '#f59e0b'
                 text_decoration = 'line-through' if is_completed else 'none'
                 opacity = '0.7' if is_completed else '1'
+                
+                # Build task title with inline dates
+                title_html = f'<span style="text-decoration: {text_decoration}; opacity: {opacity};">{task_title}</span>'
+                if dates_str:
+                    title_html += f' <span style="color: #9ca3af; font-size: 11px; font-weight: 400;">({dates_str})</span>'
                 
                 html_body.append(f'''
                 <div style="margin: 8px 0; padding: 10px 12px; background: white; border-left: 3px solid {status_color}; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                     <div style="display: flex; align-items: start; gap: 8px;">
                         <span style="flex-shrink: 0; font-size: 16px;">{status_icon}</span>
                         <div style="flex: 1; min-width: 0;">
-                            <div style="color: #1f2937; font-size: 14px; font-weight: 500; text-decoration: {text_decoration}; opacity: {opacity}; word-wrap: break-word;">{task_title}</div>
+                            <div style="color: #1f2937; font-size: 14px; font-weight: 500; word-wrap: break-word;">{title_html}</div>
                 ''')
+                in_task = True
+                i += 1
+                continue
             
-            # Task details (Details, Notes, Due, Created, Modified)
-            elif stripped.startswith('Details:') or stripped.startswith('Notes:') or stripped.startswith('Due:') or stripped.startswith('Created:') or stripped.startswith('Modified:'):
-                prefix = stripped.split(':')[0]
-                content = ':'.join(stripped.split(':')[1:]).strip()
-                
-                # Skip tag-only notes
-                if prefix == 'Notes' and self._is_tag_only_note(content):
-                    continue
-                
-                icon_map = {
-                    'Details': '📝',
-                    'Notes': '💬',
-                    'Due': '📅',
-                    'Created': '🆕',
-                    'Modified': '✏️'
-                }
-                icon = icon_map.get(prefix, '•')
-                
-                color = '#dc2626' if prefix == 'Due' else '#6b7280'
-                font_weight = '500' if prefix == 'Due' else '400'
-                
-                html_body.append(f'''
-                            <div style="margin-top: 6px; color: {color}; font-size: 12px; font-weight: {font_weight}; display: flex; align-items: start; gap: 4px;">
-                                <span style="flex-shrink: 0;">{icon}</span>
+            # Collect multi-line notes content
+            elif in_task and collecting_notes and stripped and not stripped.startswith('Task:') and not stripped.startswith('LIST:') and not stripped.startswith('TAG:') and not stripped.startswith('GROUP:') and not stripped.startswith('SECTION') and not stripped.startswith('Details:'):
+                notes_buffer.append(stripped)
+                i += 1
+                continue
+            
+            # Empty line or non-task line - stop collecting notes
+            elif in_task and (not stripped or stripped.startswith('Details:')):
+                collecting_notes = False
+                if stripped.startswith('Details:'):
+                    content = stripped.replace('Details:', '').strip()
+                    html_body.append(f'''
+                            <div style="margin-top: 6px; color: #6b7280; font-size: 12px; display: flex; align-items: start; gap: 4px;">
+                                <span style="flex-shrink: 0;">📝</span>
                                 <span style="word-wrap: break-word; flex: 1; min-width: 0;">{content}</span>
                             </div>
-                ''')
-            
-            # Close task div on empty line after task details
-            elif not stripped and html_body and '<div style="margin: 8px 0; padding: 10px 12px;' in ''.join(html_body[-10:]):
-                html_body.append('                        </div>')
-                html_body.append('                    </div>')
-                html_body.append('                </div>')
+                    ''')
+                i += 1
+                continue
             
             # No tags/groups found message
             elif '(No tags found' in stripped or '(No groups found' in stripped:
                 html_body.append(f'<div style="color: #9ca3af; font-style: italic; font-size: 13px; margin: 12px 0; padding: 8px;">{stripped}</div>')
+                i += 1
+                continue
+            
+            i += 1
+        
+        # Close any open task
+        close_current_task()
         
         # Close any open section
         if in_section:

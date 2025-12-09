@@ -39,8 +39,12 @@ def display_tasks_grouped_by_list(tasks: List[Task]):
             # Format due date
             due_str = _format_due_date(task.due)
             
-            # Format created and modified dates
+            # Format created, modified, and due dates
             dates_str = ""
+            if task.due:
+                due_date_str = task.due.strftime('%Y-%m-%d') if hasattr(task.due, 'strftime') else str(task.due)[:10]
+                dates_str += f" [D:{due_date_str}]"
+            
             if task.created_at:
                 dates_str += f" [C:{task.created_at.strftime('%Y-%m-%d')}]"
             if task.modified_at:
@@ -319,25 +323,78 @@ def _filter_tasks_by_custom_date(tasks: List[Task], period: str, date_field: str
 
 
 def _sort_tasks(tasks: List[Task], sort_field: str) -> List[Task]:
-    """Sort tasks by the specified field"""
+    """Sort tasks by the specified field.
+    
+    Supports:
+    - 'field' (ascending)
+    - 'field:asc' (ascending)
+    - 'field:desc' (descending)
+    - '-field' (descending)
+    
+    Aliases:
+    - 'due_date' -> 'due'
+    - 'created_at' -> 'created'
+    - 'modified_at' -> 'modified'
+    """
     sorted_tasks = tasks.copy()
     
+    # Parse sort field and direction
+    reverse = False
+    
+    # Check for :desc or :asc suffix
+    if ':' in sort_field:
+        field, direction = sort_field.rsplit(':', 1)
+        direction = direction.lower().strip()
+        if direction == 'desc':
+            reverse = True
+        elif direction == 'asc':
+            reverse = False
+        sort_field = field.strip()
+    # Check for - prefix
+    elif sort_field.startswith('-'):
+        reverse = True
+        sort_field = sort_field[1:]
+        
+    # Normalize field names
+    sort_field = sort_field.lower()
+    field_map = {
+        'due_date': 'due',
+        'created_at': 'created',
+        'modified_at': 'modified'
+    }
+    sort_field = field_map.get(sort_field, sort_field)
+    
     if sort_field == 'due':
-        # Sort by due date, with tasks without due dates at the end
-        sorted_tasks.sort(key=lambda t: (t.due is None, t.due))
+        # Sort by due date, with tasks without due dates at the end (or beginning if reversed? usually end is better for "no due date")
+        # For consistent sorting:
+        # Ascending: Earliest due date first. No due date last.
+        # Descending: Latest due date first. No due date last.
+        # To handle None values correctly in Python 3, we need a custom key
+        if reverse:
+            # For descending, we want latest dates first. None values can go last.
+            sorted_tasks.sort(key=lambda t: (t.due is None, t.due), reverse=True)
+        else:
+            # For ascending, we want earliest dates first. None values last.
+            sorted_tasks.sort(key=lambda t: (t.due is None, t.due))
+            
     elif sort_field == 'created':
         # Sort by creation date
-        sorted_tasks.sort(key=lambda t: t.created_at)
+        sorted_tasks.sort(key=lambda t: t.created_at, reverse=reverse)
     elif sort_field == 'modified':
         # Sort by modification date
-        sorted_tasks.sort(key=lambda t: t.modified_at)
+        sorted_tasks.sort(key=lambda t: t.modified_at, reverse=reverse)
     elif sort_field == 'priority':
         # Sort by priority (critical, high, medium, low)
         priority_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
-        sorted_tasks.sort(key=lambda t: priority_order.get(t.priority.value if hasattr(t.priority, 'value') else t.priority, 4))
+        # If reverse is True (descending), we might want Low to Critical? 
+        # Standard "descending priority" usually means Highest first (Critical -> Low).
+        # But our default sort (ascending index) does Critical(0) -> Low(3).
+        # So "priority:desc" should probably reverse that to Low -> Critical.
+        # Let's stick to Python's sort reverse.
+        sorted_tasks.sort(key=lambda t: priority_order.get(t.priority.value if hasattr(t.priority, 'value') else t.priority, 4), reverse=reverse)
     elif sort_field == 'title':
         # Sort by title alphabetically
-        sorted_tasks.sort(key=lambda t: t.title.lower())
+        sorted_tasks.sort(key=lambda t: t.title.lower(), reverse=reverse)
         
     return sorted_tasks
 
@@ -410,8 +467,7 @@ task_state = TaskState()
                    'Custom date formats: DDMMYYYY for a specific date or '
                    'DDMMYYYY-DDMMYYYY for a date range.')
 @click.option('--order-by', '-o', 'order_by',
-              type=click.Choice(['due', 'created', 'modified', 'priority', 'title']),
-              help='Order tasks by field (due, created, modified, priority, title)')
+              help='Order tasks by field (due, created, modified, priority, title). Supports :asc/:desc suffix (e.g. due_date:desc).')
 @click.option('--search', '-S', help='Search tasks by title, description, or notes')
 @click.option('--account', '-a', help='Account name for multi-account support')
 @click.pass_context

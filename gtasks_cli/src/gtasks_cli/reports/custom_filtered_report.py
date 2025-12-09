@@ -26,7 +26,8 @@ class CustomFilteredReport(BaseReport):
             **kwargs: 
                 filter_str: Date filter string (e.g., "this_week:created_at")
                 tags_filter: Tags filter string (e.g., "--em:***|--ex:cr")
-                order_by: Field to order by (e.g., "modified_at")
+                order_by: Field to order by with optional direction
+                         (e.g., "modified_at:desc", "created_at:asc", "-modified_at")
                 
         Returns:
             Dict containing report data
@@ -182,12 +183,30 @@ class CustomFilteredReport(BaseReport):
         return filtered
 
     def _apply_ordering(self, tasks: List[Task], order_by: str) -> List[Task]:
-        """Order tasks by a field."""
+        """Order tasks by a field with optional direction.
+        
+        Supports:
+        - '-field_name' for descending (e.g., '-modified_at')
+        - 'field_name:desc' for descending (e.g., 'modified_at:desc')
+        - 'field_name:asc' for ascending (e.g., 'modified_at:asc')
+        - 'field_name' for ascending (default)
+        """
         if not order_by:
             return tasks
             
         reverse = False
-        if order_by.startswith('-'):
+        
+        # Check for :desc or :asc suffix
+        if ':' in order_by:
+            field, direction = order_by.rsplit(':', 1)
+            direction = direction.lower().strip()
+            if direction == 'desc':
+                reverse = True
+            elif direction == 'asc':
+                reverse = False
+            order_by = field.strip()
+        # Check for - prefix (legacy support)
+        elif order_by.startswith('-'):
             reverse = True
             order_by = order_by[1:]
             
@@ -506,26 +525,44 @@ class CustomFilteredReport(BaseReport):
                 details = []
                 if task.get('description'):
                     details.append(c(f"  Details: {task['description']}", DIM))
-                if task.get('notes'):
-                    details.append(c(f"  Notes: {task['notes']}", DIM))
-                if task.get('due'):
-                    try:
-                        due_date = datetime.fromisoformat(task['due']).strftime('%Y-%m-%d')
-                        details.append(c(f"  Due: {due_date}", WARNING))
-                    except:
-                        pass
+                
+                # Combine dates and notes on one line
+                date_parts = []
                 if task.get('created_at'):
                     try:
-                        created_date = datetime.fromisoformat(task['created_at']).strftime('%Y-%m-%d %H:%M')
-                        details.append(c(f"  Created: {created_date}", DIM))
-                    except:
+                        created_val = task['created_at']
+                        if isinstance(created_val, str):
+                            created_dt = datetime.fromisoformat(created_val.replace('+00:00', ''))
+                        else:
+                            created_dt = created_val
+                        date_parts.append(f"C:{created_dt.strftime('%d-%m %H:%M')}")
+                    except Exception as e:
                         pass
                 if task.get('modified_at'):
                     try:
-                        modified_date = datetime.fromisoformat(task['modified_at']).strftime('%Y-%m-%d %H:%M')
-                        details.append(c(f"  Modified: {modified_date}", DIM))
+                        modified_val = task['modified_at']
+                        if isinstance(modified_val, str):
+                            modified_dt = datetime.fromisoformat(modified_val.replace('+00:00', ''))
+                        else:
+                            modified_dt = modified_val
+                        date_parts.append(f"M:{modified_dt.strftime('%d-%m %H:%M')}")
+                    except Exception as e:
+                        pass
+                if task.get('due'):
+                    try:
+                        due_date = datetime.fromisoformat(task['due']).strftime('%d-%m')
+                        date_parts.append(f"D:{due_date}")
                     except:
                         pass
+                
+                # Combine dates with notes on same line
+                if date_parts or task.get('notes'):
+                    line_parts = []
+                    if date_parts:
+                        line_parts.append(f"📅 {', '.join(date_parts)}")
+                    if task.get('notes'):
+                        line_parts.append(task['notes'])
+                    details.append(c(f"  {' | '.join(line_parts)}", DIM))
                 
                 if details:
                     lines.extend(details)
@@ -589,26 +626,44 @@ class CustomFilteredReport(BaseReport):
                 details = []
                 if task.get('description'):
                     details.append(c(f"  Details: {task['description']}", DIM))
-                if task.get('notes'):
-                    details.append(c(f"  Notes: {task['notes']}", DIM))
-                if task.get('due'):
-                    try:
-                        due_date = datetime.fromisoformat(task['due']).strftime('%Y-%m-%d')
-                        details.append(c(f"  Due: {due_date}", WARNING))
-                    except:
-                        pass
+                
+                # Combine dates and notes on one line
+                date_parts = []
                 if task.get('created_at'):
                     try:
-                        created_date = datetime.fromisoformat(task['created_at']).strftime('%Y-%m-%d %H:%M')
-                        details.append(c(f"  Created: {created_date}", DIM))
-                    except:
+                        created_val = task['created_at']
+                        if isinstance(created_val, str):
+                            created_dt = datetime.fromisoformat(created_val.replace('+00:00', ''))
+                        else:
+                            created_dt = created_val
+                        date_parts.append(f"C:{created_dt.strftime('%d-%m %H:%M')}")
+                    except Exception as e:
                         pass
                 if task.get('modified_at'):
                     try:
-                        modified_date = datetime.fromisoformat(task['modified_at']).strftime('%Y-%m-%d %H:%M')
-                        details.append(c(f"  Modified: {modified_date}", DIM))
+                        modified_val = task['modified_at']
+                        if isinstance(modified_val, str):
+                            modified_dt = datetime.fromisoformat(modified_val.replace('+00:00', ''))
+                        else:
+                            modified_dt = modified_val
+                        date_parts.append(f"M:{modified_dt.strftime('%d-%m %H:%M')}")
+                    except Exception as e:
+                        pass
+                if task.get('due'):
+                    try:
+                        due_date = datetime.fromisoformat(task['due']).strftime('%d-%m')
+                        date_parts.append(f"D:{due_date}")
                     except:
                         pass
+                
+                # Combine dates with notes on same line
+                if date_parts or task.get('notes'):
+                    line_parts = []
+                    if date_parts:
+                        line_parts.append(f"📅 {', '.join(date_parts)}")
+                    if task.get('notes'):
+                        line_parts.append(task['notes'])
+                    details.append(c(f"  {' | '.join(line_parts)}", DIM))
                 
                 if details:
                     lines.extend(details)
@@ -643,26 +698,44 @@ class CustomFilteredReport(BaseReport):
                     details = []
                     if task.get('description'):
                         details.append(c(f"  Details: {task['description']}", DIM))
-                    if task.get('notes'):
-                        details.append(c(f"  Notes: {task['notes']}", DIM))
-                    if task.get('due'):
-                        try:
-                            due_date = datetime.fromisoformat(task['due']).strftime('%Y-%m-%d')
-                            details.append(c(f"  Due: {due_date}", WARNING))
-                        except:
-                            pass
+                    
+                    # Combine dates and notes on one line
+                    date_parts = []
                     if task.get('created_at'):
                         try:
-                            created_date = datetime.fromisoformat(task['created_at']).strftime('%Y-%m-%d %H:%M')
-                            details.append(c(f"  Created: {created_date}", DIM))
-                        except:
+                            created_val = task['created_at']
+                            if isinstance(created_val, str):
+                                created_dt = datetime.fromisoformat(created_val.replace('+00:00', ''))
+                            else:
+                                created_dt = created_val
+                            date_parts.append(f"C:{created_dt.strftime('%d-%m %H:%M')}")
+                        except Exception as e:
                             pass
                     if task.get('modified_at'):
                         try:
-                            modified_date = datetime.fromisoformat(task['modified_at']).strftime('%Y-%m-%d %H:%M')
-                            details.append(c(f"  Modified: {modified_date}", DIM))
+                            modified_val = task['modified_at']
+                            if isinstance(modified_val, str):
+                                modified_dt = datetime.fromisoformat(modified_val.replace('+00:00', ''))
+                            else:
+                                modified_dt = modified_val
+                            date_parts.append(f"M:{modified_dt.strftime('%d-%m %H:%M')}")
+                        except Exception as e:
+                            pass
+                    if task.get('due'):
+                        try:
+                            due_date = datetime.fromisoformat(task['due']).strftime('%d-%m')
+                            date_parts.append(f"D:{due_date}")
                         except:
                             pass
+                    
+                    # Combine dates with notes on same line
+                    if date_parts or task.get('notes'):
+                        line_parts = []
+                        if date_parts:
+                            line_parts.append(f"📅 {', '.join(date_parts)}")
+                        if task.get('notes'):
+                            line_parts.append(task['notes'])
+                        details.append(c(f"  {' | '.join(line_parts)}", DIM))
                     
                     if details:
                         lines.extend(details)

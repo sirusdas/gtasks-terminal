@@ -176,22 +176,7 @@ def display_tasks_compact(tasks: List[Task]) -> None:
             # Add metadata line
             metadata_parts = []
             
-            # Due date
-            if task.due:
-                due_date = task.due.date() if isinstance(task.due, datetime) else task.due
-                today = datetime.now().date()
-                diff = (due_date - today).days
-                
-                if diff < 0:
-                    metadata_parts.append(f"[red]{due_date}[/red]")
-                elif diff == 0:
-                    metadata_parts.append(f"[yellow]{due_date}[/yellow]")
-                elif diff <= 3:
-                    metadata_parts.append(f"[orange1]{due_date}[/orange1]")
-                else:
-                    metadata_parts.append(f"[green]{due_date}[/green]")
-            
-            # Priority
+            # Priority (moved up)
             priority_value = task.priority
             if hasattr(task.priority, 'value'):
                 priority_value = task.priority.value
@@ -203,6 +188,8 @@ def display_tasks_compact(tasks: List[Task]) -> None:
                 'low': 'green'
             }
             metadata_parts.append(f"[{priority_colors.get(priority_value, 'white')}]{priority_value.title()}[/{priority_colors.get(priority_value, 'white')}]")
+            
+
             
             # Status
             status_value = task.status
@@ -218,7 +205,22 @@ def display_tasks_compact(tasks: List[Task]) -> None:
             }
             metadata_parts.append(f"[{status_colors.get(status_value, 'white')}]{status_value.replace('_', ' ').title()}[/{status_colors.get(status_value, 'white')}]")
             
-            # Created and Modified
+            # Dates (Due, Created, Modified)
+            if task.due:
+                due_date = task.due.date() if isinstance(task.due, datetime) else task.due
+                today = datetime.now().date()
+                diff = (due_date - today).days
+                
+                due_str = f"D:{due_date}"
+                if diff < 0:
+                    metadata_parts.append(f"[red]{due_str}[/red]")
+                elif diff == 0:
+                    metadata_parts.append(f"[yellow]{due_str}[/yellow]")
+                elif diff <= 3:
+                    metadata_parts.append(f"[orange1]{due_str}[/orange1]")
+                else:
+                    metadata_parts.append(f"[green]{due_str}[/green]")
+
             if task.created_at:
                 metadata_parts.append(f"[dim]C:{task.created_at.strftime('%Y-%m-%d')}[/dim]")
             if task.modified_at:
@@ -295,22 +297,7 @@ def display_tasks_with_details(tasks: List[Task]) -> None:
             # Add metadata line
             metadata_parts = []
             
-            # Due date
-            if task.due:
-                due_date = task.due.date() if isinstance(task.due, datetime) else task.due
-                today = datetime.now().date()
-                diff = (due_date - today).days
-                
-                if diff < 0:
-                    metadata_parts.append(f"[red]Due: {due_date} (Overdue)[/red]")
-                elif diff == 0:
-                    metadata_parts.append(f"[yellow]Due: {due_date} (Today)[/yellow]")
-                elif diff <= 3:
-                    metadata_parts.append(f"[orange1]Due: {due_date} ({diff} days)[/orange1]")
-                else:
-                    metadata_parts.append(f"[green]Due: {due_date}[/green]")
-            
-            # Priority
+            # Priority (moved up)
             priority_value = task.priority
             if hasattr(task.priority, 'value'):
                 priority_value = task.priority.value
@@ -322,6 +309,8 @@ def display_tasks_with_details(tasks: List[Task]) -> None:
                 'low': 'green'
             }
             metadata_parts.append(f"[{priority_colors.get(priority_value, 'white')}]{priority_value.title()}[/{priority_colors.get(priority_value, 'white')}]")
+            
+
             
             # Status
             status_value = task.status
@@ -337,7 +326,22 @@ def display_tasks_with_details(tasks: List[Task]) -> None:
             }
             metadata_parts.append(f"[{status_colors.get(status_value, 'white')}]{status_value.replace('_', ' ').title()}[/{status_colors.get(status_value, 'white')}]")
             
-            # Created and Modified
+            # Dates (Due, Created, Modified)
+            if task.due:
+                due_date = task.due.date() if isinstance(task.due, datetime) else task.due
+                today = datetime.now().date()
+                diff = (due_date - today).days
+                
+                due_str = f"Due: {due_date}"
+                if diff < 0:
+                    metadata_parts.append(f"[red]{due_str} (Overdue)[/red]")
+                elif diff == 0:
+                    metadata_parts.append(f"[yellow]{due_str} (Today)[/yellow]")
+                elif diff <= 3:
+                    metadata_parts.append(f"[orange1]{due_str} ({diff} days)[/orange1]")
+                else:
+                    metadata_parts.append(f"[green]{due_str}[/green]")
+
             if task.created_at:
                 metadata_parts.append(f"[dim]Created: {task.created_at.strftime('%Y-%m-%d')}[/dim]")
             if task.modified_at:
