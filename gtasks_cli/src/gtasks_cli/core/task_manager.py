@@ -96,9 +96,12 @@ class TaskManager:
                 )
                 
                 # Save to local storage for offline access
-                task_dicts = self.storage.load_tasks()
-                task_dicts.append(task.model_dump())
-                self.storage.save_tasks(task_dicts)
+                if isinstance(self.storage, SQLiteStorage):
+                    self.storage.save_tasks([task.model_dump()])
+                else:
+                    task_dicts = self.storage.load_tasks()
+                    task_dicts.append(task.model_dump())
+                    self.storage.save_tasks(task_dicts)
                 
                 # Update list mapping if needed
                 if tasklist_name:
@@ -132,9 +135,12 @@ class TaskManager:
                     logger.warning(f"Could not parse due date: {due}")
             
             # Save to local storage
-            task_dicts = self.storage.load_tasks()
-            task_dicts.append(task.model_dump())
-            self.storage.save_tasks(task_dicts)
+            if isinstance(self.storage, SQLiteStorage):
+                self.storage.save_tasks([task.model_dump()])
+            else:
+                task_dicts = self.storage.load_tasks()
+                task_dicts.append(task.model_dump())
+                self.storage.save_tasks(task_dicts)
             
             # Update list mapping if needed
             if tasklist_name:
@@ -298,8 +304,11 @@ class TaskManager:
                                 setattr(task, key, value)
                         
                         # Save updated tasks to local storage
-                        task_dicts = [t.model_dump() for t in tasks]
-                        self.storage.save_tasks(task_dicts)
+                        if isinstance(self.storage, SQLiteStorage):
+                            self.storage.save_tasks([task.model_dump()])
+                        else:
+                            task_dicts = [t.model_dump() for t in tasks]
+                            self.storage.save_tasks(task_dicts)
                         break
             return success
         else:
@@ -320,8 +329,11 @@ class TaskManager:
                     task.modified_at = datetime.utcnow()
                     
                     # Save updated tasks to local storage
-                    task_dicts = [t.model_dump() for t in tasks]
-                    self.storage.save_tasks(task_dicts)
+                    if isinstance(self.storage, SQLiteStorage):
+                        self.storage.save_tasks([task.model_dump()])
+                    else:
+                        task_dicts = [t.model_dump() for t in tasks]
+                        self.storage.save_tasks(task_dicts)
                     return True
             
             return False
@@ -338,9 +350,12 @@ class TaskManager:
                     task.status = TaskStatus.COMPLETED
                     task.completed_at = datetime.utcnow()
                     # Save updated task to local storage
-                    tasks = self.list_tasks()
-                    task_dicts = [t.model_dump() for t in tasks]
-                    self.storage.save_tasks(task_dicts)
+                    if isinstance(self.storage, SQLiteStorage):
+                        self.storage.save_tasks([task.model_dump()])
+                    else:
+                        tasks = self.list_tasks()
+                        task_dicts = [t.model_dump() for t in tasks]
+                        self.storage.save_tasks(task_dicts)
             return success
         else:
             # Complete in local storage
@@ -356,8 +371,11 @@ class TaskManager:
                     task.modified_at = datetime.utcnow()
                     
                     # Save updated tasks to local storage
-                    task_dicts = [t.model_dump() for t in tasks]
-                    self.storage.save_tasks(task_dicts)
+                    if isinstance(self.storage, SQLiteStorage):
+                        self.storage.save_tasks([task.model_dump()])
+                    else:
+                        task_dicts = [t.model_dump() for t in tasks]
+                        self.storage.save_tasks(task_dicts)
                     return True
             
             return False
@@ -374,9 +392,12 @@ class TaskManager:
                     task.status = TaskStatus.DELETED
                     task.modified_at = datetime.utcnow()
                     # Save updated task to local storage
-                    tasks = self.list_tasks()
-                    task_dicts = [t.model_dump() for t in tasks]
-                    self.storage.save_tasks(task_dicts)
+                    if isinstance(self.storage, SQLiteStorage):
+                        self.storage.save_tasks([task.model_dump()])
+                    else:
+                        tasks = self.list_tasks()
+                        task_dicts = [t.model_dump() for t in tasks]
+                        self.storage.save_tasks(task_dicts)
             return success
         else:
             # Delete in local storage
@@ -386,9 +407,12 @@ class TaskManager:
                 task.modified_at = datetime.utcnow()
                 
                 # Save updated task to local storage
-                tasks = self.list_tasks()
-                task_dicts = [t.model_dump() for t in tasks]
-                self.storage.save_tasks(task_dicts)
+                if isinstance(self.storage, SQLiteStorage):
+                    self.storage.save_tasks([task.model_dump()])
+                else:
+                    tasks = self.list_tasks()
+                    task_dicts = [t.model_dump() for t in tasks]
+                    self.storage.save_tasks(task_dicts)
                 return True
             
             return False

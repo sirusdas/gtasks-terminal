@@ -118,6 +118,7 @@ def handle_update_tags_command(task_state, task_manager, command_parts, use_goog
         task_updates[tid].append((op, tag))
         
     updated_count = 0
+    updated_tasks_list = []
     changes_log = []  # Track changes for feedback
     undo_data = [] # List of (task_id, original_notes) for undo
     
@@ -154,6 +155,12 @@ def handle_update_tags_command(task_state, task_manager, command_parts, use_goog
                     logger.debug(f"Updating task {task.id}: original_notes='{original_notes}', new_notes='{current_notes}'")
                     task_manager.update_task(task.id, notes=current_notes)
                     task.notes = current_notes
+                    
+                    # Get fresh task for auto-save
+                    updated_task_obj = task_manager.get_task(task.id)
+                    if updated_task_obj:
+                        updated_tasks_list.append(updated_task_obj)
+                        
                     logger.debug(f"After update, task.notes='{task.notes}'")
                     updated_count += 1
                     undo_data.append((task.id, original_notes))
@@ -199,3 +206,25 @@ def handle_update_tags_command(task_state, task_manager, command_parts, use_goog
     click.echo(f"\nUpdated tags for {updated_count} tasks:")
     for change in changes_log:
         click.echo(change)
+
+    if updated_tasks_list and not use_google_tasks:
+        # Auto-save (CLI option overrides config)
+        from gtasks_cli.storage.config_manager import ConfigManager
+        config_manager = ConfigManager(account_name=task_manager.account_name)
+        cli_auto_save = getattr(task_manager, 'cli_auto_save', None)
+        
+        # Use CLI option if provided, otherwise use config
+        if cli_auto_save is not None:
+            auto_save = cli_auto_save
+        else:
+            auto_save = config_manager.get('sync.auto_save', False)
+        
+        if auto_save:
+            from gtasks_cli.integrations.advanced_sync_manager import AdvancedSyncManager
+            click.echo("Auto-saving to Google Tasks...")
+            sync_manager = AdvancedSyncManager(task_manager.storage, task_manager.google_client)
+            # Use sync_multiple_tasks for efficiency
+            if sync_manager.sync_multiple_tasks(updated_tasks_list, 'update'):
+                 click.echo("✅ Auto-saved to Google Tasks")
+            else:
+                 click.echo("⚠️ Failed to auto-save to Google Tasks")

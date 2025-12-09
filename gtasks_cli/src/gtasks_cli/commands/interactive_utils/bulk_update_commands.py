@@ -216,7 +216,7 @@ def _parse_task_numbers(task_string: str) -> List[int]:
 
 def _execute_bulk_updates(task_state, task_manager, operations: List[Tuple[str, dict]], use_google_tasks: bool):
     """Execute the parsed bulk update operations"""
-    updated_count = 0
+    updated_tasks = []
     error_count = 0
     
     # Check if any operation uses ALL - if so, ask for confirmation
@@ -233,47 +233,69 @@ def _execute_bulk_updates(task_state, task_manager, operations: List[Tuple[str, 
     for op_type, op_data in operations:
         try:
             if op_type == "completed":
-                count = _set_tasks_status(task_state, task_manager, op_data["task_numbers"], TaskStatus.COMPLETED, use_google_tasks)
-                updated_count += count
-                click.echo(f"Marked {count} task(s) as completed")
+                tasks = _set_tasks_status(task_state, task_manager, op_data["task_numbers"], TaskStatus.COMPLETED, use_google_tasks)
+                updated_tasks.extend(tasks)
+                click.echo(f"Marked {len(tasks)} task(s) as completed")
                 
             elif op_type == "due_today":
-                count = _set_tasks_due_today(task_state, task_manager, op_data["task_numbers"], op_data["time"], use_google_tasks)
-                updated_count += count
-                click.echo(f"Set due date to today for {count} task(s)")
+                tasks = _set_tasks_due_today(task_state, task_manager, op_data["task_numbers"], op_data["time"], use_google_tasks)
+                updated_tasks.extend(tasks)
+                click.echo(f"Set due date to today for {len(tasks)} task(s)")
                 
             elif op_type == "delete":
-                count = _set_tasks_status(task_state, task_manager, op_data["task_numbers"], TaskStatus.DELETED, use_google_tasks)
-                updated_count += count
-                click.echo(f"Marked {count} task(s) as deleted")
+                tasks = _set_tasks_status(task_state, task_manager, op_data["task_numbers"], TaskStatus.DELETED, use_google_tasks)
+                updated_tasks.extend(tasks)
+                click.echo(f"Marked {len(tasks)} task(s) as deleted")
                 
             elif op_type == "pending":
-                count = _set_tasks_status(task_state, task_manager, op_data["task_numbers"], TaskStatus.PENDING, use_google_tasks)
-                updated_count += count
-                click.echo(f"Marked {count} task(s) as pending")
+                tasks = _set_tasks_status(task_state, task_manager, op_data["task_numbers"], TaskStatus.PENDING, use_google_tasks)
+                updated_tasks.extend(tasks)
+                click.echo(f"Marked {len(tasks)} task(s) as pending")
                 
             elif op_type == "due_on":
-                count = _set_tasks_due_on(task_state, task_manager, op_data["task_numbers"], 
+                tasks = _set_tasks_due_on(task_state, task_manager, op_data["task_numbers"], 
                                          op_data["date"], op_data["time"], use_google_tasks)
-                updated_count += count
-                click.echo(f"Set due date for {count} task(s)")
+                updated_tasks.extend(tasks)
+                click.echo(f"Set due date for {len(tasks)} task(s)")
                 
             elif op_type == "due_on_all":
-                count = _set_tasks_due_on(task_state, task_manager, op_data["task_numbers"], 
+                tasks = _set_tasks_due_on(task_state, task_manager, op_data["task_numbers"], 
                                          op_data["date"], op_data["time"], use_google_tasks)
-                updated_count += count
-                click.echo(f"Set due date for {count} task(s)")
+                updated_tasks.extend(tasks)
+                click.echo(f"Set due date for {len(tasks)} task(s)")
                 
         except Exception as e:
             error_count += 1
             click.echo(f"Error executing {op_type} operation: {e}")
     
-    click.echo(f"Bulk update completed: {updated_count} tasks updated, {error_count} errors")
+    click.echo(f"Bulk update completed: {len(updated_tasks)} tasks updated, {error_count} errors")
+
+    if updated_tasks and not use_google_tasks:
+        # Auto-save (CLI option overrides config)
+        from gtasks_cli.storage.config_manager import ConfigManager
+        config_manager = ConfigManager(account_name=task_manager.account_name)
+        cli_auto_save = getattr(task_manager, 'cli_auto_save', None)
+        
+        # Use CLI option if provided, otherwise use config
+        if cli_auto_save is not None:
+            auto_save = cli_auto_save
+        else:
+            auto_save = config_manager.get('sync.auto_save', False)
+        
+        if auto_save:
+            from gtasks_cli.integrations.advanced_sync_manager import AdvancedSyncManager
+            click.echo("Auto-saving to Google Tasks...")
+            sync_manager = AdvancedSyncManager(task_manager.storage, task_manager.google_client)
+            # Use sync_multiple_tasks for efficiency
+            if sync_manager.sync_multiple_tasks(updated_tasks, 'update'):
+                 click.echo("✅ Auto-saved to Google Tasks")
+            else:
+                 click.echo("⚠️ Failed to auto-save to Google Tasks")
 
 
-def _set_tasks_status(task_state, task_manager, task_numbers: List[int], status: TaskStatus, use_google_tasks: bool) -> int:
+def _set_tasks_status(task_state, task_manager, task_numbers: List[int], status: TaskStatus, use_google_tasks: bool) -> List[Task]:
     """Set the status of multiple tasks"""
-    count = 0
+    updated_tasks = []
     for task_num in task_numbers:
         task = task_state.get_task_by_number(task_num)
         if task:
@@ -284,19 +306,22 @@ def _set_tasks_status(task_state, task_manager, task_numbers: List[int], status:
                 
             success = task_manager.update_task(task.id, status=status, **extra_params)
             if success:
-                count += 1
+                # Get the updated task
+                updated_task = task_manager.get_task(task.id)
+                if updated_task:
+                    updated_tasks.append(updated_task)
                 # Update the task in the task state
                 _update_task_in_state(task_state, task.id, task_manager)
             else:
                 click.echo(f"Failed to update task {task_num}")
         else:
             click.echo(f"Task {task_num} not found")
-    return count
+    return updated_tasks
 
 
-def _set_tasks_due_today(task_state, task_manager, task_numbers: List[int], time_str: Optional[str], use_google_tasks: bool) -> int:
+def _set_tasks_due_today(task_state, task_manager, task_numbers: List[int], time_str: Optional[str], use_google_tasks: bool) -> List[Task]:
     """Set tasks due date to today"""
-    count = 0
+    updated_tasks = []
     today = date.today()
     
     # Parse time if provided
@@ -321,18 +346,21 @@ def _set_tasks_due_today(task_state, task_manager, task_numbers: List[int], time
         if task:
             success = task_manager.update_task(task.id, due=due_datetime)
             if success:
-                count += 1
+                # Get the updated task
+                updated_task = task_manager.get_task(task.id)
+                if updated_task:
+                    updated_tasks.append(updated_task)
                 _update_task_in_state(task_state, task.id, task_manager)
             else:
                 click.echo(f"Failed to update due date for task {task_num}")
         else:
             click.echo(f"Task {task_num} not found")
-    return count
+    return updated_tasks
 
 
-def _set_tasks_due_on(task_state, task_manager, task_numbers: List[int], date_str: str, time_str: str, use_google_tasks: bool) -> int:
+def _set_tasks_due_on(task_state, task_manager, task_numbers: List[int], date_str: str, time_str: str, use_google_tasks: bool) -> List[Task]:
     """Set tasks due on a specific date"""
-    count = 0
+    updated_tasks = []
     
     try:
         # Parse date like "21-09" (assuming current year)
@@ -348,20 +376,23 @@ def _set_tasks_due_on(task_state, task_manager, task_numbers: List[int], date_st
         due_datetime = datetime.combine(due_date.date(), time_obj)
     except ValueError as e:
         click.echo(f"Invalid date/time format: {date_str} {time_str} - {e}")
-        return 0
+        return []
     
     for task_num in task_numbers:
         task = task_state.get_task_by_number(task_num)
         if task:
             success = task_manager.update_task(task.id, due=due_datetime)
             if success:
-                count += 1
+                # Get the updated task
+                updated_task = task_manager.get_task(task.id)
+                if updated_task:
+                    updated_tasks.append(updated_task)
                 _update_task_in_state(task_state, task.id, task_manager)
             else:
                 click.echo(f"Failed to update due date for task {task_num}")
         else:
             click.echo(f"Task {task_num} not found")
-    return count
+    return updated_tasks
 
 
 def _update_task_in_state(task_state, task_id: str, task_manager):

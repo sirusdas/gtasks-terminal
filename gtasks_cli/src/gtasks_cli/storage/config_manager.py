@@ -63,7 +63,7 @@ class ConfigManager:
             },
             'sync': {
                 'pull_range_days': 10,  # Default to 10 days
-                'auto_save': False  # Default to False
+                'auto_save': True  # Default to True
             },
             'accounts': {}  # For multi-account support
         }
