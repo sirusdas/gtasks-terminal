@@ -45,6 +45,23 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+## Post-Installation Setup
+
+After installing the package, you can run the setup assistant to configure your environment:
+
+```bash
+python -m gtasks_cli.setup_assistant
+```
+
+The setup assistant will:
+- Verify that gtasks-cli is properly installed
+- Create the configuration directory (`~/.gtasks`)
+- Set up default configuration values
+- Guide you through Google authentication setup
+- Test basic functionality
+
+For more information, see [SETUP_ASSISTANT.md](SETUP_ASSISTANT.md).
+
 ## Running Tests
 
 Various test scripts are available in the root directory:
