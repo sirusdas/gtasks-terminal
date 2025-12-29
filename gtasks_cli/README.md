@@ -47,7 +47,7 @@ pip install -e .
 
 ## Post-Installation Setup
 
-After installing the package, you can run the setup assistant to configure your environment:
+After installing the package, we strongly recommend running the setup assistant to configure your environment:
 
 ```bash
 python -m gtasks_cli.setup_assistant

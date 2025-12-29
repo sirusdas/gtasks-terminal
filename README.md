@@ -39,11 +39,18 @@ pip install gtasks-cli
 
 This is the easiest and recommended way to install Google Tasks CLI. The latest version is 0.1.3.
 
-After installation, you can optionally run the setup assistant to configure your environment:
+After installation, we recommend running the setup assistant to configure your environment:
 
 ```bash
 python -m gtasks_cli.setup_assistant
 ```
+
+The setup assistant will:
+- Verify that gtasks-cli is properly installed
+- Create the configuration directory (`~/.gtasks`)
+- Set up default configuration values
+- Guide you through Google authentication setup
+- Test basic functionality
 
 For more information about the setup assistant, see [SETUP_ASSISTANT.md](gtasks_cli/SETUP_ASSISTANT.md).
 
