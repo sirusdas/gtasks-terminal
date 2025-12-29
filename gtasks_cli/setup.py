@@ -19,7 +19,7 @@ else:
 
 setup(
     name="gtasks-cli",
-    version="0.1.0",
+    version="0.1.3",
     author="Google Tasks CLI Team",
     author_email="example@example.com",
     description="A powerful command-line interface for managing Google Tasks",

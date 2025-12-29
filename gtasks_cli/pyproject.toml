@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gtasks-cli"
-version = "0.1.2"
+version = "0.1.3"
 authors = [
     {name = "Google Tasks CLI Team", email = "example@example.com"},
 ]
 description = "A powerful command-line interface for managing Google Tasks with enhanced features and functionality which is secure and easy to use with advanced features."
 readme = "README.md"
-license = "MIT"
+license = {text = "MIT"}
 requires-python = ">=3.7"
 classifiers = [
     "Development Status :: 3 - Alpha",
