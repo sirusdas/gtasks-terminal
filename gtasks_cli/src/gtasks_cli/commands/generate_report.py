@@ -31,7 +31,9 @@ logger = setup_logger(__name__)
 @click.argument('report_ids', nargs=-1)
 @click.option('--list', 'list_reports', is_flag=True, help='List all available reports')
 @click.option('--list-tags', 'list_tags', is_flag=True, help='List all available tags')
-@click.option('--email', help='Send report via email')
+@click.option('--email', multiple=True, help='Send report via email (can be used multiple times)')
+@click.option('--cc', multiple=True, help='CC email addresses (can be used multiple times)')
+@click.option('--bcc', multiple=True, help='BCC email addresses (can be used multiple times)')
 @click.option('--export', type=click.Choice(['txt', 'csv', 'pdf']), default='txt', help='Export format')
 @click.option('--output', '-o', type=click.Path(), help='Output file path')
 @click.option('--days', type=int, default=30, help='Number of days to analyze')
@@ -49,7 +51,7 @@ logger = setup_logger(__name__)
 @click.option('--output-lists', 'output_lists', help='Filter lists for output display (e.g., em:List1,List2|ex:List3)')
 @click.option('--output-tasks', 'output_tasks', help='Filter tasks for output display (e.g., em:Task1|ex:Task2)')
 @click.pass_context
-def generate_report(ctx, report_ids, list_reports, list_tags, email, export, output, days, start_date, end_date, days_ahead, tags, with_all_tags, only_title, no_other_tasks, only_pending, filter_str, order_by, output_tags, output_lists, output_tasks):
+def generate_report(ctx, report_ids, list_reports, list_tags, email, cc, bcc, export, output, days, start_date, end_date, days_ahead, tags, with_all_tags, only_title, no_other_tasks, only_pending, filter_str, order_by, output_tags, output_lists, output_tasks):
     """Generate reports based on task data."""
     
     # Initialize report manager and register all reports
@@ -225,16 +227,37 @@ def generate_report(ctx, report_ids, list_reports, list_tags, email, export, out
             
             # Send email if requested
             if email:
-                click.echo(f"Sending report {report_id} to {email}...")
+                # Flatten the email addresses from multiple --email options
+                all_to_emails = []
+                for email_item in email:
+                    all_to_emails.extend([e.strip() for e in email_item.split(',')])
+                
+                # Flatten the CC addresses from multiple --cc options
+                all_cc_emails = []
+                for cc_item in cc:
+                    all_cc_emails.extend([e.strip() for e in cc_item.split(',')])
+                
+                # Flatten the BCC addresses from multiple --bcc options
+                all_bcc_emails = []
+                for bcc_item in bcc:
+                    all_bcc_emails.extend([e.strip() for e in bcc_item.split(',')])
+                
+                click.echo(f"Sending report {report_id} to {', '.join(all_to_emails)}...")
+                if all_cc_emails:
+                    click.echo(f"CC: {', '.join(all_cc_emails)}")
+                if all_bcc_emails:
+                    click.echo(f"BCC: {', '.join(all_bcc_emails)}")
+                    
                 sender = EmailSender()
                 subject = f"GTasks Report: {report_id}"
                 if isinstance(report_data, dict) and 'title' in report_data:
                     subject = report_data['title']
                 
-                if sender.send_email(email, subject, exported_report):
-                    click.echo(f"Report sent to {email}")
+                # Send the email with all recipients
+                if sender.send_email(to_emails=all_to_emails, subject=subject, body=exported_report, cc_emails=all_cc_emails, bcc_emails=all_bcc_emails):
+                    click.echo(f"Report sent successfully")
                 else:
-                    click.echo(f"Failed to send email to {email}")
+                    click.echo(f"Failed to send email")
         except Exception as e:
             logger.error(f"Error generating report '{report_id}': {e}")
             click.echo(f"Failed to generate report: {report_id}")

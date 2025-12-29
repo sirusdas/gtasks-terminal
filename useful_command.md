@@ -7,8 +7,6 @@ gtasks interactive -- tags
 
 gtasks interactive -- list --list-names
 
-gtasks generate-report rp9 --email test@test.com
-
 gtasks generate-report rp9 --only-title --no-other-tasks
 gtasks generate-report rp9 --only-title --no-other-tasks  --email test@test.com
 
@@ -40,15 +38,23 @@ gtasks generate-report rp10 --filter past3weeks:created_at --tags "prasen|--ex:c
 
 gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
 
-gtasks generate-report rp10 --filter yesterday:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
+gtasks generate-report rp10 --filter this_week:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
 
-gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc" --email prasenjitk.deb@intglobal.com
+gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod], 3[discuss,meet]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc" --email prasenjitk.deb@intglobal.com --cc suresh.das@intglobal.com
 
 ------------ Suresh Commands --------------
-gtasks generate-report rp10 --filter past2weeks:created_at --tags "my|--ex:cr" --output-tags "--ex:tp1,R,PH|--group:1[my,***,urgent],2[prod]" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
+gtasks generate-report rp10 --filter past2weeks:created_at --tags "my,vapt,waf,***|--ex:cr" --output-tags "--ex:tp1,R,PH|--group:1[my,***,urgent],2[prod,defect,uat,live,anal,resear,bugs],3[discuss,meet,plan],4[cr],5[DEL]" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
 
 gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc" --email suresh.das@intglobal.com
+
+gtasks generate-report rp10 --filter this_week:created_at --output-tags "--ex:tp1,R,PH|--group:1[my,***,urgent],2[prod],3[discuss]" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
+
+gtasks generate-report rp10 --filter this_week:created_at  --tags "my|--ex:cr" --output-tags "--ex:tp1,R,PH|--group:1[my,***,urgent],2[prod],3[discuss]" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
+
+gtasks generate-report rp10 --filter this_week:created_at --tags "my" --output-tags "--ex:tp1,R,PH,P,m|--group:1[my,***,urgent],2[prod],3[discuss,meet]" --output-lists "--ex:Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
 
 
 gtasks interactive -- list --filter today:created_at --search "[prasen" --order-by "due_date:desc"
 gtasks interactive -- list --filter 08122025:due_date --search "[prasen" --order-by "due_date:desc"
+
+gtasks interactive -- list --filter 08122025:due_date

@@ -234,25 +234,38 @@ class EmailSender:
         
         return '\n'.join(html_body)
 
-    def send_email(self, to_email: str, subject: str, body: str, html: bool = True):
+    def send_email(self, to_emails: list, subject: str, body: str, html: bool = True, cc_emails: list = None, bcc_emails: list = None):
         """
         Send an email with optional HTML formatting.
         
         Args:
-            to_email: Recipient email address
+            to_emails: List of recipient email addresses
             subject: Email subject
             body: Email body content (plain text or will be converted to HTML)
             html: Whether to send as HTML email (default: True)
+            cc_emails: List of CC email addresses
+            bcc_emails: List of BCC email addresses
         """
         if not self.email_address or not self.password:
             logger.warning("Email credentials not found. Set GTASKS_EMAIL_USER and GTASKS_EMAIL_PASSWORD environment variables.")
             print("Error: Email credentials not configured. Please set GTASKS_EMAIL_USER and GTASKS_EMAIL_PASSWORD.")
             return False
 
+        # Ensure inputs are lists
+        if isinstance(to_emails, str):
+            to_emails = [e.strip() for e in to_emails.split(',')]
+        if isinstance(cc_emails, str):
+            cc_emails = [e.strip() for e in cc_emails.split(',')]
+        
+        cc_emails = cc_emails or []
+        bcc_emails = bcc_emails or []
+
         try:
             msg = MIMEMultipart('alternative')
             msg['From'] = self.email_address
-            msg['To'] = to_email
+            msg['To'] = ", ".join(to_emails)
+            if cc_emails:
+                msg['Cc'] = ", ".join(cc_emails)
             msg['Subject'] = subject
 
             # Create plain text version (strip ANSI codes)
@@ -306,14 +319,17 @@ class EmailSender:
                 '''
                 msg.attach(MIMEText(html_email, 'html'))
 
+            # Combine all recipients for sendmail
+            all_recipients = to_emails + cc_emails + bcc_emails
+
             server = smtplib.SMTP(self.smtp_server, self.smtp_port)
             server.starttls()
             server.login(self.email_address, self.password)
             text = msg.as_string()
-            server.sendmail(self.email_address, to_email, text)
+            server.sendmail(self.email_address, all_recipients, text)
             server.quit()
             
-            logger.info(f"Email sent successfully to {to_email}")
+            logger.info(f"Email sent successfully to {', '.join(to_emails)}")
             return True
         except Exception as e:
             logger.error(f"Failed to send email: {e}")

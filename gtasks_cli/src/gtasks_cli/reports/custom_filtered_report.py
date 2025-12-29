@@ -78,7 +78,8 @@ class CustomFilteredReport(BaseReport):
         except ValueError:
             return tasks
 
-        now = datetime.now()
+        # Create timezone-aware datetime objects to match the task datetimes
+        now = datetime.now().astimezone()
         start_date = None
         end_date = now
 
@@ -108,19 +109,15 @@ class CustomFilteredReport(BaseReport):
                     continue
             
             if task_date:
-                # Ensure timezone awareness compatibility
-                if task_date.tzinfo is not None and task_date.tzinfo.utcoffset(task_date) is not None:
-                    # task_date is aware, make start/end aware (local)
-                    if start_date.tzinfo is None:
-                        start_date = start_date.astimezone()
-                    if end_date.tzinfo is None:
-                        end_date = end_date.astimezone()
-                else:
-                    # task_date is naive, make start/end naive
-                    if start_date.tzinfo is not None:
-                        start_date = start_date.replace(tzinfo=None)
-                    if end_date.tzinfo is not None:
-                        end_date = end_date.replace(tzinfo=None)
+                # Ensure both dates use the same timezone awareness for comparison
+                if task_date.tzinfo is None and start_date.tzinfo is not None:
+                    # Make start/end dates naive to match task_date
+                    start_date = start_date.replace(tzinfo=None)
+                    end_date = end_date.replace(tzinfo=None)
+                elif task_date.tzinfo is not None and start_date.tzinfo is None:
+                    # Make start/end dates aware to match task_date
+                    start_date = start_date.astimezone()
+                    end_date = end_date.astimezone()
             
             if task_date and task_date >= start_date and task_date <= end_date:
                 filtered.append(task)
@@ -214,6 +211,20 @@ class CustomFilteredReport(BaseReport):
             val = getattr(task, order_by, None)
             if val is None:
                 return datetime.min if 'date' in order_by or 'at' in order_by else ""
+            
+            # Handle datetime string parsing for consistent timezone handling
+            if isinstance(val, str) and ('date' in order_by or 'at' in order_by):
+                try:
+                    val = datetime.fromisoformat(val)
+                except ValueError:
+                    pass
+            
+            # Ensure consistent timezone handling for datetime comparisons
+            if isinstance(val, datetime):
+                # If datetime is naive, make it aware
+                if val.tzinfo is None:
+                    val = val.astimezone()
+            
             return val
             
         return sorted(tasks, key=get_sort_key, reverse=reverse)
