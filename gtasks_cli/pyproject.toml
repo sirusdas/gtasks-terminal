@@ -40,6 +40,8 @@ dependencies = [
     "matplotlib>=3.7.0",
     "prompt-toolkit>=3.0.0",
     "colorama>=0.4.6",
+    "litellm>=1.42.0",
+    "mcp>=1.0.0",
 ]
 
 [project.urls]
