@@ -4,17 +4,16 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gtasks-cli"
-version = "0.1.4"
-authors = [
-    {name = "Google Tasks CLI Team", email = "example@example.com"},
-]
+dynamic = ["version"]
 description = "A powerful command-line interface for managing Google Tasks with enhanced features and functionality which is secure and easy to use with advanced features."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.7"
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.7",
@@ -22,6 +21,8 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Topic :: Utilities",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
     "click>=8.1.0",
@@ -45,9 +46,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/example/gtasks-cli"
-"Bug Reports" = "https://github.com/example/gtasks-cli/issues"
-"Source" = "https://github.com/example/gtasks-cli"
+Homepage = "https://github.com/sirusdas/gtasks-terminal"
+"Bug Reports" = "https://github.com/sirusdas/gtasks-terminal/issues"
+"Source" = "https://github.com/sirusdas/gtasks-terminal"
 
 [project.scripts]
 gtasks = "gtasks_cli.main:main"
@@ -57,7 +58,12 @@ dev = [
     "pytest>=6.0",
     "black",
     "flake8",
+    "build",
+    "twine",
 ]
+
+[tool.hatch.version]
+path = "src/gtasks_cli/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/gtasks_cli"]

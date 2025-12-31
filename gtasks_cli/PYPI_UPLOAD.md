@@ -1,127 +1,107 @@
-# How to Upload to PyPI
+# PyPI Upload Guide for gtasks-cli
 
-This document explains how to upload the Google Tasks CLI package to PyPI (Python Package Index).
-
-**Note: The package is already published to PyPI and can be installed with `pip install gtasks-cli`. This document is maintained for reference and future updates.**
-
-The latest version can be found at: https://pypi.org/project/gtasks-cli/
+This document explains how to build and upload the `gtasks-cli` package to PyPI.
 
 ## Prerequisites
 
-1. Make sure you have the latest versions of `build` and `twine` installed:
-   ```
+Before uploading to PyPI, you need:
+
+1. **PyPI Account**: Create an account at [pypi.org](https://pypi.org/)
+2. **API Token**: Generate an API token from your PyPI account settings
+3. **Required Tools**: Install the following Python packages:
+   ```bash
    pip install --upgrade build twine
    ```
 
-2. You need a PyPI account. If you don't have one, register at https://pypi.org/account/register/
+## Preparing for Upload
 
-3. For testing purposes, you can use TestPyPI: https://test.pypi.org/account/register/
+1. **Update Version**: Make sure to update the version number in both `pyproject.toml` and `setup.py`
+2. **Update Changelog**: Ensure the changelog is up-to-date
+3. **Test Installation**: Test the package locally:
+   ```bash
+   pip install dist/gtasks_cli-x.x.x.tar.gz
+   ```
 
-## Version Management
+## Build and Upload Process
 
-Before building and uploading a new version, you need to update the version number in two places:
+### Using Provided Scripts
 
-1. [pyproject.toml](file:///Users/int/Documents/workspace/projects/gtasks_automation/gtasks_cli/pyproject.toml) - Update the `version` field in the `[project]` section
-2. [src/gtasks_cli/__init__.py](file:///Users/int/Documents/workspace/projects/gtasks_automation/gtasks_cli/src/gtasks_cli/__init__.py) - Update the `__version__` variable
+We provide both shell and batch scripts for uploading:
 
-We follow semantic versioning (SemVer) for version numbers: `MAJOR.MINOR.PATCH`
-
-- MAJOR version when you make incompatible API changes
-- MINOR version when you add functionality in a backward compatible manner
-- PATCH version when you make backward compatible bug fixes
-
-PyPI does not allow overwriting existing versions, so you must increment the version number for each new release.
-
-## Building the Package
-
-The package now uses `hatchling` as the build backend. Make sure it's installed:
-
-```
-pip install hatchling
+#### On Linux/macOS:
+```bash
+./upload.sh
 ```
 
-To build the package:
-
-```
-cd gtasks_cli
-python -m build
+#### On Windows:
+```cmd
+upload.bat
 ```
 
-This will create a `dist/` directory with two files:
-- A source distribution (`.tar.gz`)
-- A built distribution (`.whl`)
+### Manual Process
 
-## Uploading to TestPyPI (Recommended for testing)
+If you prefer to do it manually:
 
-1. Create an API token at https://test.pypi.org/manage/account/#api-tokens
-
-2. Upload the package to TestPyPI:
-   ```
-   python -m twine upload --repository testpypi dist/*
-   ```
-   
-   Twine will ask for a username and password. For the username, enter `__token__`. For the password, enter your API token.
-
-3. Test the installation:
-   ```
-   pip install --index-url https://test.pypi.org/simple/ gtasks-cli
+1. **Clean Previous Builds**:
+   ```bash
+   rm -rf dist/ build/ *.egg-info/
    ```
 
-## Uploading to PyPI
-
-1. Create an API token at https://pypi.org/manage/account/#api-tokens
-
-2. Upload the package to PyPI:
-   ```
-   python -m twine upload dist/*
-   ```
-   
-   Twine will ask for a username and password. For the username, enter `__token__`. For the password, enter your API token.
-
-3. Your package will be available at https://pypi.org/project/gtasks-cli/
-
-## Post-upload Verification
-
-After uploading, you can verify the package installation with:
-```
-pip install gtasks-cli
-gtasks --help
-```
-
-## Updating the Package
-
-To release a new version:
-
-1. Update the version in:
-   - [pyproject.toml](file:///Users/int/Documents/workspace/projects/gtasks_automation/gtasks_cli/pyproject.toml)
-   - [src/gtasks_cli/__init__.py](file:///Users/int/Documents/workspace/projects/gtasks_automation/gtasks_cli/src/gtasks_cli/__init__.py)
-
-2. Rebuild the package:
-   ```
+2. **Build the Package**:
+   ```bash
    python -m build
    ```
 
-3. Upload the new version:
+3. **Verify the Build**:
+   ```bash
+   python -m twine check dist/*
    ```
+
+4. **Upload to Test PyPI (Optional but Recommended)**:
+   ```bash
+   python -m twine upload --repository testpypi dist/*
+   ```
+
+5. **Upload to PyPI**:
+   ```bash
    python -m twine upload dist/*
    ```
 
+## Test PyPI First (Recommended)
+
+Before uploading to the real PyPI, test with Test PyPI:
+
+1. **Upload to Test PyPI**:
+   ```bash
+   python -m twine upload --repository testpypi dist/*
+   ```
+
+2. **Test Installation from Test PyPI**:
+   ```bash
+   pip install --index-url https://test.pypi.org/simple/ gtasks-cli
+   ```
+
+## Important Notes
+
+- Always increment the version number before uploading
+- The `build` tool creates both source distribution (`.tar.gz`) and wheel (`.whl`) files
+- Use `twine check` to validate your package before uploading
+- Store your PyPI credentials securely
+- Consider using Test PyPI first to validate your package
+
 ## Troubleshooting
 
-### License Metadata Issues
+### Common Issues:
 
-If you encounter metadata errors related to license fields during upload, make sure:
-1. You're using `hatchling` as the build backend
-2. The `license` field in `pyproject.toml` uses a valid SPDX identifier (e.g., "MIT")
-3. The `[tool.hatch.build.targets.wheel]` section properly configures the packages to include
+1. **Version Already Exists**: Increment the version number in `pyproject.toml` and `setup.py`
+2. **Build Fails**: Ensure all dependencies are properly specified
+3. **Upload Fails**: Check your PyPI credentials and permissions
 
-### Build Backend Issues
+## Verification
 
-If you experience issues with the build process:
-1. Ensure `hatchling` is properly installed
-2. Verify that the `[tool.hatch.build.targets.wheel]` section in `pyproject.toml` contains the correct package paths
-3. Check that your package directory structure matches the configuration
+After uploading, verify that:
 
-### File Already Exists Error
-
-If you get an error like `File already exists`, it means you're trying to upload a version that already exists on PyPI. PyPI does not allow overwriting existing versions for security and integrity reasons. You must increment the version number in both [pyproject.toml](file:///Users/int/Documents/workspace/projects/gtasks_automation/gtasks_cli/pyproject.toml) and [src/gtasks_cli/__init__.py](file:///Users/int/Documents/workspace/projects/gtasks_automation/gtasks_cli/src/gtasks_cli/__init__.py), then rebuild and re-upload.
+1. The package page displays correctly on PyPI
+2. Installation works: `pip install gtasks-cli`
+3. The command works: `gtasks --help`
+4. All functionality is available as expected

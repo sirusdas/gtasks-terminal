@@ -1,54 +1,67 @@
 #!/bin/bash
-# Upload script for gtasks-cli to PyPI
+# Script to build and upload gtasks-cli to PyPI
 
 set -e  # Exit on any error
 
-echo "==========================================="
-echo "Google Tasks CLI - PyPI Upload Script"
-echo "==========================================="
+echo "Starting PyPI upload process for gtasks-cli..."
 
-# Check if build tools are installed
-if ! command -v python -m build &> /dev/null; then
-    echo "Installing build tools..."
-    pip install build twine
-fi
-
-echo "Cleaning previous builds..."
-rm -rf dist/ build/ *.egg-info/
-
-echo "Building package..."
-python -m build
-
-echo "Checking package..."
-twine check dist/*
-
-echo "Package built successfully!"
-echo "Files created:"
-ls -la dist/
-
-echo ""
-echo "Choose upload target:"
-echo "1) Upload to TestPyPI"
-echo "2) Upload to PyPI (Production)"
-read -p "Enter your choice (1 or 2): " choice
-
-if [ "$choice" = "1" ]; then
-    echo "Uploading to TestPyPI..."
-    twine upload --repository testpypi dist/*
-    echo "Upload to TestPyPI complete!"
-    echo ""
-    echo "To test install from TestPyPI, run:"
-    echo "pip install --index-url https://test.pypi.org/simple/ gtasks-cli"
-elif [ "$choice" = "2" ]; then
-    echo "Uploading to PyPI..."
-    twine upload dist/*
-    echo "Upload to PyPI complete!"
-    echo ""
-    echo "Package is now available at: https://pypi.org/project/gtasks-cli/"
-else
-    echo "Invalid choice. Exiting."
+# Check if we're in the right directory
+if [ ! -f "pyproject.toml" ] || [ ! -f "setup.py" ]; then
+    echo "Error: pyproject.toml or setup.py not found in current directory."
+    echo "Please run this script from the gtasks_cli directory."
     exit 1
 fi
 
-echo ""
-echo "Upload process completed!"
+# Check if required tools are installed
+if ! command -v python3 &> /dev/null; then
+    echo "Error: python3 is not installed or not in PATH."
+    exit 1
+fi
+
+if ! command -v pip &> /dev/null; then
+    echo "Error: pip is not installed or not in PATH."
+    exit 1
+fi
+
+# Install build tools if not already installed
+echo "Installing/Updating build tools..."
+pip install --upgrade build twine
+
+# Clean previous builds if they exist
+echo "Cleaning previous builds..."
+rm -rf dist/ build/ *.egg-info/ 2>/dev/null || true
+
+# Build the package
+echo "Building the package..."
+python3 -m build
+
+# Check if build was successful
+if [ ! -f "dist/*.tar.gz" ] || [ ! -f "dist/*.whl" ]; then
+    echo "Build failed. Please check the error messages above."
+    exit 1
+fi
+
+echo "Build completed successfully!"
+echo "Built files:"
+ls -la dist/
+
+# Ask for confirmation before uploading
+echo
+read -p "Do you want to upload to PyPI? (y/N): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Upload to PyPI
+    echo "Uploading to PyPI..."
+    python3 -m twine upload dist/*
+    
+    if [ $? -eq 0 ]; then
+        echo "Successfully uploaded to PyPI!"
+    else
+        echo "Upload failed. Please check the error messages above."
+        exit 1
+    fi
+else
+    echo "Upload cancelled by user. Files are available in dist/ directory."
+fi
+
+echo "PyPI upload process completed."
