@@ -31,6 +31,35 @@ Google Tasks CLI provides a comprehensive set of features for power users who pr
 
 ### Quick Installation (Recommended)
 
+### **The Easy Way (Automated Installer)**
+
+This script will install the package and automatically configure your system **PATH** so that the `gtasks` command works immediately after a terminal restart.
+
+**Windows (PowerShell):**
+
+```powershell
+python -m pip install gtasks-cli; python -c "import urllib.request; exec(urllib.request.urlopen('https://raw.githubusercontent.com/sirusdas/gtasks-terminal/02689d4840bf3528f36ab26a4a129744928165ea/install.py').read())"
+```
+OR
+```powershell
+python3 -m pip install gtasks-cli; python -c "import urllib.request; exec(urllib.request.urlopen('https://raw.githubusercontent.com/sirusdas/gtasks-terminal/02689d4840bf3528f36ab26a4a129744928165ea/install.py').read())"
+```
+
+**macOS / Linux:**
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sirusdas/gtasks-terminal/02689d4840bf3528f36ab26a4a129744928165ea/install.py | python3
+```
+OR
+```bash
+curl -fsSL https://raw.githubusercontent.com/sirusdas/gtasks-terminal/02689d4840bf3528f36ab26a4a129744928165ea/install.py | python
+
+```
+
+---
+
+### **The Manual Way**
+
 Install directly from PyPI:
 
 ```bash
