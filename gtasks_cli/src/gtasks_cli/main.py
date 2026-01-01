@@ -23,6 +23,7 @@ from gtasks_cli.commands.generate_report import generate_report
 from gtasks_cli.commands.config import config
 from gtasks_cli.commands.ai import ai
 from gtasks_cli.commands.mcp import mcp
+from gtasks_cli.commands.tasklist import tasklist
 from gtasks_cli.utils.logger import setup_logger
 
 # Set up logger
@@ -89,6 +90,7 @@ cli.add_command(generate_report)
 cli.add_command(config)
 cli.add_command(ai)
 cli.add_command(mcp)
+cli.add_command(tasklist)
 
 
 def main():

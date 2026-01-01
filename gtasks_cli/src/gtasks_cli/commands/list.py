@@ -170,6 +170,19 @@ def _filter_tasks_by_time(tasks: List[Task], filter_type: str) -> List[Task]:
     if _is_custom_date_format(period):
         return _filter_tasks_by_custom_date(tasks, period, date_field)
     
+    # Special handling for 'due_today' which only checks the due date field
+    if period == 'due_today':
+        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = start_of_day + timedelta(days=1)
+        
+        def _task_due_today(task: Task) -> bool:
+            """Check if a task is due today"""
+            if task.due:
+                return start_of_day <= _normalize_datetime(task.due) < end_of_day
+            return False
+        
+        return [t for t in tasks if _task_due_today(t)]
+    
     def _task_in_time_period(task: Task, start_time, end_time, specific_field=None) -> bool:
         """Check if a task falls within the specified time period based on specified or all date fields"""
         # If a specific field is requested, only check that field
@@ -462,7 +475,7 @@ task_state = TaskState()
                    'Use format like "this_month", "this_week", etc. '
                    'To filter by a specific date field, use "this_month:due_date", '
                    '"this_week:created_at", or "this_month:modified_at". '
-                   'Supported periods: today, this_week, this_month, last_month, '
+                   'Supported periods: today, due_today, this_week, this_month, last_month, '
                    'last_3m, last_6m, last_year. '
                    'Custom date formats: DDMMYYYY for a specific date or '
                    'DDMMYYYY-DDMMYYYY for a date range.')
