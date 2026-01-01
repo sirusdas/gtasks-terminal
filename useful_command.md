@@ -40,12 +40,12 @@ gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen|--ex:c
 
 gtasks generate-report rp10 --filter this_week:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
 
-gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod], 3[discuss,meet]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc" --email prasenjitk.deb@intglobal.com --cc suresh.das@intglobal.com
+gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod], 3[discuss,meet]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc" --email prasenjitk.deb@example.com --cc suresh.das@example.com
 
 ------------ Suresh Commands --------------
 gtasks generate-report rp10 --filter past2weeks:created_at --tags "my,vapt,waf,***|--ex:cr" --output-tags "--ex:tp1,R,PH|--group:1[my,***,urgent],2[prod,defect,uat,live,anal,resear,bugs],3[discuss,meet,plan],4[cr],5[DEL]" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
 
-gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc" --email suresh.das@intglobal.com
+gtasks generate-report rp10 --filter past2weeks:created_at --tags "prasen|--ex:cr" --output-tags "--ex:my,upscaling,tp1,todo,R,PH|--group:1[prasen,***,urgent],2[prod]" --output-lists "--ex:My Tasks,Raju Da" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc" --email suresh.das@example.com
 
 gtasks generate-report rp10 --filter this_week:created_at --output-tags "--ex:tp1,R,PH|--group:1[my,***,urgent],2[prod],3[discuss]" --output-tasks "--ex:Tracker" --only-pending --order-by "modified_at:desc"
 
