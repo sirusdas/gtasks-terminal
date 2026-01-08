@@ -71,23 +71,22 @@ def cli(ctx, google, storage, account, auto_save):
 
 
 # Register commands
-cli.add_command(add)
+# cli.add_command(add)
+cli.add_command(advanced_sync)
+cli.add_command(interactive)
 cli.add_command(list_tasks)
 cli.add_command(search)
 cli.add_command(view)
-cli.add_command(done)
-cli.add_command(delete)
-cli.add_command(update)
+# cli.add_command(done)
+# cli.add_command(delete)
+# cli.add_command(update)
 cli.add_command(auth)
-cli.add_command(summary)
-cli.add_command(interactive)
 cli.add_command(deduplicate)
 cli.add_command(account)
-cli.add_command(advanced_sync)
 cli.add_command(generate_report)
 cli.add_command(config)
-cli.add_command(ai)
-cli.add_command(mcp)
+# cli.add_command(ai)
+# cli.add_command(mcp)
 cli.add_command(tasklist)
 
 
