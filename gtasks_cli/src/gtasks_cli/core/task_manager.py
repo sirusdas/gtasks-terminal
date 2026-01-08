@@ -416,18 +416,3 @@ class TaskManager:
                 return True
             
             return False
-    
-    def sync_with_google_tasks(self) -> bool:
-        """Synchronize tasks between local storage and Google Tasks."""
-        if not self.use_google_tasks:
-            logger.warning("Google Tasks sync requested but not enabled")
-            return False
-        
-        try:
-            success = self.sync_manager.sync()
-            logger.info(f"Sync completed: {'success' if success else 'failed'}")
-            return success
-        except Exception as e:
-            logger.error(f"Sync failed with error: {e}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            return False
