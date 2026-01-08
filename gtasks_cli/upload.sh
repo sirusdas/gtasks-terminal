@@ -35,8 +35,8 @@ rm -rf dist/ build/ *.egg-info/ 2>/dev/null || true
 echo "Building the package..."
 python3 -m build
 
-# Check if build was successful
-if [ ! -f "dist/*.tar.gz" ] || [ ! -f "dist/*.whl" ]; then
+# Check if build was successful by looking for files in dist/
+if [ ! -d "dist" ] || [ -z "$(ls -A dist/)" ]; then
     echo "Build failed. Please check the error messages above."
     exit 1
 fi
