@@ -5,3 +5,7 @@ suresh_int_client_secret_907170957481-akgrvhj968mk5lkr2g3dt6p56qj2vv3f.apps.goog
 gtasks_cli/src/gtasks_cli/core/__pycache__/*
 gtasks_cli/dist/*.whl
 gtasks_cli/dist/*.tar.gz
+gtasks_cli/qdrant_storage/*
+gtasks_cli/src/gtasks_cli/__pycache__/*
+gtasks_dashboard/gtasks-dashboard/lib/*
+gtasks_dashboard/gtasks-dashboard/bin/*

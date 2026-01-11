@@ -1,0 +1,9 @@
+# GTasks Dashboard - Python Dependencies
+# Install with: pip install -r requirements-python.txt
+
+Flask==2.3.3
+Flask-SocketIO==5.3.6
+plotly==5.17.0
+pandas==2.1.4
+python-socketio==5.8.0
+eventlet==0.33.3

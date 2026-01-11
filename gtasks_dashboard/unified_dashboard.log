@@ -1,0 +1,4 @@
+  File "/Users/int/Documents/workspace/projects/gtasks_automation/gtasks_dashboard/unified_dashboard_with_api.py", line 1744
+                panel.class
+                           ^
+SyntaxError: EOF while scanning triple-quoted string literal

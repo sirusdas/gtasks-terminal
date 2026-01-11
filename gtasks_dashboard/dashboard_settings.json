@@ -1,0 +1,16 @@
+{
+  "show_deleted_tasks": false,
+  "theme": "light",
+  "notifications": true,
+  "default_view": "dashboard",
+  "auto_refresh": true,
+  "compact_view": false,
+  "menu_visible": true,
+  "menu_animation": true,
+  "keyboard_shortcuts": true,
+  "priority_system_enabled": true,
+  "advanced_filters_enabled": true,
+  "reports_enabled": true,
+  "auto_save_interval": 300,
+  "timezone": "UTC"
+}

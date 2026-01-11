@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Advanced Google Tasks Dashboard with Multi-Account Support and Real-time Sync" />
+    <meta name="keywords" content="google tasks, dashboard, productivity, task management" />
+    <meta name="author" content="GTasks Dashboard" />
+    
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#3b82f6" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Apple Touch Icon -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://gtasks-dashboard.com/" />
+    <meta property="og:title" content="GTasks Dashboard - Advanced Task Management" />
+    <meta property="og:description" content="Advanced Google Tasks Dashboard with Multi-Account Support and Real-time Sync" />
+    <meta property="og:image" content="/og-image.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://gtasks-dashboard.com/" />
+    <meta property="twitter:title" content="GTasks Dashboard - Advanced Task Management" />
+    <meta property="twitter:description" content="Advanced Google Tasks Dashboard with Multi-Account Support and Real-time Sync" />
+    <meta property="twitter:image" content="/og-image.png" />
+    
+    <title>GTasks Dashboard - Advanced Task Management</title>
+    
+    <style>
+      /* Loading screen styles */
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.5s ease-out;
+      }
+      
+      .loading-content {
+        text-align: center;
+        color: white;
+      }
+      
+      .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-top: 3px solid white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
+      
+      .loading-text {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 18px;
+        font-weight: 500;
+        margin: 0;
+      }
+      
+      .loading-subtext {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        opacity: 0.8;
+        margin: 8px 0 0;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      /* Hide loading screen when app is ready */
+      .app-ready #loading-screen {
+        opacity: 0;
+        pointer-events: none;
+      }
+      
+      /* Fallback for users with JavaScript disabled */
+      noscript {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: #f3f4f6;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      
+      .no-js-message {
+        text-align: center;
+        padding: 2rem;
+        max-width: 500px;
+      }
+      
+      .no-js-message h1 {
+        color: #374151;
+        margin-bottom: 1rem;
+      }
+      
+      .no-js-message p {
+        color: #6b7280;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <h1 class="loading-text">GTasks Dashboard</h1>
+        <p class="loading-subtext">Loading your tasks...</p>
+      </div>
+    </div>
+    
+    <!-- App Root -->
+    <div id="root"></div>
+    
+    <!-- No Script Fallback -->
+    <noscript>
+      <div class="no-js-message">
+        <h1>JavaScript Required</h1>
+        <p>
+          GTasks Dashboard requires JavaScript to function properly. 
+          Please enable JavaScript in your browser settings and reload the page.
+        </p>
+      </div>
+    </noscript>
+    
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <script>
+      // Hide loading screen when app is ready
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          document.body.classList.add('app-ready');
+          setTimeout(function() {
+            const loadingScreen = document.getElementById('loading-screen');
+            if (loadingScreen) {
+              loadingScreen.remove();
+            }
+          }, 500);
+        }, 1000); // Show loading for at least 1 second
+      });
+      
+      // Service Worker Registration for PWA
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js')
+            .then(function(registration) {
+              console.log('SW registered: ', registration);
+            })
+            .catch(function(registrationError) {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>

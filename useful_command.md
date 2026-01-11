@@ -58,3 +58,6 @@ gtasks interactive -- list --filter today:created_at --search "[prasen" --order-
 gtasks interactive -- list --filter 08122025:due_date --search "[prasen" --order-by "due_date:desc"
 
 gtasks interactive -- list --filter 08122025:due_date
+
+# Kill all Python processes listening on ports
+lsof -i -P -n | grep LISTEN | grep Python | awk '{print $2}' | xargs kill -9
