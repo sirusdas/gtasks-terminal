@@ -1,7 +1,136 @@
-## Context rules
+# GTasks Automation - Coding Rules
 
-* Stick to human-readable and LLM-friendly formats
-* Keep files short, maintain them and clean them up regularly
-* If files start getting long, break them up into smaller files and folders and subfolders. Use descriptive filenames
+## Modular Architecture
 
-<Add additional rules here if necessary>
+### Single Source of Truth
+- Each feature should have ONE implementation
+- NEVER create multiple versions: `main.py` → `advanced_main.py` → `complete_main.py` is PROHIBITED
+- Instead: Extend the original file with new parameters, flags, or configuration options
+
+### Example of Correct Approach
+```
+✅ GOOD: main.py with --enhanced flag
+✅ GOOD: data_manager.py with optional features via parameters
+❌ BAD: main.py, main_enhanced.py, main_advanced.py, main_complete.py
+❌ BAD: data_manager.py, enhanced_data_manager.py, super_data_manager.py
+```
+
+### File Naming Conventions
+- Use descriptive, singular names: `task_manager.py`, not `task_managers.py`
+- Avoid prefixes like `super_`, `advanced_`, `enhanced_` in filenames
+- Use suffixes for variants only when they represent fundamentally different types:
+  - `base_report.py` (base class), `task_report.py` (specific report type)
+
+---
+
+## Code Organization
+
+### Directory Structure
+- Keep related functionality in the same module
+- Routes → `routes/`
+- Models → `models/`
+- Services → `services/`
+- Utils → `utils/`
+- Tests → alongside source files or in `tests/`
+
+### Import Order
+1. Standard library imports
+2. Third-party imports
+3. Local application imports
+
+### Module Responsibilities
+- Each module should have ONE clear responsibility
+- Services handle business logic
+- Models handle data structures
+- Routes/Commands handle I/O and routing
+- Utils handle reusable helpers
+
+---
+
+## Code Quality
+
+### Functions
+- Keep functions small and focused (single responsibility)
+- Maximum 50 lines per function (excluding docstrings)
+- Use type hints for function signatures
+- Document complex logic with docstrings
+
+### Naming
+- Use descriptive names: `get_completed_tasks()` not `get_tasks()`
+- Avoid single-letter variables (except loop counters)
+- Use verbs for functions: `validate_input()`, `fetch_data()`
+
+### Error Handling
+- Use custom exceptions in `utils/exceptions.py`
+- Log errors with appropriate level (ERROR, WARNING, INFO)
+- Provide meaningful error messages
+
+---
+
+## Git & Version Control
+
+### Commit Messages
+- Use imperative mood: "Add feature" not "Added feature"
+- Keep first line under 72 characters
+- Reference issues/tickets when applicable
+
+### Branch Naming
+- `feature/` for new features
+- `bugfix/` for bug fixes
+- `refactor/` for code improvements
+
+---
+
+## Testing
+
+### Test Files
+- Place tests alongside source or in `tests/` directory
+- Name test files: `test_<module>.py`
+- Use descriptive test method names
+
+### Coverage
+- Aim for meaningful test coverage on critical paths
+- Test edge cases and error conditions
+
+---
+
+## Documentation
+
+### Code Comments
+- Explain WHY, not WHAT
+- Keep comments up-to-date with code
+- Remove commented-out code
+
+### README
+- Keep project README updated
+- Include setup instructions
+- Document main use cases
+
+---
+
+## Anti-Patterns to Avoid
+
+```
+❌ Duplicate files (dashboard.py, dashboard2.py, new_dashboard.py)
+❌ God classes/modules that do everything
+❌ Deep nesting (if/elif/else > 3 levels)
+❌ Magic numbers (use constants/enums)
+❌ Ignoring linter/formatter rules
+❌ Large functions (>100 lines)
+❌ Circular imports
+```
+
+---
+
+## Best Practices Summary
+
+1. **DRY**: Don't Repeat Yourself - abstract common code
+2. **KISS**: Keep It Simple, Stupid
+3. **YAGNI**: You Aren't Gonna Need It - don't over-engineer
+4. **SOLID**: Follow SOLID principles for object-oriented code
+5. **Single Responsibility**: Each module/class/function has one purpose
+6. **Open/Closed**: Open for extension, closed for modification
+7. **Dependency Injection**: Use interfaces, not concrete implementations
+8. **Fail Fast**: Validate inputs early
+9. **Logging**: Log important operations and errors
+10. **Review**: Read your own code before submitting
