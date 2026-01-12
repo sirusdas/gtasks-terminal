@@ -1,0 +1,7 @@
+## Context rules
+
+* Stick to human-readable and LLM-friendly formats
+* Keep files short, maintain them and clean them up regularly
+* If files start getting long, break them up into smaller files and folders and subfolders. Use descriptive filenames
+
+<Add additional rules here if necessary>

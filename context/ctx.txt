@@ -1,0 +1,110 @@
+---
+Note: This file provides global context and should ideally not be modified or removed
+---
+
+# context-llemur 🐒: Collaborative Memory for Humans and LLMs
+
+context-llemur (`ctx`) is a version-controlled collaborative thinking system where ideas evolve through commits, branch into experiments, and merge across different minds (human and AI). It's git for thoughts, not code.
+
+## Key Problems We Solve
+- **LLM Amnesia**: Every new session starts from zero
+- **Lost Context**: Valuable conversations vanish when the window closes  
+- **Linear Thinking**: Can't branch conversations or explore alternatives
+- **Fragmented Memory**: Context scattered across different tools
+
+## Core Commands
+
+### Repository Management
+```bash
+ctx new [name]              # Create new context repository (default: ./context/)
+ctx status                  # Show current branch and repository status
+ctx list                    # List all discovered context repositories
+ctx switch <name>           # Switch to a different context repository
+```
+
+### Semantic Workflows
+```bash
+ctx explore <topic>         # Start exploring a new topic (creates new branch)
+ctx save "<message>"        # Save current insights (git add -A && git commit -m)
+ctx integrate <exploration> # Merge insights back to main context
+ctx discard [--force]       # Reset to last commit, dropping changes
+```
+
+### File Operations
+```bash
+ctx mv <source> <destination> # Move or rename files (git mv equivalent)
+ctx rm <filepath> [--force]   # Remove files from repository (git rm equivalent)
+```
+
+### Content Operations
+```bash
+ctx show_all [directory]    # Display all file contents with clear delimiters
+ctx recent                  # Show recent activity and modified files
+ctx diff                    # Show current changes
+```
+
+### MCP Server
+```bash
+ctx mcp                     # Start MCP server for AI agent integration
+ctx load                    # Load context (use this to start conversations)
+```
+
+## MCP Server Integration
+
+When working as an MCP server, you have access to tools that provide:
+- **Repository Management**: Create, switch, and manage contexts
+- **Semantic Workflows**: Explore topics, save insights, integrate knowledge
+- **File Operations**: Read, write, and organize context files
+- **Navigation**: Browse branches, history, and search content
+
+Start conversations with `ctx load` to access the current context.
+
+## Managing Multiple Contexts
+
+`ctx` supports switching between multiple independent contexts using:
+
+- **`ctx.config`**: TOML file at the root tracking active and available repositories
+- **`.ctx` marker**: Empty file in each context repository for identification
+
+Example `ctx.config`:
+```toml
+active_ctx = "research"
+discovered_ctx = ["context", "research", "experiments"]
+```
+
+This allows you to create multiple context repositories in the same workspace and switch between them easily with `ctx switch <name>`.
+
+## Quick Workflow
+
+```bash
+ctx new "my-project"        # Create new context
+# Edit files in context/ directory
+ctx save "initial setup"   # Save changes
+ctx explore "new-feature"  # Branch to explore ideas
+ctx save "feature design"  # Save exploration
+ctx integrate "new-feature" # Merge back to main
+```
+
+## Git Command Mapping
+
+| ctx Command | Git Equivalent | Purpose |
+|-------------|----------------|---------|
+| `ctx explore <topic>` | `git checkout -b <topic>` | Create and switch to new branch |
+| `ctx save "<message>"` | `git add -A && git commit -m "<message>"` | Stage and commit changes |
+| `ctx integrate <branch>` | `git merge <branch>` | Merge branch into current |
+| `ctx discard` | `git reset --hard HEAD` | Reset to last commit |
+| `ctx mv <source> <destination>` | `git mv <source> <destination>` | Move or rename files |
+| `ctx rm <filepath> [--force]` | `git rm <filepath> [--force]` | Remove files from repository |
+
+## Best Practices
+
+- **Commit early and often** to preserve thinking evolution
+- **Use descriptive branch names**: `bias-detection-approach`, `performance-optimization`
+- **Main branch represents current consensus** - explorations are for trying new ideas
+- **Files stored as plain text** for maximum compatibility across all AI tools
+
+## Technical Notes
+- Context repositories are standard git repositories with additional tooling
+- All git commands work normally within the context directory
+- Repository state travels with the context directory
+- MCP server provides programmatic access to all ctx functionality
