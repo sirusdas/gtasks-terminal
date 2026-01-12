@@ -1,0 +1,13 @@
+{
+  "mcp": {
+    "context-llemur": {
+      "type": "local",
+      "command": [
+        "/Users/int/.pyenv/shims/ctx",
+        "mcp"
+      ],
+      "enabled": true
+    }
+  },
+  "$schema": "https://opencode.ai/config.json"
+}
