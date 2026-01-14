@@ -43,6 +43,227 @@ class GTasksUIComponents:
             <!-- Font Awesome -->
             <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
             <style>
+                /* Dark Mode CSS Variables */
+                :root {
+                    --bg-primary: #f3f4f6;
+                    --bg-secondary: #ffffff;
+                    --bg-tertiary: #e5e7eb;
+                    --text-primary: #1f2937;
+                    --text-secondary: #4b5563;
+                    --text-muted: #6b7280;
+                    --border-color: #e5e7eb;
+                    --shadow-color: rgba(0, 0, 0, 0.1);
+                    --hover-bg: #e5e7eb;
+                }
+                
+                .dark-mode {
+                    --bg-primary: #111827;
+                    --bg-secondary: #1f2937;
+                    --bg-tertiary: #374151;
+                    --text-primary: #f9fafb;
+                    --text-secondary: #e5e7eb;
+                    --text-muted: #9ca3af;
+                    --border-color: #374151;
+                    --shadow-color: rgba(0, 0, 0, 0.3);
+                    --hover-bg: #374151;
+                }
+                
+                /* Base styles with CSS variables */
+                body {
+                    background-color: var(--bg-primary);
+                    color: var(--text-primary);
+                    transition: background-color 0.3s ease, color 0.3s ease;
+                }
+                
+                /* Dark mode overrides for Tailwind */
+                .dark-mode body {
+                    background-color: var(--bg-primary);
+                    color: var(--text-primary);
+                }
+                
+                .dark-mode .bg-white,
+                .dark-mode .bg-gray-50,
+                .dark-mode .bg-gray-100 {
+                    background-color: var(--bg-secondary) !important;
+                }
+                
+                .dark-mode .text-gray-600,
+                .dark-mode .text-gray-500,
+                .dark-mode .text-gray-800,
+                .dark-mode .text-sm,
+                .dark-mode .text-gray-700,
+                .dark-mode .text-gray-900 {
+                    color: var(--text-secondary) !important;
+                }
+                
+                .dark-mode .text-gray-400,
+                .dark-mode .text-gray-300 {
+                    color: var(--text-muted) !important;
+                }
+                
+                .dark-mode .border,
+                .dark-mode .border-gray-200,
+                .dark-mode .border-gray-300 {
+                    border-color: var(--border-color) !important;
+                }
+                
+                .dark-mode .bg-gray-200,
+                .dark-mode .bg-gray-300 {
+                    background-color: var(--bg-tertiary) !important;
+                }
+                
+                .dark-mode .hover\:bg-blue-100:hover {
+                    background-color: var(--hover-bg) !important;
+                }
+                
+                .dark-mode .shadow,
+                .dark-mode .shadow-lg {
+                    box-shadow: 0 4px 6px -1px var(--shadow-color) !important;
+                }
+                
+                /* Form elements */
+                .dark-mode input,
+                .dark-mode select,
+                .dark-mode textarea {
+                    background-color: var(--bg-secondary);
+                    color: var(--text-primary);
+                    border-color: var(--border-color);
+                }
+                
+                .dark-mode input::placeholder,
+                .dark-mode textarea::placeholder {
+                    color: var(--text-muted);
+                }
+                
+                .dark-mode input:focus,
+                .dark-mode select:focus,
+                .dark-mode textarea:focus {
+                    outline: none;
+                    border-color: #3b82f6;
+                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+                }
+                
+                /* Buttons */
+                .dark-mode button {
+                    color: var(--text-primary);
+                }
+                
+                .dark-mode .bg-blue-500,
+                .dark-mode .bg-green-500,
+                .dark-mode .bg-red-500,
+                .dark-mode .bg-yellow-500,
+                .dark-mode .bg-purple-500,
+                .dark-mode .bg-indigo-500 {
+                    filter: brightness(0.9);
+                }
+                
+                .dark-mode .bg-blue-500:hover,
+                .dark-mode .bg-green-500:hover,
+                .dark-mode .bg-red-500:hover,
+                .dark-mode .bg-yellow-500:hover,
+                .dark-mode .bg-purple-500:hover,
+                .dark-mode .bg-indigo-500:hover {
+                    filter: brightness(1.1);
+                }
+                
+                /* Tables */
+                .dark-mode table {
+                    color: var(--text-primary);
+                }
+                
+                .dark-mode th,
+                .dark-mode td {
+                    border-color: var(--border-color) !important;
+                }
+                
+                .dark-mode .dataTables_wrapper .dataTables_length,
+                .dark-mode .dataTables_wrapper .dataTables_filter,
+                .dark-mode .dataTables_wrapper .dataTables_info,
+                .dark-mode .dataTables_wrapper .dataTables_processing,
+                .dark-mode .dataTables_wrapper .dataTables_paginate {
+                    color: var(--text-secondary) !important;
+                }
+                
+                .dark-mode .dataTables_wrapper .paginate_button {
+                    background-color: var(--bg-secondary) !important;
+                    color: var(--text-primary) !important;
+                    border-color: var(--border-color) !important;
+                }
+                
+                .dark-mode .dataTables_wrapper .paginate_button:hover {
+                    background-color: var(--hover-bg) !important;
+                }
+                
+                .dark-mode .dataTables_wrapper .paginate_button.current {
+                    background-color: #3b82f6 !important;
+                    color: white !important;
+                }
+                
+                /* Modal */
+                .dark-mode #addTaskModal ~ * {
+                    background-color: var(--bg-secondary) !important;
+                    color: var(--text-primary) !important;
+                }
+                
+                /* Sidebar */
+                .dark-mode .sidebar {
+                    background-color: var(--bg-secondary) !important;
+                }
+                
+                /* Stats cards */
+                .dark-mode .rounded-lg.shadow.p-6.text-center {
+                    background-color: var(--bg-secondary) !important;
+                }
+                
+                /* Account cards */
+                .dark-mode .bg-gray-50 {
+                    background-color: var(--bg-secondary) !important;
+                }
+                
+                /* Tag badges */
+                .dark-mode .inline-block.bg-gray-200 {
+                    background-color: var(--bg-tertiary) !important;
+                    color: var(--text-primary) !important;
+                }
+                
+                /* Dark mode toggle button */
+                .dark-mode-toggle {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 8px 16px;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    border: 2px solid transparent;
+                }
+                
+                .dark-mode-toggle:hover {
+                    background-color: rgba(255, 255, 255, 0.1);
+                }
+                
+                .dark-mode .dark-mode-toggle {
+                    border-color: rgba(255, 255, 255, 0.2);
+                }
+                
+                /* Sun/Moon icons */
+                .dark-mode .sun-icon {
+                    display: none;
+                }
+                
+                .dark-mode .moon-icon {
+                    display: inline-block;
+                }
+                
+                :not(.dark-mode) .sun-icon {
+                    display: inline-block;
+                }
+                
+                :not(.dark-mode) .moon-icon {
+                    display: none;
+                }
+                
+                /* Sidebar styles */
                 .sidebar { 
                     min-height: calc(100vh - 64px); 
                     transition: all 0.3s ease;
@@ -86,6 +307,11 @@ class GTasksUIComponents:
                                 </h1>
                             </div>
                             <div class="flex items-center space-x-4">
+                                <div id="darkModeToggle" class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                                    <i class="fas fa-sun sun-icon text-yellow-400"></i>
+                                    <i class="fas fa-moon moon-icon text-blue-300"></i>
+                                    <span class="text-sm font-medium"><span class="sun-icon">Light</span><span class="moon-icon">Dark</span></span>
+                                </div>
                                 <select id="accountSelector" onchange="switchAccount()" class="bg-blue-500 text-white px-3 py-1 rounded">
                                 </select>
                                 <button onclick="refreshData()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded">
@@ -439,9 +665,49 @@ class GTasksUIComponents:
                 let tasksDataTable = null;
                 let graphSimulation = null;
                 let sidebarVisible = true;
-
+                
+                // Dark mode functions
+                function initDarkMode() {
+                    const savedDarkMode = localStorage.getItem('darkMode');
+                    if (savedDarkMode === 'enabled') {
+                        document.body.classList.add('dark-mode');
+                    }
+                    
+                    // Update toggle button icon
+                    updateDarkModeToggle();
+                }
+                
+                function toggleDarkMode() {
+                    document.body.classList.toggle('dark-mode');
+                    
+                    const isDarkMode = document.body.classList.contains('dark-mode');
+                    localStorage.setItem('darkMode', isDarkMode ? 'enabled' : 'disabled');
+                    
+                    updateDarkModeToggle();
+                    
+                    // Reinitialize DataTables if they exist to apply dark theme
+                    if (typeof $ !== 'undefined') {
+                        if (tasksDataTable) {
+                            tasksDataTable.columns.adjust().draw();
+                        }
+                        if ($.fn.DataTable.isDataTable('#recentTasksTable')) {
+                            $('#recentTasksTable').DataTable().columns.adjust().draw();
+                        }
+                    }
+                }
+                
+                function updateDarkModeToggle() {
+                    const toggle = document.getElementById('darkModeToggle');
+                    const isDarkMode = document.body.classList.contains('dark-mode');
+                    
+                    if (toggle) {
+                        toggle.setAttribute('title', isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode');
+                    }
+                }
+                
                 // Initialize the dashboard
                 window.addEventListener('load', function() {
+                    initDarkMode();
                     setupEventListeners();
                     loadDashboardData();
                 });
