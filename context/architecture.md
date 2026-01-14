@@ -32,16 +32,27 @@ Google Tasks automation tool with CLI and Web Dashboard interfaces for managing 
 
 | Component | Location | Responsibility |
 |-----------|----------|----------------|
-| **Entry Point** | `gtasks_dashboard/main_dashboard.py` | Flask app initialization, blueprint registration |
-| **Routes/API** | `gtasks_dashboard/routes/` | API and dashboard route handlers |
-| **Routes** | `gtasks_dashboard/routes/api.py`, `dashboard.py` | REST API endpoints and page routes |
+| **Entry Point** | `gtasks_dashboard/main_dashboard.py` | Flask app initialization, blueprint registration, feature flag management |
+| **Routes** | `gtasks_dashboard/routes/api.py` | REST API endpoints for task operations |
+| **Routes** | `gtasks_dashboard/routes/dashboard.py` | Page routes and view rendering |
+| **Services** | `gtasks_dashboard/services/data_manager.py` | Business logic, data transformation, task operations |
+| **Services** | `gtasks_dashboard/services/dashboard_generator.py` | Static HTML dashboard generation (optional export) |
 | **Models** | `gtasks_dashboard/models/` | Data models (Task, Account, DashboardStats, HybridTags) |
-| **Services** | `gtasks_dashboard/services/` | Business logic (data_manager) |
-| **Modules** | `gtasks_dashboard/modules/` | Feature modules (priority_system, tag_manager, account_manager, settings_manager) |
+| **Modules** | `gtasks_dashboard/modules/priority_system.py` | Priority calculation and management |
+| **Modules** | `gtasks_dashboard/modules/tag_manager.py` | Hybrid tag extraction (@user, #tag, [bracket]) |
+| **Modules** | `gtasks_dashboard/modules/account_manager.py` | Multi-account support |
+| **Modules** | `gtasks_dashboard/modules/settings_manager.py` | Dashboard configuration persistence |
+| **Templates** | `gtasks_dashboard/templates/dashboard.html` | Main dashboard template (single source) |
+| **Templates** | `gtasks_dashboard/templates/static_dashboard.html` | Standalone export template (optional) |
 | **UI Components** | `gtasks_dashboard/ui_components.py` | Reusable UI components |
-| **Config** | `gtasks_dashboard/config.py` | Dashboard configuration |
+| **Config** | `gtasks_dashboard/config.py` | Dashboard configuration, feature flags |
 
-**Frontend**: HTML + JavaScript with D3.js for hierarchical visualization
+**Frontend**: HTML + JavaScript with Force-Graph/D3.js for hierarchical visualization + DataTables for task listing
+
+**Architecture Principles**:
+- **Single Source of Truth**: One dashboard implementation with feature flags
+- **Modular Design**: Services handle business logic, routes handle HTTP, templates handle presentation
+- **Configuration-Driven**: Features enabled/disabled via `config.py`, not duplicate files
 
 ---
 
@@ -91,3 +102,68 @@ Response/View Rendering
 - **Dashboard**: flask, d3.js (frontend)
 - **Database**: sqlite3 (built-in)
 - **Reports**: Various visualization and reporting modules
+
+---
+
+## 🧠 AI Context Layer (Git-Native)
+| Component | Implementation | Responsibility |
+|-----------|----------------|----------------|
+| **Memory Store** | `context-llemur` | Stores logic/rules in `context/` as plain text |
+| **Tooling** | **MCP** | Exposes `ctx_read/write` to Kilo, Continue, and OpenCode |
+| **Version Sync** | **Git** | Synchronizes AI "memory" across local and remote clones |
+
+---
+
+## 🌐 Browser Debugging Tools (MCP)
+| Tool | Purpose | Key Functions |
+|------|---------|---------------|
+| **Playwright** | Interactive browser automation and testing | `browser_fill_form`, `browser_click`, `browser_take_screenshot`, `browser_snapshot`, `browser_console_messages`, `browser_network_requests` |
+
+### Playwright Usage Guidelines
+- **Navigation**: Use `browser_navigate` to navigate to URLs
+- **DOM Inspection**: Use `browser_snapshot` to inspect DOM structure
+- **Form Interactions**: Use `browser_fill_form`, `browser_click` for form filling and clicking
+- **Screenshots**: Use `browser_take_screenshot` to capture page screenshots
+- **Console Errors**: Use `browser_console_messages` to retrieve error logs
+- **Network Monitoring**: Use `browser_network_requests` to monitor API calls
+
+### Browser Debugging Workflow
+1. **For UI Issues**: Use `browser_snapshot` to inspect DOM structure
+2. **For Console Errors**: Use `browser_console_messages` to retrieve error logs
+3. **For Network Issues**: Use `browser_network_requests` to monitor API calls
+4. **For Automation**: Use `browser_fill_form`, `browser_click` for form interactions and user flows
+
+---
+
+## 🏗 Core Components
+
+### 1. gtasks_cli (Command Line)
+- **Location**: `gtasks_cli/src/gtasks_cli/`
+- **Logic**: Uses `click` for command routing.
+- **Key Modules**: 
+    - `commands/`: Individual logic for `add`, `list`, `sync`, etc.
+    - `models/`: Schema for `Task` and `Account`.
+    - `reports/`: Logic for generating pending/completion summaries.
+
+### 2. gtasks_dashboard (Web UI)
+- **Location**: `gtasks_dashboard/`
+- **Stack**: Flask (Backend) + D3.js (Frontend Visualization).
+- **Logic**: Handles hierarchical task views and priority management.
+
+---
+
+## 🔄 Data & Sync Flow
+
+
+1. **Input**: User triggers action via CLI Command or Flask Route.
+2. **Context Check**: AI verifies rules in `context/rules.md`.
+3. **Service**: `data_manager` or `sync_service` processes logic.
+4. **Storage**: SQLite/JSON updated; Google Tasks API synced via OAuth2.
+5. **Context Update**: AI updates `architecture.md` if structure changed.
+
+---
+
+## 🚀 Entry Points
+- **CLI**: `python -m gtasks_cli`
+- **Web**: `python gtasks_dashboard/main_dashboard.py`
+- **AI Sync**: `ctx save` (Run this before `git push`)

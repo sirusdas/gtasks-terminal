@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GTasks Dashboard - Hierarchical Visualization</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2 id="sidebar-title">GTasks</h2>
+                <button class="menu-toggle" onclick="toggleSidebar()" title="Toggle menu">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" onclick="showSection('dashboard')">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" class="nav-item" onclick="showSection('hierarchy')">
+                    <i class="fas fa-project-diagram"></i>
+                    <span>Hierarchy</span>
+                </a>
+                <a href="#" class="nav-item" onclick="showSection('tasks')">
+                    <i class="fas fa-tasks"></i>
+                    <span>Tasks</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content" id="main-content">
+            <!-- Dashboard Section -->
+            <section id="dashboard-section" class="section">
+                <div class="header">
+                    <h1><i class="fas fa-tasks mr-2"></i>GTasks Dashboard</h1>
+                    <div class="header-actions">
+                        <select id="account-selector" class="account-selector" onchange="switchAccount(this.value)">
+                            <option value="">Loading accounts...</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="refreshData()">
+                            <i class="fas fa-sync-alt"></i>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="color: #3b82f6;">
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                        <div class="stat-value" id="total-tasks">-</div>
+                        <div class="stat-label">Total Tasks</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="color: #10b981;">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="stat-value" id="completed-tasks">-</div>
+                        <div class="stat-label">Completed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="color: #f59e0b;">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-value" id="pending-tasks">-</div>
+                        <div class="stat-label">Pending</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="color: #ef4444;">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="stat-value" id="critical-tasks">-</div>
+                        <div class="stat-label">Critical</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="color: #8b5cf6;">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div class="stat-value" id="high-tasks">-</div>
+                        <div class="stat-label">High Priority</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="color: #ec4899;">
+                            <i class="fas fa-calendar-times"></i>
+                        </div>
+                        <div class="stat-value" id="overdue-tasks">-</div>
+                        <div class="stat-label">Overdue</div>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="quick-stats">
+                    <div class="progress-ring-container">
+                        <svg class="progress-ring" width="120" height="120">
+                            <circle class="progress-ring-circle-bg" stroke="#e5e7eb" stroke-width="8" fill="transparent" r="52" cx="60" cy="60"/>
+                            <circle class="progress-ring-circle" id="completion-ring" stroke="#10b981" stroke-width="8" fill="transparent" r="52" cx="60" cy="60"/>
+                        </svg>
+                        <div class="progress-text">
+                            <span id="completion-rate">0%</span>
+                            <span class="progress-label">Complete</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Hierarchy Section -->
+            <section id="hierarchy-section" class="section" style="display: none;">
+                <div class="header">
+                    <h1><i class="fas fa-project-diagram mr-2"></i>Hierarchical Task Visualization</h1>
+                    <div class="header-actions">
+                        <select id="hierarchy-account-selector" class="account-selector" onchange="switchAccountForHierarchy(this.value)">
+                            <option value="">Loading accounts...</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="refreshHierarchy()">
+                            <i class="fas fa-sync-alt"></i>
+                            Refresh
+                        </button>
+                        <button class="btn btn-secondary" onclick="toggleFullscreen()">
+                            <i class="fas fa-expand"></i>
+                            Fullscreen
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Visualization -->
+                <div class="viz-container" id="viz-container">
+                    <svg class="hierarchy-svg" id="hierarchy-viz"></svg>
+                    
+                    <!-- Fullscreen exit button -->
+                    <button class="fullscreen-exit" id="fullscreen-exit" onclick="toggleFullscreen()" style="display: none;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Task Panel -->
+                <div class="task-panel" id="task-panel" style="display: none;">
+                    <div class="task-panel-header">
+                        <h3 id="selected-node-title">Selected Node Tasks</h3>
+                        <div class="task-panel-controls">
+                            <button class="btn btn-secondary" onclick="closeTaskPanel()">
+                                <i class="fas fa-times"></i>
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                    <div class="task-panel-content">
+                        <div class="task-filters">
+                            <select id="node-task-status-filter" class="filter-select">
+                                <option value="">All Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                            </select>
+                            <select id="node-task-priority-filter" class="filter-select">
+                                <option value="">All Priorities</option>
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                            <input type="text" id="node-task-search-filter" class="filter-input" placeholder="Search tasks...">
+                            <input type="text" id="node-task-project-filter" class="filter-input" placeholder="Filter by project...">
+                            <input type="text" id="node-task-tags-filter" class="filter-input" placeholder="Filter by tags (comma separated)...">
+                            <div class="date-range-filter">
+                                <input type="date" id="node-task-due-date-start" class="filter-input" placeholder="Due date from...">
+                                <span style="color: #6b7280; margin: 0 0.5rem;">to</span>
+                                <input type="date" id="node-task-due-date-end" class="filter-input" placeholder="Due date to...">
+                            </div>
+                            <div class="date-range-filter">
+                                <input type="date" id="node-task-created-date-start" class="filter-input" placeholder="Created from...">
+                                <span style="color: #6b7280; margin: 0 0.5rem;">to</span>
+                                <input type="date" id="node-task-created-date-end" class="filter-input" placeholder="Created to...">
+                            </div>
+                        </div>
+                        <div class="node-tasks-grid" id="node-tasks-grid">
+                            <!-- Node-related tasks will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tasks Section -->
+            <section id="tasks-section" class="section" style="display: none;">
+                <div class="header">
+                    <h1><i class="fas fa-tasks mr-2"></i>Task Management</h1>
+                    <div class="header-actions">
+                        <select id="tasks-account-selector" class="account-selector" onchange="switchAccountForTasks(this.value)">
+                            <option value="">Loading accounts...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Task Filters -->
+                <div class="task-filters-bar">
+                    <input type="text" id="task-search-filter" class="filter-input" placeholder="Search tasks..." oninput="filterTasks()">
+                    <select id="task-status-filter" class="filter-select" onchange="filterTasks()">
+                        <option value="">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                    <select id="task-priority-filter" class="filter-select" onchange="filterTasks()">
+                        <option value="">All Priorities</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+
+                <!-- Tasks Grid -->
+                <div class="tasks-grid" id="tasks-grid">
+                    <!-- Tasks will be populated here -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <p>Loading...</p>
+    </div>
+
+    <script src="/static/js/hierarchy.js?v=2"></script>
+    <script src="/static/js/filters.js"></script>
+    <script>
+        // Global state - exposed for other scripts
+        window.dashboardData = {};
+        // hierarchyData and selectedNode are declared in hierarchy.js - no need to redeclare
+        let selectedAccount = null;
+        let isFullscreen = false;
+
+        // ========== Global Functions ==========
+
+        // Show section
+        function showSection(section) {
+            document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            
+            const sectionEl = document.getElementById(`${section}-section`);
+            if (sectionEl) {
+                sectionEl.style.display = 'block';
+            }
+            
+            const navItem = document.querySelector(`.nav-item[onclick="showSection('${section}')"]`);
+            if (navItem) {
+                navItem.classList.add('active');
+            }
+            
+            if (section === 'hierarchy') {
+                loadHierarchy();
+            }
+        }
+
+        // Toggle sidebar
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('main-content');
+            sidebar.classList.toggle('collapsed');
+            mainContent.classList.toggle('expanded');
+        }
+
+        // Toggle fullscreen
+        function toggleFullscreen() {
+            const vizContainer = document.getElementById('viz-container');
+            const exitButton = document.getElementById('fullscreen-exit');
+            
+            isFullscreen = !isFullscreen;
+            
+            if (isFullscreen) {
+                vizContainer.classList.add('fullscreen-mode');
+                exitButton.style.display = 'block';
+            } else {
+                vizContainer.classList.remove('fullscreen-mode');
+                exitButton.style.display = 'none';
+            }
+            
+            setTimeout(updateHierarchyVisualization, 300);
+        }
+
+        // Show/hide loading
+        function showLoading(show) {
+            document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none';
+        }
+
+        // Load dashboard data
+        async function loadDashboard() {
+            showLoading(true);
+            try {
+                const response = await fetch('/api/data');
+                window.dashboardData = await response.json();
+                
+                updateStats();
+                updateAccountSelectors();
+                loadTasks();
+                
+                // Load hierarchy data
+                await loadHierarchy();
+                
+                console.log('Dashboard loaded successfully');
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Update statistics
+        function updateStats() {
+            const stats = window.dashboardData.stats || {};
+            document.getElementById('total-tasks').textContent = stats.total || 0;
+            document.getElementById('completed-tasks').textContent = stats.completed || 0;
+            document.getElementById('pending-tasks').textContent = stats.pending || 0;
+            document.getElementById('critical-tasks').textContent = stats.critical || 0;
+            document.getElementById('high-tasks').textContent = stats.high || 0;
+            document.getElementById('overdue-tasks').textContent = stats.overdue || 0;
+            
+            // Update progress ring
+            const completionRate = stats.completion_rate || 0;
+            document.getElementById('completion-rate').textContent = Math.round(completionRate) + '%';
+            const circle = document.getElementById('completion-ring');
+            if (circle) {
+                const circumference = 2 * Math.PI * 52;
+                const offset = circumference - (completionRate / 100) * circumference;
+                circle.style.strokeDasharray = circumference;
+                circle.style.strokeDashoffset = offset;
+            }
+        }
+
+        // Update account selectors
+        function updateAccountSelectors() {
+            const accounts = window.dashboardData.accounts || [];
+            const currentAccount = window.dashboardData.current_account;
+            
+            const selectors = [
+                document.getElementById('account-selector'),
+                document.getElementById('hierarchy-account-selector'),
+                document.getElementById('tasks-account-selector')
+            ];
+            
+            selectors.forEach(selector => {
+                if (selector) {
+                    selector.innerHTML = accounts.map(acc => 
+                        `<option value="${acc.id}" ${acc.id === currentAccount ? 'selected' : ''}>${acc.name}</option>`
+                    ).join('');
+                }
+            });
+        }
+
+        // Switch account
+        async function switchAccount(accountId) {
+            if (!accountId) return;
+            
+            showLoading(true);
+            try {
+                const response = await fetch(`/api/accounts/${accountId}/switch`, { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    await loadDashboard();
+                }
+            } catch (error) {
+                console.error('Error switching account:', error);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function switchAccountForHierarchy(accountId) {
+            switchAccount(accountId);
+        }
+
+        function switchAccountForTasks(accountId) {
+            switchAccount(accountId);
+        }
+
+        // Load tasks
+        function loadTasks() {
+            const tasks = window.dashboardData.tasks || [];
+            const container = document.getElementById('tasks-grid');
+            if (!container) return;
+            
+            container.innerHTML = '';
+            
+            if (tasks.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #6b7280;">No tasks found for this account.</p>';
+                return;
+            }
+            
+            tasks.forEach(task => {
+                const card = createTaskCard(task);
+                container.appendChild(card);
+            });
+        }
+
+        // Create task card
+        function createTaskCard(task) {
+            const card = document.createElement('div');
+            card.className = 'task-card';
+            
+            const priorityClass = `priority-${task.calculated_priority || 'medium'}`;
+            const statusClass = task.status === 'completed' ? 'status-completed' : 
+                               task.status === 'in_progress' ? 'status-in-progress' : 'status-pending';
+            
+            card.innerHTML = `
+                <div class="task-card-header">
+                    <span class="task-priority-badge ${priorityClass}">${task.calculated_priority || task.priority}</span>
+                    <span class="task-status-badge ${statusClass}">${task.status}</span>
+                </div>
+                <h4 class="task-card-title">${task.title}</h4>
+                ${task.description ? `<p class="task-card-description">${task.description}</p>` : ''}
+                <div class="task-card-footer">
+                    ${task.due ? `<span class="task-due"><i class="fas fa-calendar"></i> ${task.due}</span>` : ''}
+                    ${task.account ? `<span class="task-account"><i class="fas fa-user"></i> ${task.account}</span>` : ''}
+                </div>
+            `;
+            
+            return card;
+        }
+
+        // Filter tasks
+        function filterTasks() {
+            const search = document.getElementById('task-search-filter')?.value.toLowerCase() || '';
+            const status = document.getElementById('task-status-filter')?.value || '';
+            const priority = document.getElementById('task-priority-filter')?.value || '';
+            
+            const tasks = window.dashboardData.tasks || [];
+            const container = document.getElementById('tasks-grid');
+            if (!container) return;
+            
+            container.innerHTML = '';
+            
+            const filteredTasks = tasks.filter(task => {
+                if (status && task.status !== status) return false;
+                if (priority && (task.calculated_priority || task.priority) !== priority) return false;
+                if (search) {
+                    const searchLower = search.toLowerCase();
+                    const matchesTitle = task.title.toLowerCase().includes(searchLower);
+                    const matchesDesc = task.description && task.description.toLowerCase().includes(searchLower);
+                    if (!matchesTitle && !matchesDesc) return false;
+                }
+                return true;
+            });
+            
+            if (filteredTasks.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #6b7280;">No tasks match your filters.</p>';
+                return;
+            }
+            
+            filteredTasks.forEach(task => {
+                const card = createTaskCard(task);
+                container.appendChild(card);
+            });
+        }
+
+        // Refresh data
+        async function refreshData() {
+            await loadDashboard();
+        }
+
+        // Refresh hierarchy
+        async function refreshHierarchy() {
+            await loadHierarchy();
+        }
+
+        // Load hierarchy data
+        async function loadHierarchy() {
+            try {
+                const response = await fetch('/api/hierarchy');
+                hierarchyData = await response.json();
+                updateHierarchyVisualization();
+            } catch (error) {
+                console.error('Error loading hierarchy:', error);
+            }
+        }
+
+        // Update hierarchy visualization
+        function updateHierarchyVisualization() {
+            if (window.renderHierarchy) {
+                window.renderHierarchy(hierarchyData);
+            }
+        }
+
+        // Keyboard shortcuts
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'b') {
+                    e.preventDefault();
+                    toggleSidebar();
+                }
+                if (e.key === 'Escape' && isFullscreen) {
+                    toggleFullscreen();
+                }
+            });
+        }
+
+        // Close task panel
+        function closeTaskPanel() {
+            if (window.closeTaskPanelHierarchy) {
+                window.closeTaskPanelHierarchy();
+            }
+        }
+
+        // ========== Initialize ==========
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadDashboard();
+            setupKeyboardShortcuts();
+        });
+    </script>
+</body>
+</html>

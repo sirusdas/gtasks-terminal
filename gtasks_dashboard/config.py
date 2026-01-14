@@ -16,6 +16,99 @@ DASHBOARD_CONFIG = {
     'sidebar_default_visible': True
 }
 
+# ============================================
+# FEATURE FLAGS - Control Enhanced Features
+# ============================================
+# Set these to True/False to enable/disable features
+# This follows the Single Source of Truth principle
+# instead of maintaining multiple dashboard files
+
+FEATURE_FLAGS = {
+    # Core Features (always enabled)
+    'ENABLE_BASIC_DASHBOARD': True,
+    'ENABLE_HIERARCHICAL_VIEW': True,
+    
+    # Enhanced Features
+    'ENABLE_PRIORITY_SYSTEM': True,        # Asterisk-based priority calculation
+    'ENABLE_ADVANCED_FILTERS': True,       # OR/AND/NOT tag filtering
+    'ENABLE_REPORTS': True,                # Reports system integration
+    'ENABLE_DELETED_TASKS': True,          # Soft delete/restore functionality
+    'ENABLE_REALTIME_UPDATES': True,       # Periodic data refresh
+    'ENABLE_TASKS_DUE_TODAY': True,        # Tasks due today dashboard
+    'ENABLE_ACCOUNT_TYPE_FILTERS': True,   # Multi-select account type filters
+    'ENABLE_SETTINGS_PERSISTENCE': True,   # User settings saved to file
+    
+    # UI Features
+    'ENABLE_COLLAPSIBLE_MENU': True,       # Collapsible sidebar menu
+    'ENABLE_KEYBOARD_SHORTCUTS': True,     # Keyboard navigation
+    'ENABLE_COMPACT_VIEW': False,          # Compact task display
+}
+
+# Account Type Categorization Patterns
+ACCOUNT_TYPE_PATTERNS = {
+    'Work': ['work', 'office', 'business', 'company', 'job', 'professional', 'corp'],
+    'Personal': ['personal', 'home', 'private', 'life', 'family', 'me'],
+    'Learning': ['learning', 'study', 'education', 'course', 'training', 'book'],
+    'Health': ['health', 'fitness', 'medical', 'doctor', 'gym', 'exercise'],
+    'Finance': ['finance', 'money', 'bank', 'investment', 'budget', 'tax'],
+    'Social': ['social', 'friends', 'family', 'event', 'party', 'meeting']
+}
+
+# Priority Colors for Visualization
+PRIORITY_COLORS = {
+    'critical': '#ef4444',  # Red
+    'high': '#f97316',      # Orange  
+    'medium': '#eab308',    # Yellow
+    'low': '#6b7280'        # Gray
+}
+
+# Priority Icons for Visualization
+PRIORITY_ICONS = {
+    'critical': '🔥',
+    'high': '⚠️',
+    'medium': '📋',
+    'low': '📝'
+}
+
+# Available Report Types
+REPORT_TYPES = {
+    'task_completion': {
+        'name': 'Task Completion Report',
+        'description': 'Summary of completed tasks over a specified period',
+        'icon': 'fa-check-circle',
+        'category': 'Performance',
+        'supports_date_range': True,
+    },
+    'overdue_tasks': {
+        'name': 'Overdue Tasks Report',
+        'description': 'Detailed list of tasks that are past their due dates',
+        'icon': 'fa-exclamation-triangle',
+        'category': 'Analysis',
+        'supports_date_range': False,
+    },
+    'task_distribution': {
+        'name': 'Task Distribution Report',
+        'description': 'Analysis of tasks by category, priority, or tags',
+        'icon': 'fa-chart-pie',
+        'category': 'Analytics',
+        'supports_date_range': False,
+    },
+    'timeline': {
+        'name': 'Timeline Report',
+        'description': 'Visual representation of tasks completed over a specified time period',
+        'icon': 'fa-timeline',
+        'category': 'Visualization',
+        'supports_date_range': True,
+    },
+    'pending_tasks': {
+        'name': 'Pending Tasks Report',
+        'description': 'List of all pending tasks with their due dates',
+        'icon': 'fa-clock',
+        'category': 'Status',
+        'supports_date_range': False,
+    },
+}
+
 # Enhanced category mapping configuration
 CATEGORIES = {
     'Team': ['@john', '@alice', '@bob', '@mou', '@john', '@devteam', '@dev', '@team'],
