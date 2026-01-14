@@ -419,6 +419,63 @@ body {
     gap: 0.5rem;
 }
 
+/* ========== Enhanced Filter Sections ========== */
+.filter-section {
+    margin: 0.5rem 0;
+    padding: 0.75rem;
+    background: var(--bg-primary);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.date-filter-section {
+    background: #f0f9ff;
+    border-color: #bae6fd;
+}
+
+.sort-filter-section {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+
+.clear-filter-section {
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+
+.filter-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.5rem 0;
+    flex-wrap: wrap;
+}
+
+.filter-row label {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    min-width: 80px;
+}
+
+.filter-row .filter-select,
+.filter-row .filter-input {
+    flex: 1;
+    min-width: 150px;
+}
+
+.clear-filter-section .btn {
+    width: 100%;
+    justify-content: center;
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+.clear-filter-section .btn:hover {
+    background: #fecaca;
+}
+
 /* ========== Node Tasks Grid ========== */
 .node-tasks-grid {
     display: grid;

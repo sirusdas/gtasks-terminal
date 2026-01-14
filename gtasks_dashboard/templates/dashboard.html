@@ -170,15 +170,47 @@
                             <input type="text" id="node-task-search-filter" class="filter-input" placeholder="Search tasks...">
                             <input type="text" id="node-task-project-filter" class="filter-input" placeholder="Filter by project...">
                             <input type="text" id="node-task-tags-filter" class="filter-input" placeholder="Filter by tags (comma separated)...">
-                            <div class="date-range-filter">
-                                <input type="date" id="node-task-due-date-start" class="filter-input" placeholder="Due date from...">
-                                <span style="color: #6b7280; margin: 0 0.5rem;">to</span>
-                                <input type="date" id="node-task-due-date-end" class="filter-input" placeholder="Due date to...">
+                            
+                            <!-- Date Filter Section -->
+                            <div class="filter-section date-filter-section">
+                                <div class="filter-row">
+                                    <label>Date Field:</label>
+                                    <select id="node-task-date-field" class="filter-select">
+                                        <option value="due">Due Date</option>
+                                        <option value="created_at">Created Date</option>
+                                        <option value="modified_at">Modified Date</option>
+                                    </select>
+                                </div>
+                                <div class="filter-row date-range-filter">
+                                    <input type="date" id="node-task-date-start" class="filter-input" placeholder="From date...">
+                                    <span style="color: #6b7280; margin: 0 0.5rem;">to</span>
+                                    <input type="date" id="node-task-date-end" class="filter-input" placeholder="To date...">
+                                </div>
                             </div>
-                            <div class="date-range-filter">
-                                <input type="date" id="node-task-created-date-start" class="filter-input" placeholder="Created from...">
-                                <span style="color: #6b7280; margin: 0 0.5rem;">to</span>
-                                <input type="date" id="node-task-created-date-end" class="filter-input" placeholder="Created to...">
+                            
+                            <!-- Sort Section -->
+                            <div class="filter-section sort-filter-section">
+                                <div class="filter-row">
+                                    <label>Sort By:</label>
+                                    <select id="node-task-sort-field" class="filter-select">
+                                        <option value="due">Due Date</option>
+                                        <option value="created_at">Created Date</option>
+                                        <option value="modified_at">Modified Date</option>
+                                        <option value="priority">Priority</option>
+                                        <option value="title">Title</option>
+                                    </select>
+                                    <select id="node-task-sort-order" class="filter-select">
+                                        <option value="asc">Ascending</option>
+                                        <option value="desc">Descending</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <!-- Clear Button -->
+                            <div class="filter-section clear-filter-section">
+                                <button id="node-task-clear-filters" class="btn btn-secondary" onclick="clearNodeFilters()">
+                                    <i class="fas fa-times"></i> Clear All Filters
+                                </button>
                             </div>
                         </div>
                         <div class="node-tasks-grid" id="node-tasks-grid">
@@ -508,6 +540,55 @@
         function closeTaskPanel() {
             if (window.closeTaskPanelHierarchy) {
                 window.closeTaskPanelHierarchy();
+            }
+        }
+
+        // Clear all node filters
+        function clearNodeFilters() {
+            // Reset status filter
+            const statusFilter = document.getElementById('node-task-status-filter');
+            if (statusFilter) statusFilter.value = '';
+            
+            // Reset priority filter
+            const priorityFilter = document.getElementById('node-task-priority-filter');
+            if (priorityFilter) priorityFilter.value = '';
+            
+            // Reset search filter
+            const searchFilter = document.getElementById('node-task-search-filter');
+            if (searchFilter) searchFilter.value = '';
+            
+            // Reset project filter
+            const projectFilter = document.getElementById('node-task-project-filter');
+            if (projectFilter) projectFilter.value = '';
+            
+            // Reset tags filter
+            const tagsFilter = document.getElementById('node-task-tags-filter');
+            if (tagsFilter) tagsFilter.value = '';
+            
+            // Reset date field filter
+            const dateFieldFilter = document.getElementById('node-task-date-field');
+            if (dateFieldFilter) dateFieldFilter.value = 'due';
+            
+            // Reset date range filters
+            const dateStartFilter = document.getElementById('node-task-date-start');
+            if (dateStartFilter) dateStartFilter.value = '';
+            
+            const dateEndFilter = document.getElementById('node-task-date-end');
+            if (dateEndFilter) dateEndFilter.value = '';
+            
+            // Reset sort field
+            const sortFieldFilter = document.getElementById('node-task-sort-field');
+            if (sortFieldFilter) sortFieldFilter.value = 'due';
+            
+            // Reset sort order
+            const sortOrderFilter = document.getElementById('node-task-sort-order');
+            if (sortOrderFilter) sortOrderFilter.value = 'asc';
+            
+            // Re-apply filters if a node is selected
+            if (window.selectedNode) {
+                if (window.filterNodeTasks) {
+                    window.filterNodeTasks(window.selectedNode);
+                }
             }
         }
 

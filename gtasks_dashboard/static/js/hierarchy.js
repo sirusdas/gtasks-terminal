@@ -483,10 +483,11 @@ function setupTaskFilters(node) {
     const searchFilter = document.getElementById('node-task-search-filter');
     const projectFilter = document.getElementById('node-task-project-filter');
     const tagsFilter = document.getElementById('node-task-tags-filter');
-    const dueDateStart = document.getElementById('node-task-due-date-start');
-    const dueDateEnd = document.getElementById('node-task-due-date-end');
-    const createdDateStart = document.getElementById('node-task-created-date-start');
-    const createdDateEnd = document.getElementById('node-task-created-date-end');
+    const dateFieldFilter = document.getElementById('node-task-date-field');
+    const dateStartFilter = document.getElementById('node-task-date-start');
+    const dateEndFilter = document.getElementById('node-task-date-end');
+    const sortFieldFilter = document.getElementById('node-task-sort-field');
+    const sortOrderFilter = document.getElementById('node-task-sort-order');
 
     const applyFilters = () => {
         if (selectedNode) {
@@ -494,7 +495,7 @@ function setupTaskFilters(node) {
         }
     };
 
-    // Remove old event listeners
+    // Remove old event listeners by cloning and replacing elements
     const newStatusFilter = statusFilter.cloneNode(true);
     statusFilter.parentNode.replaceChild(newStatusFilter, statusFilter);
 
@@ -510,17 +511,20 @@ function setupTaskFilters(node) {
     const newTagsFilter = tagsFilter.cloneNode(true);
     tagsFilter.parentNode.replaceChild(newTagsFilter, tagsFilter);
 
-    const newDueDateStart = dueDateStart.cloneNode(true);
-    dueDateStart.parentNode.replaceChild(newDueDateStart, dueDateStart);
+    const newDateFieldFilter = dateFieldFilter.cloneNode(true);
+    dateFieldFilter.parentNode.replaceChild(newDateFieldFilter, dateFieldFilter);
 
-    const newDueDateEnd = dueDateEnd.cloneNode(true);
-    dueDateEnd.parentNode.replaceChild(newDueDateEnd, dueDateEnd);
+    const newDateStartFilter = dateStartFilter.cloneNode(true);
+    dateStartFilter.parentNode.replaceChild(newDateStartFilter, dateStartFilter);
 
-    const newCreatedDateStart = createdDateStart.cloneNode(true);
-    createdDateStart.parentNode.replaceChild(newCreatedDateStart, createdDateStart);
+    const newDateEndFilter = dateEndFilter.cloneNode(true);
+    dateEndFilter.parentNode.replaceChild(newDateEndFilter, dateEndFilter);
 
-    const newCreatedDateEnd = createdDateEnd.cloneNode(true);
-    createdDateEnd.parentNode.replaceChild(newCreatedDateEnd, createdDateEnd);
+    const newSortFieldFilter = sortFieldFilter.cloneNode(true);
+    sortFieldFilter.parentNode.replaceChild(newSortFieldFilter, sortFieldFilter);
+
+    const newSortOrderFilter = sortOrderFilter.cloneNode(true);
+    sortOrderFilter.parentNode.replaceChild(newSortOrderFilter, sortOrderFilter);
 
     // Add new event listeners
     newStatusFilter.onchange = applyFilters;
@@ -528,10 +532,11 @@ function setupTaskFilters(node) {
     newSearchFilter.oninput = debounce(applyFilters, 300);
     newProjectFilter.oninput = debounce(applyFilters, 300);
     newTagsFilter.oninput = debounce(applyFilters, 300);
-    newDueDateStart.onchange = applyFilters;
-    newDueDateEnd.onchange = applyFilters;
-    newCreatedDateStart.onchange = applyFilters;
-    newCreatedDateEnd.onchange = applyFilters;
+    newDateFieldFilter.onchange = applyFilters;
+    newDateStartFilter.onchange = applyFilters;
+    newDateEndFilter.onchange = applyFilters;
+    newSortFieldFilter.onchange = applyFilters;
+    newSortOrderFilter.onchange = applyFilters;
 }
 
 function filterNodeTasks(node) {
@@ -542,10 +547,11 @@ function filterNodeTasks(node) {
     const searchFilter = document.getElementById('node-task-search-filter')?.value.toLowerCase() || '';
     const projectFilter = document.getElementById('node-task-project-filter')?.value.toLowerCase() || '';
     const tagsFilter = document.getElementById('node-task-tags-filter')?.value.toLowerCase() || '';
-    const dueDateStart = document.getElementById('node-task-due-date-start')?.value || '';
-    const dueDateEnd = document.getElementById('node-task-due-date-end')?.value || '';
-    const createdDateStart = document.getElementById('node-task-created-date-start')?.value || '';
-    const createdDateEnd = document.getElementById('node-task-created-date-end')?.value || '';
+    const dateField = document.getElementById('node-task-date-field')?.value || 'due';
+    const dateStart = document.getElementById('node-task-date-start')?.value || '';
+    const dateEnd = document.getElementById('node-task-date-end')?.value || '';
+    const sortField = document.getElementById('node-task-sort-field')?.value || 'due';
+    const sortOrder = document.getElementById('node-task-sort-order')?.value || 'asc';
 
     let filteredTasks = relatedTasks;
 
@@ -589,35 +595,102 @@ function filterNodeTasks(node) {
         }
     }
 
-    if (dueDateStart) {
+    // Apply unified date filter based on selected date field
+    if (dateField && (dateStart || dateEnd)) {
         filteredTasks = filteredTasks.filter(task => {
-            if (!task.due) return false;
-            return new Date(task.due) >= new Date(dueDateStart);
+            let taskDate;
+            
+            // Get the date based on the selected field
+            switch (dateField) {
+                case 'due':
+                    taskDate = task.due;
+                    break;
+                case 'created_at':
+                    taskDate = task.created_at;
+                    break;
+                case 'modified_at':
+                    taskDate = task.modified_at;
+                    break;
+                default:
+                    taskDate = task.due;
+            }
+            
+            if (!taskDate) return false;
+            
+            const taskDateObj = new Date(taskDate);
+            
+            if (dateStart) {
+                const startDate = new Date(dateStart);
+                if (taskDateObj < startDate) return false;
+            }
+            
+            if (dateEnd) {
+                const endDate = new Date(dateEnd);
+                // Set end date to end of day
+                endDate.setHours(23, 59, 59, 999);
+                if (taskDateObj > endDate) return false;
+            }
+            
+            return true;
         });
     }
 
-    if (dueDateEnd) {
-        filteredTasks = filteredTasks.filter(task => {
-            if (!task.due) return false;
-            return new Date(task.due) <= new Date(dueDateEnd);
-        });
-    }
-
-    if (createdDateStart) {
-        filteredTasks = filteredTasks.filter(task => {
-            if (!task.created_at) return false;
-            return new Date(task.created_at) >= new Date(createdDateStart);
-        });
-    }
-
-    if (createdDateEnd) {
-        filteredTasks = filteredTasks.filter(task => {
-            if (!task.created_at) return false;
-            return new Date(task.created_at) <= new Date(createdDateEnd);
-        });
+    // Apply sorting
+    if (sortField) {
+        filteredTasks = sortTasksByField(filteredTasks, sortField, sortOrder);
     }
 
     displayNodeTasks(filteredTasks, node);
+}
+
+// Sort tasks by field with direction
+function sortTasksByField(tasks, sortField, sortOrder = 'asc') {
+    const sortedTasks = [...tasks];
+    
+    sortedTasks.sort((a, b) => {
+        let comparison = 0;
+        
+        switch (sortField) {
+            case 'due':
+                if (!a.due && !b.due) comparison = 0;
+                else if (!a.due) comparison = 1;
+                else if (!b.due) comparison = -1;
+                else comparison = new Date(a.due).getTime() - new Date(b.due).getTime();
+                break;
+                
+            case 'created_at':
+                if (!a.created_at && !b.created_at) comparison = 0;
+                else if (!a.created_at) comparison = 1;
+                else if (!b.created_at) comparison = -1;
+                else comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                break;
+                
+            case 'modified_at':
+                if (!a.modified_at && !b.modified_at) comparison = 0;
+                else if (!a.modified_at) comparison = 1;
+                else if (!b.modified_at) comparison = -1;
+                else comparison = new Date(a.modified_at).getTime() - new Date(b.modified_at).getTime();
+                break;
+                
+            case 'priority':
+                const priorityOrder = { 'critical': 0, 'high': 1, 'medium': 2, 'low': 3 };
+                const aPriority = priorityOrder[a.calculated_priority || a.priority || 'medium'] || 2;
+                const bPriority = priorityOrder[b.calculated_priority || b.priority || 'medium'] || 2;
+                comparison = aPriority - bPriority;
+                break;
+                
+            case 'title':
+                comparison = a.title.localeCompare(b.title);
+                break;
+                
+            default:
+                comparison = 0;
+        }
+        
+        return sortOrder === 'desc' ? -comparison : comparison;
+    });
+    
+    return sortedTasks;
 }
 
 function debounce(func, wait) {
