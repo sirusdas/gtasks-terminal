@@ -457,12 +457,30 @@ function createNodeTaskCard(task, node) {
         'low': '<i class="fas fa-arrow-down"></i>'
     }[task.calculated_priority || 'medium'] || '<i class="fas fa-minus"></i>';
 
+    // Date status calculation
+    const dateStatus = getDateStatus(task.due);
+    const dateStatusBadge = getDateStatusBadge(dateStatus);
+    
+    // Compact date display
+    const compactDates = getCompactDateDisplay(task);
+    
+    // Notes section (expandable)
+    const notesSection = getNotesSection(task);
+    
+    // Tags display
+    const tagsDisplay = getTagsDisplay(task);
+
     // Check if this task has dependencies
     const hasDeps = task.dependencies && task.dependencies.length > 0;
     const depsInfo = hasDeps ? `<small style="color: #f59e0b; font-size: 0.7rem; display: block; margin-top: 0.25rem;"><i class="fas fa-link"></i> ${task.dependencies.length} dependency(ies)</small>` : '';
 
     card.innerHTML = `
-        <div class="node-task-title">${task.title}</div>
+        <div class="node-task-header">
+            <span class="priority-icon">🔸</span>
+            <div class="node-task-title">${task.title}</div>
+            ${dateStatusBadge}
+        </div>
+        <div class="node-task-dates">${compactDates}</div>
         ${task.description ? `<p style="color: #6b7280; font-size: 0.875rem; margin: 0.5rem 0;">${task.description}</p>` : ''}
         <div class="node-task-meta">
             <span class="node-task-priority ${priorityClass}">
@@ -471,10 +489,124 @@ function createNodeTaskCard(task, node) {
             <span class="node-task-status">${task.status || 'pending'}</span>
         </div>
         ${depsInfo}
+        ${tagsDisplay}
+        ${notesSection}
         ${task.account ? `<small style="color: #9ca3af; font-size: 0.75rem; margin-top: 0.5rem; display: block;">Account: ${task.account}</small>` : ''}
     `;
 
+    // Add click handler for expanding notes
+    const notesToggle = card.querySelector('.notes-toggle');
+    if (notesToggle) {
+        notesToggle.addEventListener('click', function() {
+            const notesContent = this.nextElementSibling;
+            const isExpanded = notesContent.style.maxHeight !== '0px' && notesContent.style.maxHeight !== '';
+            
+            if (isExpanded) {
+                notesContent.style.maxHeight = '0px';
+                this.textContent = 'Show more 📓';
+            } else {
+                notesContent.style.maxHeight = notesContent.scrollHeight + 'px';
+                this.textContent = 'Show less 📓';
+            }
+        });
+    }
+
     return card;
+}
+
+// Helper function to calculate date status
+function getDateStatus(dueDate) {
+    if (!dueDate) return 'none';
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const due = new Date(dueDate);
+    due.setHours(0, 0, 0, 0);
+    
+    if (due < today) return 'overdue';
+    if (due.getTime() === today.getTime()) return 'today';
+    return 'future';
+}
+
+// Helper function to generate date status badge
+function getDateStatusBadge(dateStatus) {
+    const badges = {
+        'overdue': '<span class="date-status-badge overdue">⏳ Overdue</span>',
+        'today': '<span class="date-status-badge today">📅 Today</span>',
+        'future': '<span class="date-status-badge future">📅 Future</span>',
+        'none': ''
+    };
+    return badges[dateStatus] || badges['none'];
+}
+
+// Helper function to format date to YYYY-MM-DD
+function formatDate(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toISOString().split('T')[0];
+}
+
+// Helper function to generate compact date display
+function getCompactDateDisplay(task) {
+    const due = formatDate(task.due);
+    const created = formatDate(task.created_at);
+    const modified = formatDate(task.modified_at);
+    
+    return `<span class="compact-dates">
+        <span class="date-label">D:${due}</span>
+        <span class="date-label">C:${created}</span>
+        <span class="date-label">M:${modified}</span>
+    </span>`;
+}
+
+// Helper function to generate notes section
+function getNotesSection(task) {
+    const notes = task.notes || task.description || '';
+    if (!notes) return '';
+    
+    const truncated = notes.length > 100;
+    const displayText = truncated ? notes.substring(0, 100) + '...' : notes;
+    const fullContent = notes.split('\n').map(line => line.trim()).filter(line => line).join('<br>');
+    
+    return `
+        <div class="notes-section">
+            <button class="notes-toggle">${truncated ? 'Show more 📓' : 'Show less 📓'}</button>
+            <div class="notes-content" style="${truncated ? 'max-height: 0px; overflow: hidden;' : 'max-height: none;'}">
+                <div class="notes-text">📓 ${fullContent}</div>
+            </div>
+        </div>
+    `;
+}
+
+// Helper function to generate tags display
+function getTagsDisplay(task) {
+    const tags = [];
+    
+    // Add bracket tags
+    if (task.hybrid_tags && task.hybrid_tags.bracket) {
+        tags.push(...task.hybrid_tags.bracket);
+    }
+    
+    // Add hash tags
+    if (task.hybrid_tags && task.hybrid_tags.hash) {
+        tags.push(...task.hybrid_tags.hash);
+    }
+    
+    // Add user tags
+    if (task.hybrid_tags && task.hybrid_tags.user) {
+        tags.push(...task.hybrid_tags.user);
+    }
+    
+    // Add regular tags
+    if (task.tags) {
+        tags.push(...task.tags);
+    }
+    
+    if (tags.length === 0) return '';
+    
+    const tagsHtml = tags.map(tag => `<span class="task-tag">[${tag}]</span>`).join(' ');
+    return `<div class="task-tags">${tagsHtml}</div>`;
 }
 
 function setupTaskFilters(node) {
@@ -617,18 +749,21 @@ function filterNodeTasks(node) {
             
             if (!taskDate) return false;
             
-            const taskDateObj = new Date(taskDate);
+            const taskDateObj = parseDateInput(taskDate);
+            if (!taskDateObj) return false;
             
             if (dateStart) {
-                const startDate = new Date(dateStart);
-                if (taskDateObj < startDate) return false;
+                const startDate = parseDateInput(dateStart);
+                if (startDate && taskDateObj < startDate) return false;
             }
             
             if (dateEnd) {
-                const endDate = new Date(dateEnd);
-                // Set end date to end of day
-                endDate.setHours(23, 59, 59, 999);
-                if (taskDateObj > endDate) return false;
+                const endDate = parseDateInput(dateEnd);
+                if (endDate) {
+                    // Set end date to end of day
+                    endDate.setHours(23, 59, 59, 999);
+                    if (taskDateObj > endDate) return false;
+                }
             }
             
             return true;
@@ -651,26 +786,26 @@ function sortTasksByField(tasks, sortField, sortOrder = 'asc') {
         let comparison = 0;
         
         switch (sortField) {
-            case 'due':
-                if (!a.due && !b.due) comparison = 0;
-                else if (!a.due) comparison = 1;
-                else if (!b.due) comparison = -1;
-                else comparison = new Date(a.due).getTime() - new Date(b.due).getTime();
+            case 'due': {
+                const aDue = a.due ? new Date(a.due).getTime() : -Infinity;
+                const bDue = b.due ? new Date(b.due).getTime() : -Infinity;
+                comparison = aDue - bDue;
                 break;
+            }
                 
-            case 'created_at':
-                if (!a.created_at && !b.created_at) comparison = 0;
-                else if (!a.created_at) comparison = 1;
-                else if (!b.created_at) comparison = -1;
-                else comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            case 'created_at': {
+                const aCreated = a.created_at ? new Date(a.created_at).getTime() : -Infinity;
+                const bCreated = b.created_at ? new Date(b.created_at).getTime() : -Infinity;
+                comparison = aCreated - bCreated;
                 break;
+            }
                 
-            case 'modified_at':
-                if (!a.modified_at && !b.modified_at) comparison = 0;
-                else if (!a.modified_at) comparison = 1;
-                else if (!b.modified_at) comparison = -1;
-                else comparison = new Date(a.modified_at).getTime() - new Date(b.modified_at).getTime();
+            case 'modified_at': {
+                const aModified = a.modified_at ? new Date(a.modified_at).getTime() : -Infinity;
+                const bModified = b.modified_at ? new Date(b.modified_at).getTime() : -Infinity;
+                comparison = aModified - bModified;
                 break;
+            }
                 
             case 'priority':
                 const priorityOrder = { 'critical': 0, 'high': 1, 'medium': 2, 'low': 3 };
