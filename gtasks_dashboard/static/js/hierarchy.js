@@ -285,15 +285,21 @@ function showTaskPanel(node) {
 
     title.textContent = `Tasks for: ${node.name || node.id}`;
     panel.style.display = 'block';
-
-    // Smooth slide down animation
-    panel.style.maxHeight = '0';
-    panel.style.overflow = 'hidden';
+    
+    // Remove any previous animation styles
+    panel.style.maxHeight = '';
+    panel.style.transition = '';
+    
+    // Make the panel very tall so users can scroll through all tasks and bring any part to the top
+    panel.style.minHeight = '300vh'; // Much taller than viewport for full scrolling
+    
+    // Scroll the task panel into view
     setTimeout(() => {
-        panel.style.transition = 'max-height 0.3s ease';
-        panel.style.maxHeight = '40vh';
-        panel.style.overflow = 'auto';
-    }, 10);
+        panel.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+        });
+    }, 50);
 }
 
 function closeTaskPanel() {
