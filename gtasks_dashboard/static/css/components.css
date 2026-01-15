@@ -1,0 +1,183 @@
+/* 
+ * Component Styles
+ * Button styles, header actions, and other UI components
+ */
+
+/* Body transition for dark mode */
+body {
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Header actions layout */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Dark mode toggle button - Visible in both modes */
+.dark-mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    /* Light mode: blue gradient background for visibility */
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    font-size: 14px;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+.dark-mode-toggle:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+    transform: translateY(-1px);
+}
+
+/* Dark mode: lighter blue for visibility on dark background */
+.dark-mode .dark-mode-toggle {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .dark-mode-toggle:hover {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    box-shadow: 0 4px 8px rgba(96, 165, 250, 0.4);
+}
+
+.dark-mode .sun-icon,
+.dark-mode .moon-icon {
+    color: white;
+}
+
+.dark-mode .sun-icon {
+    display: none;
+}
+
+.dark-mode .moon-icon {
+    display: inline-block;
+}
+
+:not(.dark-mode) .sun-icon {
+    display: inline-block;
+}
+
+:not(.dark-mode) .moon-icon {
+    display: none;
+}
+
+/* Settings Button - Visible in both modes */
+.settings-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    /* Light mode: purple gradient background for visibility */
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    color: white;
+    font-size: 14px;
+    box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
+}
+
+.settings-btn:hover {
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+    box-shadow: 0 4px 8px rgba(139, 92, 246, 0.4);
+    transform: translateY(-1px);
+}
+
+/* Dark mode: lighter purple for visibility on dark background */
+.dark-mode .settings-btn {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .settings-btn:hover {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    box-shadow: 0 4px 8px rgba(167, 139, 250, 0.4);
+}
+
+.dark-mode .settings-btn i {
+    color: white;
+}
+
+/* Refresh Button */
+.header-refresh-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+.header-refresh-btn:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+    transform: translateY(-1px);
+}
+
+.header-refresh-btn:active {
+    transform: translateY(0);
+}
+
+.dark-mode .header-refresh-btn {
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    box-shadow: 0 2px 4px rgba(96, 165, 250, 0.3);
+}
+
+.dark-mode .header-refresh-btn:hover {
+    box-shadow: 0 4px 8px rgba(96, 165, 250, 0.4);
+}
+
+.header-refresh-btn i {
+    font-size: 14px;
+}
+
+/* Filter toggle button */
+.filter-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    font-size: 14px;
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+}
+
+.filter-toggle-btn:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+    transform: translateY(-1px);
+}
+
+.filter-toggle-btn.active {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+}
+
+.filter-toggle-btn i {
+    font-size: 14px;
+}

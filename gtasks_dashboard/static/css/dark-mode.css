@@ -1,0 +1,228 @@
+/* 
+ * Dark Mode Styles
+ * Dark mode specific overrides for the dashboard
+ */
+
+/* Dark Mode CSS Variables */
+.dark-mode {
+    --bg-primary: #111827;
+    --bg-secondary: #1f2937;
+    --bg-tertiary: #374151;
+    --text-primary: #f9fafb;
+    --text-secondary: #e5e7eb;
+    --text-muted: #9ca3af;
+    --border-color: #374151;
+    --shadow-color: rgba(0, 0, 0, 0.3);
+    --hover-bg: #374151;
+}
+
+/* Dark mode overrides */
+.dark-mode body,
+.dark-mode .dashboard-container {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.dark-mode .sidebar,
+.dark-mode .stat-card,
+.dark-mode .task-card,
+.dark-mode .header {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.dark-mode .sidebar-header,
+.dark-mode .nav-item {
+    color: var(--text-primary);
+}
+
+.dark-mode .nav-item:hover,
+.dark-mode .nav-item.active {
+    background-color: var(--hover-bg);
+}
+
+.dark-mode .stat-label,
+.dark-mode .task-card-description,
+.dark-mode .compact-dates,
+.dark-mode .date-label {
+    color: var(--text-secondary);
+}
+
+.dark-mode .btn {
+    color: var(--text-primary);
+}
+
+.dark-mode .btn-primary {
+    background-color: #3b82f6;
+}
+
+.dark-mode input,
+.dark-mode select {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+.dark-mode .filter-input,
+.dark-mode .filter-select {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+.dark-mode .progress-ring-circle-bg {
+    stroke: var(--bg-tertiary);
+}
+
+.dark-mode .task-tag {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.dark-mode .date-status-badge {
+    color: var(--text-primary);
+}
+
+.dark-mode .date-status-badge.overdue {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+.dark-mode .date-status-badge.today {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+/* Dark mode filter sections */
+.dark-mode .filter-section {
+    background-color: var(--bg-tertiary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.dark-mode .date-filter-section {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+    border-color: #3b82f6 !important;
+}
+
+.dark-mode .sort-filter-section {
+    background-color: rgba(16, 185, 129, 0.15) !important;
+    border-color: #10b981 !important;
+}
+
+.dark-mode .clear-filter-section {
+    background-color: rgba(239, 68, 68, 0.15) !important;
+    border-color: #ef4444 !important;
+}
+
+.dark-mode .filter-row label {
+    color: var(--text-primary) !important;
+}
+
+.dark-mode .date-range-filter span {
+    color: var(--text-muted) !important;
+}
+
+/* Dark mode for task-panel in Hierarchy view */
+.dark-mode .task-panel {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+}
+
+.dark-mode .task-panel-header {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.dark-mode .task-panel-header h3 {
+    color: var(--text-primary) !important;
+}
+
+.dark-mode .task-panel-content {
+    background-color: var(--bg-secondary) !important;
+}
+
+.dark-mode .node-tasks-grid {
+    background-color: var(--bg-secondary) !important;
+}
+
+/* Dark mode for hierarchy visualization */
+.dark-mode .viz-container {
+    background-color: var(--bg-primary) !important;
+}
+
+.dark-mode .hierarchy-svg {
+    background-color: var(--bg-primary) !important;
+}
+
+/* Dark mode for node task filters */
+.dark-mode .task-filters {
+    background-color: var(--bg-tertiary) !important;
+}
+
+.dark-mode .task-filters .filter-input,
+.dark-mode .task-filters .filter-select {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.dark-mode .task-filters label {
+    color: var(--text-primary) !important;
+}
+
+.dark-mode .node-tasks-grid .task-card {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Dark mode for node-task-card in hierarchy */
+.dark-mode .node-task-card {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.dark-mode .node-task-title {
+    color: var(--text-primary) !important;
+}
+
+.dark-mode .node-task-meta {
+    color: var(--text-secondary) !important;
+}
+
+.dark-mode .compact-dates {
+    color: var(--text-muted) !important;
+}
+
+.dark-mode .date-label {
+    color: var(--text-secondary) !important;
+}
+
+/* Dark mode for hierarchy filter panel */
+.dark-mode .hierarchy-filter-panel {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
+    border-color: #3b82f6;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+}
+
+.dark-mode .hierarchy-filter-panel label {
+    color: #60a5fa;
+}
+
+.dark-mode .hierarchy-filter-panel .filter-input {
+    background-color: #1e293b;
+    border-color: #3b82f6;
+    color: #e2e8f0;
+}
+
+.dark-mode .hierarchy-filter-panel .filter-input::placeholder {
+    color: #64748b;
+}
+
+.dark-mode .hierarchy-filter-panel .filter-select {
+    background-color: #1e293b;
+    border-color: #3b82f6;
+    color: #e2e8f0;
+}

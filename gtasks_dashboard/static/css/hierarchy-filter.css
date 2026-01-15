@@ -1,0 +1,119 @@
+/* 
+ * Hierarchy Filter Panel Styles
+ * Filter panel styles for the hierarchy visualization
+ */
+
+/* Hierarchy Chart Filter Panel Styles */
+.hierarchy-filter-panel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 1px solid #bae6fd;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(14, 165, 233, 0.15);
+}
+
+.hierarchy-filter-panel label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #0369a1;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.hierarchy-filter-panel .filter-input {
+    padding: 8px 12px;
+    border: 1px solid #7dd3fc;
+    border-radius: 6px;
+    font-size: 13px;
+    background-color: #ffffff;
+    color: #0c4a6e;
+    min-width: 180px;
+    transition: all 0.2s ease;
+}
+
+.hierarchy-filter-panel .filter-input:focus {
+    outline: none;
+    border-color: #0284c7;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+}
+
+.hierarchy-filter-panel .filter-input::placeholder {
+    color: #94a3b8;
+}
+
+.hierarchy-filter-panel .filter-select {
+    padding: 8px 12px;
+    border: 1px solid #7dd3fc;
+    border-radius: 6px;
+    font-size: 13px;
+    background-color: #ffffff;
+    color: #0c4a6e;
+    cursor: pointer;
+    min-width: 140px;
+    transition: all 0.2s ease;
+}
+
+.hierarchy-filter-panel .filter-select:focus {
+    outline: none;
+    border-color: #0284c7;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+}
+
+.hierarchy-filter-panel .filter-btn {
+    padding: 8px 16px;
+    border: 1px solid #7dd3fc;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.hierarchy-filter-panel .filter-btn:hover {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(14, 165, 233, 0.3);
+}
+
+.hierarchy-filter-panel .clear-btn {
+    padding: 8px 16px;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.hierarchy-filter-panel .clear-btn:hover {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+}
+
+/* Filter panel in fullscreen mode */
+.viz-container.fullscreen-mode .hierarchy-filter-panel {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    right: 16px;
+    z-index: 100;
+    max-width: 600px;
+    margin: 0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}

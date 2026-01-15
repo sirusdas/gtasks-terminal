@@ -42,10 +42,32 @@ Google Tasks automation tool with CLI and Web Dashboard interfaces for managing 
 | **Modules** | `gtasks_dashboard/modules/tag_manager.py` | Hybrid tag extraction (@user, #tag, [bracket]) |
 | **Modules** | `gtasks_dashboard/modules/account_manager.py` | Multi-account support |
 | **Modules** | `gtasks_dashboard/modules/settings_manager.py` | Dashboard configuration persistence |
-| **Templates** | `gtasks_dashboard/templates/dashboard.html` | Main dashboard template (single source) |
+| **Templates** | `gtasks_dashboard/templates/dashboard.html` | Main dashboard template |
 | **Templates** | `gtasks_dashboard/templates/static_dashboard.html` | Standalone export template (optional) |
 | **UI Components** | `gtasks_dashboard/ui_components.py` | Reusable UI components |
 | **Config** | `gtasks_dashboard/config.py` | Dashboard configuration, feature flags |
+| **Frontend Modules** | `gtasks_dashboard/static/js/` | Modular JavaScript for dashboard |
+
+**Frontend JavaScript Modules**:
+
+| Module | File | Responsibility |
+|--------|------|---------------|
+| **Constants** | `constants.js` | Configuration, color scales, API endpoints, storage keys |
+| **Utils** | `utils.js` | Utility functions (date parsing, filtering, sorting) |
+| **State** | `state.js` | Centralized state management |
+| **Task Card** | `task-card.js` | Task card component rendering |
+| **Dashboard** | `dashboard.js` | Main dashboard functionality and initialization |
+| **Hierarchy** | `hierarchy.js` | D3.js hierarchy visualization |
+
+**Frontend CSS Modules**:
+
+| Module | File | Responsibility |
+|--------|------|---------------|
+| **Base Styles** | `dashboard.css` | Core layout, components, responsive design |
+| **Dark Mode** | `dark-mode.css` | Dark mode specific styles |
+| **Components** | `components.css` | Button, header, toggle styles |
+| **Modal** | `modal.css` | Settings modal and overlay |
+| **Hierarchy Filter** | `hierarchy-filter.css` | Hierarchy filter panel styles |
 
 **Frontend**: HTML + JavaScript with Force-Graph/D3.js for hierarchical visualization + DataTables for task listing
 
