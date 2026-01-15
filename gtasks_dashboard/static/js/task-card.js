@@ -23,6 +23,7 @@ import {
 export function createTaskCard(task, options = {}) {
     const card = document.createElement('div');
     card.className = options.isNodeTask ? 'node-task-card' : 'task-card';
+    card.setAttribute('data-task-id', task.id);
     
     const priorityClass = getPriorityClass(task.calculated_priority);
     const priorityIcon = getPriorityIcon(task.calculated_priority);
@@ -48,10 +49,21 @@ export function createTaskCard(task, options = {}) {
             <i class="fas fa-link"></i> ${task.dependencies.length} dependency(ies)
         </small>` : '';
     
+    // Complete button - show checkmark for incomplete, completed for complete
+    const isCompleted = task.status === 'completed';
+    const completeBtnHtml = `
+        <div class="task-complete-btn ${isCompleted ? 'completed' : ''}" 
+             onclick="${isCompleted ? '' : `completeTask('${task.id}')`}"
+             title="${isCompleted ? 'Completed' : 'Mark as complete'}">
+            ${isCompleted ? '✅' : '⭕'}
+        </div>
+    `;
+    
     if (options.isNodeTask) {
         // Node task card HTML
         card.innerHTML = `
             <div class="node-task-header">
+                ${completeBtnHtml}
                 <span class="priority-icon">🔸</span>
                 <div class="node-task-title">${task.title}</div>
                 ${dateStatusBadge}
@@ -72,6 +84,7 @@ export function createTaskCard(task, options = {}) {
     } else {
         // Main task card HTML
         card.innerHTML = `
+            ${completeBtnHtml}
             <div class="task-card-header">
                 <span class="task-priority-badge ${priorityClass}">${priorityIcon} ${task.calculated_priority || task.priority}</span>
                 <span class="task-status-badge ${statusClass}">${task.status}</span>

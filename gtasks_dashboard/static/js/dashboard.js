@@ -652,6 +652,157 @@ export function clearNodeFilters() {
     }
 }
 
+// ========== Complete Task ==========
+
+/**
+ * Mark a task as complete
+ * @param {string} taskId - The task ID to complete
+ */
+export async function completeTask(taskId) {
+    console.log('[Dashboard] Completing task:', taskId);
+    
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/complete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            console.log('Task completed:', taskId);
+            
+            // Update UI - change task appearance to completed (no full reload)
+            updateTaskCompletedState(taskId);
+            
+            // Show success feedback
+            showNotification('Task completed ✅', 'success');
+            
+            // Update stats in place without full dashboard reload
+            updateStatsInPlace(taskId);
+        } else {
+            showNotification(data.message || 'Failed to complete task', 'error');
+        }
+    } catch (error) {
+        console.error('Error completing task:', error);
+        showNotification('Error completing task', 'error');
+    }
+}
+
+/**
+ * Update stats in place after task completion (no full reload)
+ * @param {string} taskId - The completed task ID
+ */
+function updateStatsInPlace(taskId) {
+    const stats = dashboardData.stats || {};
+    
+    // Update counters
+    const completedEl = document.getElementById('completed-tasks');
+    const pendingEl = document.getElementById('pending-tasks');
+    
+    if (completedEl) {
+        const currentCompleted = parseInt(completedEl.textContent) || 0;
+        completedEl.textContent = currentCompleted + 1;
+    }
+    
+    if (pendingEl) {
+        const currentPending = parseInt(pendingEl.textContent) || 0;
+        pendingEl.textContent = Math.max(0, currentPending - 1);
+    }
+    
+    // Update completion rate
+    const completionRateEl = document.getElementById('completion-rate');
+    const totalEl = document.getElementById('total-tasks');
+    
+    if (completionRateEl && totalEl) {
+        const total = parseInt(totalEl.textContent) || 1;
+        const completed = parseInt(completedEl?.textContent) || 0;
+        const rate = (completed / total) * 100;
+        completionRateEl.textContent = Math.round(rate) + '%';
+        
+        // Update progress ring
+        const circle = document.getElementById('completion-ring');
+        if (circle) {
+            const circumference = 2 * Math.PI * 52;
+            const offset = circumference - (rate / 100) * circumference;
+            circle.style.strokeDasharray = circumference;
+            circle.style.strokeDashoffset = offset;
+        }
+    }
+}
+
+/**
+ * Update task UI to show completed state
+ * @param {string} taskId - The task ID that was completed
+ */
+export function updateTaskCompletedState(taskId) {
+    // Update in tasks grid
+    const taskElement = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
+    if (taskElement) {
+        taskElement.classList.add('completed');
+        const completeBtn = taskElement.querySelector('.task-complete-btn');
+        if (completeBtn) {
+            completeBtn.innerHTML = '✅';
+            completeBtn.title = 'Completed';
+            completeBtn.onclick = null;
+        }
+    }
+    
+    // Update in hierarchy task panel
+    const nodeTaskElement = document.querySelector(`.node-task-item[data-task-id="${taskId}"]`);
+    if (nodeTaskElement) {
+        nodeTaskElement.classList.add('completed');
+        const completeBtn = nodeTaskElement.querySelector('.task-complete-btn');
+        if (completeBtn) {
+            completeBtn.innerHTML = '✅';
+            completeBtn.title = 'Completed';
+            completeBtn.onclick = null;
+        }
+    }
+}
+
+/**
+ * Show notification
+ * @param {string} message - The message to show
+ * @param {string} type - The notification type ('success' or 'error')
+ */
+function showNotification(message, type = 'success') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 14px 28px;
+        border-radius: 10px;
+        color: white;
+        font-weight: 600;
+        font-size: 15px;
+        z-index: 100000;
+        animation: slideIn 0.3s ease;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        ${type === 'success' ? 'background: linear-gradient(135deg, #10b981, #059669);' : 'background: linear-gradient(135deg, #ef4444, #dc2626);'}
+    `;
+    notification.innerHTML = `
+        <span style="margin-right: 10px;">${type === 'success' ? '✅' : '❌'}</span>
+        ${message}
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateX(100%)';
+        notification.style.transition = 'all 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
 // Make functions globally available for backward compatibility
 window.showLoading = showLoading;
 window.showSection = showSection;
@@ -681,7 +832,10 @@ window.toggleChartFilters = toggleChartFilters;
 window.applyChartFilters = applyChartFilters;
 window.clearChartFilters = clearChartFilters;
 window.clearNodeFilters = clearNodeFilters;
+window.completeTask = completeTask;
+window.updateTaskCompletedState = updateTaskCompletedState;
 window.toggleDarkMode = stateManager.toggleDarkMode;
+window.showNotification = showNotification;
 
 // Export for use in other modules
 export default {

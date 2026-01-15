@@ -3,6 +3,8 @@ API Routes
 """
 from flask import Blueprint, jsonify, request
 from services.data_manager import DataManager
+import threading
+import traceback
 
 api = Blueprint('api', __name__)
 data_manager = DataManager()
@@ -14,6 +16,82 @@ _dashboard_state = {
     'current_account': None,
     'stats': {}
 }
+
+# Background sync lock to prevent concurrent Google sync
+_sync_lock = threading.Lock()
+
+
+def _sync_task_to_google_background(task_id: str, account_id: str):
+    """Background task to sync task completion to Google Tasks (non-blocking)"""
+    with _sync_lock:
+        try:
+            print(f'[Background Sync] Starting sync for task {task_id} (account: {account_id})')
+            
+            # Import here to avoid circular imports and only load when needed
+            import sys
+            from pathlib import Path
+            from datetime import datetime
+            
+            # Add gtasks_cli to path
+            gtasks_cli_path = Path(__file__).parent.parent.parent / 'gtasks_cli' / 'src'
+            if str(gtasks_cli_path) not in sys.path:
+                sys.path.insert(0, str(gtasks_cli_path))
+            
+            from gtasks_cli.core.task_manager import TaskManager
+            from gtasks_cli.storage.sqlite_storage import SQLiteStorage
+            from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
+            from gtasks_cli.models.task import TaskStatus
+            
+            # Initialize components
+            storage = SQLiteStorage(account_name=account_id)
+            google_client = GoogleTasksClient(account_name=account_id)
+            
+            # Connect to Google Tasks (non-blocking, uses cached credentials)
+            if not google_client.connect():
+                print(f'[Background Sync] Failed to connect to Google Tasks - credentials may need refresh')
+                return
+            
+            # Get the task from local storage
+            task_dicts = storage.load_tasks()
+            task = None
+            for t in task_dicts:
+                if t.get('id') == task_id:
+                    task = t
+                    break
+            
+            if not task:
+                print(f'[Background Sync] Task {task_id} not found in local storage')
+                return
+            
+            # Create Task object
+            from gtasks_cli.models.task import Task
+            task_obj = Task(**task)
+            
+            # Update status to completed
+            task_obj.status = TaskStatus.COMPLETED
+            task_obj.completed_at = datetime.utcnow()
+            task_obj.modified_at = datetime.utcnow()
+            
+            # Try to update via Google Tasks API
+            try:
+                if hasattr(task_obj, 'tasklist_id') and task_obj.tasklist_id:
+                    updated = google_client.update_task(task_obj, task_obj.tasklist_id)
+                    if updated:
+                        print(f'[Background Sync] ✅ Successfully synced task {task_id} to Google Tasks')
+                    else:
+                        print(f'[Background Sync] ⚠️ Google Tasks API returned empty response for {task_id}')
+                else:
+                    print(f'[Background Sync] ⚠️ Task {task_id} has no tasklist_id, cannot sync to Google')
+            except Exception as e:
+                error_msg = str(e)
+                if 'invalid_grant' in error_msg.lower() or 'credentials' in error_msg.lower():
+                    print(f'[Background Sync] 🔑 Google credentials need refresh - sync pending')
+                else:
+                    print(f'[Background Sync] ❌ Error syncing to Google: {e}')
+                    
+        except Exception as e:
+            print(f'[Background Sync] ❌ Unexpected error: {e}')
+            traceback.print_exc()
 
 
 def init_dashboard_state():
@@ -444,3 +522,94 @@ def api_last_update():
             'connected': data_manager.dashboard_state['realtime'].get('connected', False)
         }
     })
+
+
+@api.route('/api/tasks/<task_id>/complete', methods=['POST'])
+def api_complete_task(task_id):
+    """Mark a task as completed with background sync to Google Tasks"""
+    from datetime import datetime
+    data = request.get_json() or {}
+    account_id = data.get('account_id', _dashboard_state.get('current_account'))
+    sync_to_google = data.get('sync_to_google', True)
+    
+    print(f'[API] Completing task: {task_id}')
+    print(f'[API] Account: {account_id}')
+    print(f'[API] Sync to Google: {sync_to_google}')
+    
+    # Search in the specified account first, then all accounts
+    accounts_to_search = []
+    if account_id and account_id in _dashboard_state['tasks']:
+        accounts_to_search = [account_id]
+    else:
+        accounts_to_search = list(_dashboard_state['tasks'].keys())
+    
+    task_found = False
+    completed_task = None
+    
+    for acc_id in accounts_to_search:
+        tasks = _dashboard_state['tasks'].get(acc_id, [])
+        
+        for task in tasks:
+            if task.get('id') == task_id:
+                print(f'[API] Found task: {task_id}')
+                task_found = True
+                
+                # Update task in memory
+                task['status'] = 'completed'
+                task['completed_at'] = datetime.now().isoformat()
+                completed_task = task
+                
+                # Sync to local SQLite database
+                try:
+                    db_path = data_manager.gtasks_path / acc_id / 'tasks.db' if data_manager.gtasks_path else None
+                    if not db_path or not db_path.exists():
+                        db_path = data_manager.gtasks_path / 'tasks.db' if data_manager.gtasks_path else None
+                    
+                    if db_path and db_path.exists():
+                        import sqlite3
+                        conn = sqlite3.connect(str(db_path))
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            UPDATE tasks 
+                            SET status = ?, completed_at = ?, modified_at = ?
+                            WHERE id = ?
+                        """, (
+                            'completed',
+                            task['completed_at'],
+                            datetime.now().isoformat(),
+                            task_id
+                        ))
+                        conn.commit()
+                        conn.close()
+                        print(f'[API] Task {task_id} updated in local database')
+                except Exception as e:
+                    print(f'[API] Error updating local database: {e}')
+                
+                # Trigger background sync to Google Tasks (non-blocking)
+                if sync_to_google:
+                    print(f'[API] Starting background sync to Google Tasks...')
+                    sync_thread = threading.Thread(
+                        target=_sync_task_to_google_background,
+                        args=(task_id, acc_id),
+                        daemon=True
+                    )
+                    sync_thread.start()
+                    print(f'[API] Background sync thread started for task {task_id}')
+                
+                break
+        
+        if task_found:
+            break
+    
+    if task_found:
+        return jsonify({
+            'success': True,
+            'message': 'Task completed successfully',
+            'syncing': sync_to_google
+        })
+    else:
+        print(f'[API] Task {task_id} not found')
+        return jsonify({
+            'success': False,
+            'message': 'Task not found'
+        }), 404

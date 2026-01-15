@@ -181,3 +181,93 @@ body {
 .filter-toggle-btn i {
     font-size: 14px;
 }
+
+/* ============================================
+ * Task Complete Button Styles
+ * ============================================ */
+
+/* Complete button - positioned in top-left of task cards */
+.task-complete-btn {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.task-complete-btn:hover {
+    transform: scale(1.15);
+    background: #f3f4f6;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+}
+
+.task-complete-btn:active {
+    transform: scale(0.95);
+}
+
+/* Completed state */
+.task-complete-btn.completed {
+    cursor: default;
+}
+
+.task-complete-btn.completed:hover {
+    transform: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+/* Node task cards need slightly different positioning */
+.node-task-card .task-complete-btn {
+    top: 8px;
+    left: 8px;
+    width: 24px;
+    height: 24px;
+    font-size: 14px;
+}
+
+/* Task card container needs relative positioning */
+.task-card {
+    position: relative;
+    padding-left: 48px;
+}
+
+.node-task-card {
+    position: relative;
+    padding-left: 40px;
+}
+
+/* Completed task card styling */
+.task-card.completed,
+.node-task-card.completed {
+    opacity: 0.7;
+    background-color: #f0fdf4;
+    border-left: 3px solid #10b981;
+}
+
+.task-card.completed .task-card-title,
+.node-task-card.completed .node-task-title {
+    text-decoration: line-through;
+    color: #6b7280;
+}
+
+/* Notification styles */
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}

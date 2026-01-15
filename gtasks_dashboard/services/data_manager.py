@@ -807,6 +807,92 @@ class DataManager:
                     return True
         return False
     
+    def complete_task(self, task_id: str, account_id: Optional[str] = None) -> bool:
+        """Complete a task and sync to Google Tasks"""
+        current_account = account_id or self.dashboard_state['current_account']
+        
+        print(f'[DataManager] Trying to complete task: {task_id}')
+        print(f'[DataManager] Current account: {current_account}')
+        print(f'[DataManager] Available accounts: {list(self.dashboard_state["tasks"].keys())}')
+        
+        if current_account in self.dashboard_state['tasks']:
+            tasks = self.dashboard_state['tasks'][current_account]
+            print(f'[DataManager] Tasks in account: {len(tasks)}')
+            
+            for task in tasks:
+                print(f'[DataManager] Checking task: {task.id}')
+                if task.id == task_id:
+                    print(f'[DataManager] Found task: {task.id}')
+                    # Update task status
+                    task.status = 'completed'
+                    task.completed_at = datetime.now().isoformat()
+                    
+                    # Sync to local SQLite database
+                    self._update_task_in_db(task, current_account)
+                    
+                    # Sync to Google Tasks (async)
+                    self._sync_task_to_google(task, current_account)
+                    
+                    return True
+        else:
+            print(f'[DataManager] Account {current_account} not found in tasks')
+            
+        # Try to find task in any account
+        for acc_id, tasks in self.dashboard_state['tasks'].items():
+            for task in tasks:
+                if task.id == task_id:
+                    print(f'[DataManager] Found task in account: {acc_id}')
+                    task.status = 'completed'
+                    task.completed_at = datetime.now().isoformat()
+                    self._update_task_in_db(task, acc_id)
+                    self._sync_task_to_google(task, acc_id)
+                    return True
+        
+        print(f'[DataManager] Task {task_id} not found in any account')
+        return False
+    
+    def _update_task_in_db(self, task: Task, account_id: str):
+        """Update task in local SQLite database"""
+        if not self.gtasks_path:
+            return
+            
+        db_path = self.gtasks_path / account_id / 'tasks.db'
+        if not db_path.exists():
+            db_path = self.gtasks_path / 'tasks.db'
+        
+        if not db_path.exists():
+            return
+        
+        try:
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE tasks 
+                SET status = ?, completed_at = ?, modified_at = ?
+                WHERE id = ?
+            """, (
+                task.status,
+                task.completed_at,
+                datetime.now().isoformat(),
+                task.id
+            ))
+            conn.commit()
+            conn.close()
+            print(f'✅ Task {task.id} updated in local database')
+        except Exception as e:
+            print(f'⚠️  Error updating task in database: {e}')
+    
+    def _sync_task_to_google(self, task: Task, account_id: str):
+        """Sync task completion to Google Tasks API"""
+        # This would integrate with Google Tasks API
+        # For now, we log the sync attempt
+        print(f'🔄 Syncing task {task.id} completion to Google Tasks (account: {account_id})')
+        
+        # TODO: Implement actual Google Tasks sync
+        # This would use the gtasks CLI or direct Google Tasks API
+        # Example: subprocess.run(['gtasks', 'done', task.id], ...)
+        pass
+    
     # ============================================
     # PRIORITY SYSTEM ENHANCEMENTS
     # ============================================
