@@ -109,14 +109,18 @@ export function createTaskCard(task, options = {}) {
     if (notesToggle) {
         notesToggle.addEventListener('click', function() {
             const notesContent = this.nextElementSibling;
-            const isExpanded = notesContent.style.maxHeight !== '0px' && notesContent.style.maxHeight !== '';
+            const isExpanded = this.getAttribute('data-expanded') === 'true';
             
             if (isExpanded) {
+                // Collapse
                 notesContent.style.maxHeight = '0px';
                 this.textContent = 'Show more 📓';
+                this.setAttribute('data-expanded', 'false');
             } else {
+                // Expand
                 notesContent.style.maxHeight = notesContent.scrollHeight + 'px';
                 this.textContent = 'Show less 📓';
+                this.setAttribute('data-expanded', 'true');
             }
         });
     }

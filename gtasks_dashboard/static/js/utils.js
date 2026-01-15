@@ -130,10 +130,21 @@ export function getNotesSection(task) {
     const truncated = notes.length > 100;
     const fullContent = notes.split('\n').map(line => line.trim()).filter(line => line).join('<br>');
     
+    // Only show toggle button when notes are truncated
+    if (!truncated) {
+        return `
+            <div class="notes-section">
+                <div class="notes-content">
+                    <div class="notes-text">📓 ${fullContent}</div>
+                </div>
+            </div>
+        `;
+    }
+    
     return `
         <div class="notes-section">
-            <button class="notes-toggle">${truncated ? 'Show more 📓' : 'Show less 📓'}</button>
-            <div class="notes-content" style="${truncated ? 'max-height: 0px; overflow: hidden;' : 'max-height: none;'}">
+            <button class="notes-toggle">Show more 📓</button>
+            <div class="notes-content" style="max-height: 0px; overflow: hidden;">
                 <div class="notes-text">📓 ${fullContent}</div>
             </div>
         </div>
