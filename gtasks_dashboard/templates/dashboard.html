@@ -1130,6 +1130,15 @@
                         </select>
                     </div>
                 </div>
+                <div class="setting-item">
+                    <div class="setting-label">
+                        <span>Hide Deleted Tasks</span>
+                        <span>Never show deleted tasks when enabled</span>
+                    </div>
+                    <div class="setting-control">
+                        <div class="toggle-switch" id="hide-deleted-toggle" onclick="toggleHideDeleted()"></div>
+                    </div>
+                </div>
             </div>
             
             <div class="modal-footer">
@@ -1178,11 +1187,13 @@
             const autoRefreshEnabled = localStorage.getItem('autoRefresh') === 'enabled';
             const refreshInterval = localStorage.getItem('refreshInterval') || '60';
             const defaultView = localStorage.getItem('defaultView') || 'dashboard';
+            const hideDeleted = localStorage.getItem('hideDeleted') === 'enabled';
             
             // Update UI
             const toggleElement = document.getElementById('auto-refresh-toggle');
             const intervalSelect = document.getElementById('refresh-interval');
             const viewSelect = document.getElementById('default-view');
+            const hideDeletedToggle = document.getElementById('hide-deleted-toggle');
             
             if (autoRefreshEnabled && toggleElement) {
                 toggleElement.classList.add('active');
@@ -1194,6 +1205,12 @@
             
             if (viewSelect) {
                 viewSelect.value = defaultView;
+            }
+            
+            if (hideDeletedToggle) {
+                if (hideDeleted) {
+                    hideDeletedToggle.classList.add('active');
+                }
             }
             
             // Apply auto-refresh if enabled
@@ -1249,6 +1266,42 @@
             const viewSelect = document.getElementById('default-view');
             localStorage.setItem('defaultView', viewSelect ? viewSelect.value : 'dashboard');
         }
+        
+        // Toggle hide deleted tasks
+        function toggleHideDeleted() {
+            const toggleElement = document.getElementById('hide-deleted-toggle');
+            const isEnabled = toggleElement.classList.toggle('active');
+            
+            localStorage.setItem('hideDeleted', isEnabled ? 'enabled' : 'disabled');
+            
+            // Refresh tasks and hierarchy to apply the filter
+            loadTasks();
+            if (window.dashboardData && window.dashboardData.tasks) {
+                // Re-filter hierarchy visualization
+                if (window.refreshHierarchyVisualization) {
+                    window.refreshHierarchyVisualization();
+                }
+            }
+            
+            console.log(`Hide deleted tasks: ${isEnabled ? 'enabled' : 'disabled'}`);
+        }
+        
+        // Check if deleted tasks should be hidden
+        function shouldHideDeleted() {
+            return localStorage.getItem('hideDeleted') === 'enabled';
+        }
+        
+        // Filter out deleted tasks if setting is enabled
+        function filterOutDeletedTasks(tasks) {
+            if (!shouldHideDeleted()) {
+                return tasks;
+            }
+            return tasks.filter(task => task.status !== 'deleted');
+        }
+        
+        // Export functions globally for use in other modules
+        window.shouldHideDeleted = shouldHideDeleted;
+        window.filterOutDeletedTasks = filterOutDeletedTasks;
         
         function startAutoRefresh(interval) {
             stopAutoRefresh(); // Clear existing interval
@@ -1426,18 +1479,20 @@
         // Load tasks
         function loadTasks() {
             const tasks = window.dashboardData.tasks || [];
+            // Filter out deleted tasks if setting is enabled
+            const filteredTasks = filterOutDeletedTasks(tasks);
             const container = document.getElementById('tasks-grid');
             if (!container) return;
             
             container.innerHTML = '';
             
-            if (tasks.length === 0) {
+            if (filteredTasks.length === 0) {
                 container.innerHTML = '<p style="text-align: center; color: #6b7280;">No tasks found for this account.</p>';
                 return;
             }
             
             // Sort by due date descending by default
-            const sortedTasks = sortTasksByField(tasks, 'due', 'desc');
+            const sortedTasks = sortTasksByField(filteredTasks, 'due', 'desc');
             
             sortedTasks.forEach(task => {
                 const card = createTaskCard(task);
@@ -1657,6 +1712,9 @@
             container.innerHTML = '';
             
             let filteredTasks = tasks;
+            
+            // Filter out deleted tasks if setting is enabled
+            filteredTasks = filterOutDeletedTasks(filteredTasks);
             
             // Apply status filter
             if (status) {

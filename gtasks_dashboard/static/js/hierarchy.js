@@ -394,6 +394,11 @@ function getRelatedTasks(node) {
     // Apply current hierarchy filters to get filtered tasks
     let filteredTasks = allTasks;
     
+    // Filter out deleted tasks if setting is enabled
+    if (window.shouldHideDeleted && window.shouldHideDeleted()) {
+        filteredTasks = filteredTasks.filter(task => task.status !== 'deleted');
+    }
+    
     // Apply status filter
     if (hierarchyFilters.status) {
         filteredTasks = filteredTasks.filter(task => task.status === hierarchyFilters.status);
