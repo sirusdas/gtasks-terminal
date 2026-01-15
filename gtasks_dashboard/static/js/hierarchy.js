@@ -8,6 +8,14 @@ let hierarchyData = {};
 let selectedNode = null;
 let simulation = null;
 
+// Hierarchy filter state
+let hierarchyFilters = {
+    tagSearch: '',
+    status: '',
+    dateStart: '',
+    dateEnd: ''
+};
+
 const colorScale = {
     'meta': '#8b5cf6',
     'priority': {
@@ -125,7 +133,7 @@ function initHierarchy() {
             handleNodeClick(d);
         });
 
-    // Add labels for level 0 and 1 nodes
+    // Add labels for level 0 and 1 nodes with truncation
     const labels = g.append('g')
         .attr('class', 'labels')
         .selectAll('text')
@@ -137,7 +145,17 @@ function initHierarchy() {
         .attr('font-size', '11px')
         .attr('fill', '#374151')
         .attr('font-weight', '500')
-        .text(d => d.name);
+        .style('cursor', 'pointer')
+        .text(d => truncateText(d.name, 5))
+        .each(function(d) {
+            // Store full name in data attribute for tooltip
+            d3.select(this)
+                .attr('data-full-name', d.name)
+                .on('mouseover', function(event) {
+                    showLabelTooltip(event, d.name);
+                })
+                .on('mouseout', hideLabelTooltip);
+        });
 
     // Initialize force simulation
     simulation = d3.forceSimulation(hierarchyData.nodes)
@@ -253,6 +271,47 @@ function hideNodeTooltip() {
     }
 }
 
+// Text truncation helper
+function truncateText(text, maxLength) {
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+}
+
+// Label tooltip for truncated text
+function showLabelTooltip(event, fullText) {
+    let tooltip = document.getElementById('label-tooltip');
+    if (!tooltip) {
+        tooltip = document.createElement('div');
+        tooltip.id = 'label-tooltip';
+        tooltip.style.cssText = `
+            position: fixed;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 10000;
+            max-width: 200px;
+            white-space: nowrap;
+        `;
+        document.body.appendChild(tooltip);
+    }
+    
+    tooltip.textContent = fullText;
+    tooltip.style.left = (event.pageX + 10) + 'px';
+    tooltip.style.top = (event.pageY + 10) + 'px';
+    tooltip.style.display = 'block';
+}
+
+function hideLabelTooltip() {
+    const tooltip = document.getElementById('label-tooltip');
+    if (tooltip) {
+        tooltip.style.display = 'none';
+    }
+}
+
 // Node click handler
 function handleNodeClick(node) {
     console.log('Node clicked:', node);
@@ -331,13 +390,72 @@ function loadNodeTasks(node) {
 
 function getRelatedTasks(node) {
     const allTasks = dashboardData.tasks || [];
-
-    let filteredTasks = [];
+    
+    // Apply current hierarchy filters to get filtered tasks
+    let filteredTasks = allTasks;
+    
+    // Apply status filter
+    if (hierarchyFilters.status) {
+        filteredTasks = filteredTasks.filter(task => task.status === hierarchyFilters.status);
+    }
+    
+    // Apply date filters
+    if (hierarchyFilters.dateStart || hierarchyFilters.dateEnd) {
+        filteredTasks = filteredTasks.filter(task => {
+            const taskDate = task.due;
+            if (!taskDate) return false;
+            
+            const taskDateObj = new Date(taskDate);
+            
+            if (hierarchyFilters.dateStart) {
+                const startDate = new Date(hierarchyFilters.dateStart);
+                startDate.setHours(0, 0, 0, 0);
+                if (taskDateObj < startDate) return false;
+            }
+            
+            if (hierarchyFilters.dateEnd) {
+                const endDate = new Date(hierarchyFilters.dateEnd);
+                endDate.setHours(23, 59, 59, 999);
+                if (taskDateObj > endDate) return false;
+            }
+            
+            return true;
+        });
+    }
+    
+    // Apply tag search filter
+    if (hierarchyFilters.tagSearch && hierarchyFilters.tagSearch.length >= 3) {
+        const searchTerms = hierarchyFilters.tagSearch.split(',')
+            .map(term => term.trim().toLowerCase())
+            .filter(term => term.length >= 3);
+        
+        if (searchTerms.length > 0) {
+            filteredTasks = filteredTasks.filter(task => {
+                if (!task.hybrid_tags) return false;
+                
+                const taskTags = [
+                    ...task.hybrid_tags.bracket || [],
+                    ...task.hybrid_tags.hash || [],
+                    ...task.hybrid_tags.user || []
+                ];
+                
+                return searchTerms.some(searchTerm =>
+                    taskTags.some(taskTag => 
+                        taskTag.toLowerCase().startsWith(searchTerm)
+                    )
+                );
+            });
+        }
+    }
+    
+    let filteredTaskIds = new Set(filteredTasks.map(t => t.id));
+    
+    let relatedTasks;
 
     switch (node.type) {
         case 'priority':
             const priority = (node.priority || node.name.toLowerCase().split(' ')[0]);
-            filteredTasks = allTasks.filter(task =>
+            relatedTasks = filteredTasks.filter(task =>
                 task.calculated_priority === priority ||
                 task.priority === priority
             );
@@ -354,7 +472,7 @@ function getRelatedTasks(node) {
                 'research': ['research', 'investigate', 'explore', 'analysis']
             };
             const keywords = categoryKeywords[category] || [];
-            filteredTasks = allTasks.filter(task => {
+            relatedTasks = filteredTasks.filter(task => {
                 const taskText = `${task.title} ${task.description}`.toLowerCase();
                 return keywords.some(keyword => taskText.includes(keyword));
             });
@@ -362,7 +480,7 @@ function getRelatedTasks(node) {
 
         case 'tag':
             const tag = node.id.replace('tag_', '');
-            filteredTasks = allTasks.filter(task => {
+            relatedTasks = filteredTasks.filter(task => {
                 if (!task.hybrid_tags) return false;
                 const allTags = [
                     ...task.hybrid_tags.bracket || [],
@@ -375,22 +493,22 @@ function getRelatedTasks(node) {
 
         case 'account':
             const account = node.id.replace('account_', '');
-            filteredTasks = allTasks.filter(task => task.account === account);
+            relatedTasks = filteredTasks.filter(task => task.account === account);
             break;
 
         case 'meta':
-            filteredTasks = allTasks.slice(0, 10);
+            relatedTasks = filteredTasks.slice(0, 10);
             break;
 
         default:
-            filteredTasks = allTasks;
+            relatedTasks = filteredTasks;
     }
 
-    // Get dependent tasks
-    const dependentTasks = getDependentTasks(filteredTasks, allTasks);
+    // Get dependent tasks from filtered set
+    const dependentTasks = getDependentTasks(relatedTasks, filteredTasks);
 
-    // Combine filtered tasks with their dependents
-    const allRelatedTasks = [...filteredTasks];
+    // Combine related tasks with their dependents
+    const allRelatedTasks = [...relatedTasks];
     dependentTasks.forEach(depTask => {
         if (!allRelatedTasks.find(t => t.id === depTask.id)) {
             allRelatedTasks.push(depTask);
@@ -840,9 +958,548 @@ function debounce(func, wait) {
     };
 }
 
+/**
+ * Filter hierarchy data by tags
+ * @param {Object} data - Original hierarchy data
+ * @param {string} tagSearch - Comma-separated tag search terms
+ * @returns {Object} - Filtered hierarchy data
+ */
+function filterHierarchyByTags(data, tagSearch) {
+    if (!tagSearch || tagSearch.length < 3) {
+        return data;
+    }
+    
+    const searchTerms = tagSearch.split(',')
+        .map(term => term.trim().toLowerCase())
+        .filter(term => term.length >= 3);
+    
+    if (searchTerms.length === 0) {
+        return data;
+    }
+    
+    // Get tasks from dashboardData
+    const tasks = window.dashboardData?.tasks || [];
+    
+    // Find matching tasks
+    const matchingTasks = tasks.filter(task => {
+        if (!task.hybrid_tags) return false;
+        
+        const taskTags = [
+            ...task.hybrid_tags.bracket || [],
+            ...task.hybrid_tags.hash || [],
+            ...task.hybrid_tags.user || []
+        ];
+        
+        return searchTerms.some(searchTerm =>
+            taskTags.some(taskTag => 
+                taskTag.toLowerCase().startsWith(searchTerm)
+            )
+        );
+    });
+    
+    // Get tag IDs from matching tasks
+    const matchingTagIds = new Set();
+    matchingTasks.forEach(task => {
+        if (task.hybrid_tags) {
+            const allTags = task.hybrid_tags.to_list();
+            allTags.forEach(tag => {
+                const tagId = `tag_${tag}`;
+                matchingTagIds.add(tagId);
+            });
+        }
+    });
+    
+    // Filter nodes: keep meta, priority, category nodes and matching tag nodes
+    const filteredNodes = data.nodes.filter(node => {
+        if (node.level <= 2) return true; // Keep meta, priority, category nodes
+        if (node.type === 'tag' && matchingTagIds.has(node.id)) return true;
+        return false;
+    });
+    
+    // Build link map for filtered nodes
+    const nodeIds = new Set(filteredNodes.map(n => n.id));
+    const filteredLinks = data.links.filter(link => {
+        return nodeIds.has(link.source.id || link.source) && 
+               nodeIds.has(link.target.id || link.target);
+    });
+    
+    return {
+        nodes: filteredNodes,
+        links: filteredLinks
+    };
+}
+
+/**
+ * Filter hierarchy data by date range
+ * @param {Object} data - Original hierarchy data
+ * @param {string} dateField - Field to filter by ('due', 'created_at', 'modified_at')
+ * @param {string} dateStart - Start date (YYYY-MM-DD)
+ * @param {string} dateEnd - End date (YYYY-MM-DD)
+ * @returns {Object} - Filtered hierarchy data
+ */
+function filterHierarchyByDate(data, dateField, dateStart, dateEnd) {
+    if (!dateStart && !dateEnd) {
+        return data;
+    }
+    
+    const tasks = window.dashboardData?.tasks || [];
+    
+    // Parse dates
+    let startDate = dateStart ? new Date(dateStart) : null;
+    let endDate = dateEnd ? new Date(dateEnd) : null;
+    
+    if (endDate) {
+        endDate.setHours(23, 59, 59, 999);
+    }
+    
+    // Find matching tasks
+    const matchingTasks = tasks.filter(task => {
+        const taskDate = task[dateField] || task.due;
+        if (!taskDate) return false;
+        
+        const taskDateObj = new Date(taskDate);
+        
+        if (startDate && taskDateObj < startDate) return false;
+        if (endDate && taskDateObj > endDate) return false;
+        
+        return true;
+    });
+    
+    // Get matching task IDs
+    const matchingTaskIds = new Set(matchingTasks.map(t => t.id));
+    
+    // Get tag IDs from matching tasks
+    const matchingTagIds = new Set();
+    matchingTasks.forEach(task => {
+        if (task.hybrid_tags) {
+            const allTags = task.hybrid_tags.to_list();
+            allTags.forEach(tag => {
+                const tagId = `tag_${tag}`;
+                matchingTagIds.add(tagId);
+            });
+        }
+    });
+    
+    // Count tasks per node type
+    const priorityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+    const categoryCounts = {};
+    
+    matchingTasks.forEach(task => {
+        // Count by priority
+        const priority = task.calculated_priority || 'medium';
+        if (priorityCounts.hasOwnProperty(priority)) {
+            priorityCounts[priority]++;
+        }
+        
+        // Count by category
+        const taskText = `${task.title} ${task.description}`.toLowerCase();
+        const categoryKeywords = {
+            'development': ['api', 'frontend', 'backend', 'code', 'implementation', 'feature', 'bug'],
+            'testing': ['test', 'qa', 'validation', 'verification'],
+            'infrastructure': ['deploy', 'setup', 'config', 'infrastructure', 'environment', 'devops'],
+            'documentation': ['doc', 'documentation', 'readme', 'guide'],
+            'meeting': ['meeting', 'review', 'discussion'],
+            'research': ['research', 'investigate', 'explore', 'analysis']
+        };
+        
+        for (const [category, keywords] of Object.entries(categoryKeywords)) {
+            if (keywords.some(kw => taskText.includes(kw))) {
+                categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+            }
+        }
+    });
+    
+    // Filter nodes based on counts
+    const filteredNodes = data.nodes.filter(node => {
+        if (node.level === 0) return true; // Keep meta node
+        
+        if (node.type === 'priority') {
+            const priority = node.priority || node.name.toLowerCase().split(' ')[0];
+            return priorityCounts[priority] > 0;
+        }
+        
+        if (node.type === 'category') {
+            const category = node.id.replace('category_', '');
+            return (categoryCounts[category] || 0) > 0;
+        }
+        
+        if (node.type === 'tag') {
+            return matchingTagIds.has(node.id);
+        }
+        
+        return true;
+    });
+    
+    // Build link map for filtered nodes
+    const nodeIds = new Set(filteredNodes.map(n => n.id));
+    const filteredLinks = data.links.filter(link => {
+        const sourceId = link.source.id || link.source;
+        const targetId = link.target.id || link.target;
+        return nodeIds.has(sourceId) && nodeIds.has(targetId);
+    });
+    
+    return {
+        nodes: filteredNodes,
+        links: filteredLinks
+    };
+}
+
+/**
+ * Filter hierarchy data by task status
+ * @param {Object} data - Original hierarchy data
+ * @param {string} status - Status to filter by
+ * @returns {Object} - Filtered hierarchy data
+ */
+function filterHierarchyByStatus(data, status) {
+    if (!status) {
+        return data;
+    }
+    
+    const tasks = window.dashboardData?.tasks || [];
+    
+    // Find matching tasks
+    const matchingTasks = tasks.filter(task => task.status === status);
+    
+    // Count tasks per node type
+    const priorityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+    const categoryCounts = {};
+    
+    matchingTasks.forEach(task => {
+        // Count by priority
+        const priority = task.calculated_priority || 'medium';
+        if (priorityCounts.hasOwnProperty(priority)) {
+            priorityCounts[priority]++;
+        }
+        
+        // Count by category
+        const taskText = `${task.title} ${task.description}`.toLowerCase();
+        const categoryKeywords = {
+            'development': ['api', 'frontend', 'backend', 'code', 'implementation', 'feature', 'bug'],
+            'testing': ['test', 'qa', 'validation', 'verification'],
+            'infrastructure': ['deploy', 'setup', 'config', 'infrastructure', 'environment', 'devops'],
+            'documentation': ['doc', 'documentation', 'readme', 'guide'],
+            'meeting': ['meeting', 'review', 'discussion'],
+            'research': ['research', 'investigate', 'explore', 'analysis']
+        };
+        
+        for (const [category, keywords] of Object.entries(categoryKeywords)) {
+            if (keywords.some(kw => taskText.includes(kw))) {
+                categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+            }
+        }
+    });
+    
+    // Filter nodes based on counts
+    const filteredNodes = data.nodes.filter(node => {
+        if (node.level === 0) return true; // Keep meta node
+        
+        if (node.type === 'priority') {
+            const priority = node.priority || node.name.toLowerCase().split(' ')[0];
+            return priorityCounts[priority] > 0;
+        }
+        
+        if (node.type === 'category') {
+            const category = node.id.replace('category_', '');
+            return (categoryCounts[category] || 0) > 0;
+        }
+        
+        if (node.type === 'tag') {
+            // Check if tag has any tasks with matching status
+            const tag = node.id.replace('tag_', '');
+            return matchingTasks.some(task => {
+                if (!task.hybrid_tags) return false;
+                const allTags = task.hybrid_tags.to_list();
+                return allTags.some(t => t.toLowerCase().includes(tag.toLowerCase()));
+            });
+        }
+        
+        return true;
+    });
+    
+    // Build link map for filtered nodes
+    const nodeIds = new Set(filteredNodes.map(n => n.id));
+    const filteredLinks = data.links.filter(link => {
+        const sourceId = link.source.id || link.source;
+        const targetId = link.target.id || link.target;
+        return nodeIds.has(sourceId) && nodeIds.has(targetId);
+    });
+    
+    return {
+        nodes: filteredNodes,
+        links: filteredLinks
+    };
+}
+
+/**
+ * Apply all hierarchy filters
+ * @returns {Object} - Filtered hierarchy data
+ */
+function applyHierarchyFilters() {
+    let filteredData = hierarchyData;
+    
+    // Apply tag search filter
+    if (hierarchyFilters.tagSearch && hierarchyFilters.tagSearch.length >= 3) {
+        filteredData = filterHierarchyByTags(filteredData, hierarchyFilters.tagSearch);
+    }
+    
+    // Apply status filter
+    if (hierarchyFilters.status) {
+        filteredData = filterHierarchyByStatus(filteredData, hierarchyFilters.status);
+    }
+    
+    // Apply date filter
+    if (hierarchyFilters.dateStart || hierarchyFilters.dateEnd) {
+        filteredData = filterHierarchyByDate(
+            filteredData, 
+            'due',
+            hierarchyFilters.dateStart, 
+            hierarchyFilters.dateEnd
+        );
+    }
+    
+    return filteredData;
+}
+
 // Make functions available globally
 window.renderHierarchy = renderHierarchy;
 window.closeTaskPanelHierarchy = closeTaskPanel;
+window.initHierarchyFilters = initHierarchyFilters;
+window.clearHierarchyFilters = clearHierarchyFilters;
+window.refreshHierarchyVisualization = refreshHierarchyVisualization;
+
+/**
+ * Initialize hierarchy filter event listeners
+ * Note: Network calls only happen when Apply button is clicked
+ */
+function initHierarchyFilters() {
+    const tagSearchInput = document.getElementById('hierarchy-tag-search');
+    const statusFilter = document.getElementById('hierarchy-status-filter');
+    const dateStartInput = document.getElementById('hierarchy-date-start');
+    const dateEndInput = document.getElementById('hierarchy-date-end');
+    
+    if (!tagSearchInput) return;
+    
+    // Tag search - only update filter state (no network call)
+    tagSearchInput.addEventListener('input', function() {
+        hierarchyFilters.tagSearch = (this.value || '').trim();
+    });
+    
+    // Status filter - only update filter state (no network call)
+    if (statusFilter) {
+        statusFilter.addEventListener('change', function() {
+            hierarchyFilters.status = this.value || '';
+        });
+    }
+    
+    // Date filters - only update filter state (no network call)
+    if (dateStartInput) {
+        dateStartInput.addEventListener('change', function() {
+            hierarchyFilters.dateStart = this.value || '';
+        });
+    }
+    
+    if (dateEndInput) {
+        dateEndInput.addEventListener('change', function() {
+            hierarchyFilters.dateEnd = this.value || '';
+        });
+    }
+}
+
+/**
+ * Refresh hierarchy visualization with filters
+ */
+async function refreshHierarchyVisualization() {
+    // Build query params from filters
+    const params = new URLSearchParams();
+    
+    if (hierarchyFilters.tagSearch && hierarchyFilters.tagSearch.length >= 3) {
+        params.append('tag_search', hierarchyFilters.tagSearch);
+    }
+    
+    if (hierarchyFilters.status) {
+        params.append('status', hierarchyFilters.status);
+    }
+    
+    if (hierarchyFilters.dateStart) {
+        params.append('date_start', hierarchyFilters.dateStart);
+    }
+    
+    if (hierarchyFilters.dateEnd) {
+        params.append('date_end', hierarchyFilters.dateEnd);
+    }
+    
+    try {
+        const response = await fetch(`/api/hierarchy/filtered?${params.toString()}`);
+        hierarchyData = await response.json();
+        updateHierarchyVisualization();
+    } catch (error) {
+        console.error('Error refreshing hierarchy:', error);
+    }
+}
+
+/**
+ * Clear all hierarchy filters
+ */
+function clearHierarchyFilters() {
+    hierarchyFilters = {
+        tagSearch: '',
+        status: '',
+        dateStart: '',
+        dateEnd: ''
+    };
+    
+    // Reset UI
+    const tagSearchInput = document.getElementById('hierarchy-tag-search');
+    const statusFilter = document.getElementById('hierarchy-status-filter');
+    const dateStartInput = document.getElementById('hierarchy-date-start');
+    const dateEndInput = document.getElementById('hierarchy-date-end');
+    
+    if (tagSearchInput) tagSearchInput.value = '';
+    if (statusFilter) statusFilter.value = '';
+    if (dateStartInput) dateStartInput.value = '';
+    if (dateEndInput) dateEndInput.value = '';
+    
+    // Refresh visualization
+    refreshHierarchyVisualization();
+}
+
+/**
+ * Update existing hierarchy visualization with new data
+ */
+function updateHierarchyVisualization() {
+    const svg = d3.select('#hierarchy-viz');
+    if (svg.empty()) return;
+    
+    const g = svg.select('g');
+    if (g.empty()) return;
+    
+    // Clear existing content
+    g.selectAll('*').remove();
+    
+    if (!hierarchyData.nodes || hierarchyData.nodes.length === 0) {
+        g.append('text')
+            .attr('x', '50%')
+            .attr('y', '50%')
+            .attr('text-anchor', 'middle')
+            .attr('fill', '#6b7280')
+            .text('No matching hierarchy data. Try adjusting filters.');
+        return;
+    }
+    
+    // Recreate visualization
+    const width = svg.node().clientWidth || 800;
+    const height = svg.node().clientHeight || 500;
+    
+    // Create links
+    const link = g.append('g')
+        .attr('class', 'links')
+        .selectAll('line')
+        .data(hierarchyData.links || [])
+        .enter()
+        .append('line')
+        .attr('stroke', '#d1d5db')
+        .attr('stroke-opacity', 0.7)
+        .attr('stroke-width', d => Math.max(1, Math.sqrt(d.value || 1)));
+    
+    // Create nodes
+    const node = g.append('g')
+        .attr('class', 'nodes')
+        .selectAll('circle')
+        .data(hierarchyData.nodes || [])
+        .enter()
+        .append('circle')
+        .attr('r', d => {
+            const baseSize = Math.max(8, Math.min(25, d.val || 10));
+            return d.level === 0 ? baseSize * 1.2 : baseSize;
+        })
+        .attr('fill', d => getNodeColor(d))
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 2)
+        .style('cursor', 'pointer')
+        .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))')
+        .on('mouseover', function (event, d) {
+            d3.select(this)
+                .transition()
+                .duration(150)
+                .attr('r', (d.val || 10) * 1.2);
+            showNodeTooltip(event, d);
+        })
+        .on('mouseout', function (event, d) {
+            d3.select(this)
+                .transition()
+                .duration(150)
+                .attr('r', d => {
+                    const baseSize = Math.max(8, Math.min(25, d.val || 10));
+                    return d.level === 0 ? baseSize * 1.2 : baseSize;
+                });
+            hideNodeTooltip();
+        })
+        .on('click', function (event, d) {
+            event.stopPropagation();
+            handleNodeClick(d);
+        });
+    
+    // Add labels with truncation
+    const labels = g.append('g')
+        .attr('class', 'labels')
+        .selectAll('text')
+        .data(hierarchyData.nodes.filter(d => d.level <= 1) || [])
+        .enter()
+        .append('text')
+        .attr('dy', d => (d.val || 10) + 15)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '11px')
+        .attr('fill', '#374151')
+        .attr('font-weight', '500')
+        .style('cursor', 'pointer')
+        .text(d => truncateText(d.name, 5))
+        .each(function(d) {
+            d3.select(this)
+                .attr('data-full-name', d.name)
+                .on('mouseover', function(event) {
+                    showLabelTooltip(event, d.name);
+                })
+                .on('mouseout', hideLabelTooltip);
+        });
+    
+    // Restart simulation
+    simulation = d3.forceSimulation(hierarchyData.nodes)
+        .force('link', d3.forceLink(hierarchyData.links)
+            .id(d => d.id)
+            .distance(d => {
+                const sourceLevel = hierarchyData.nodes.find(n => n.id === d.source)?.level || 0;
+                const targetLevel = hierarchyData.nodes.find(n => n.id === d.target)?.level || 0;
+                return Math.max(60, (sourceLevel + targetLevel) * 30);
+            }))
+        .force('charge', d3.forceManyBody().strength(d => {
+            if (d.level === 0) return -400;
+            if (d.level === 1) return -200;
+            return -100;
+        }))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(d => (d.val || 10) + 10))
+        .on('tick', () => {
+            link
+                .attr('x1', d => d.source.x)
+                .attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x)
+                .attr('y2', d => d.target.y);
+            
+            node
+                .attr('cx', d => d.x)
+                .attr('cy', d => d.y);
+            
+            labels
+                .attr('x', d => d.x)
+                .attr('y', d => d.y);
+        });
+    
+    // Add drag behavior
+    node.call(d3.drag()
+        .on('start', dragstarted)
+        .on('drag', dragged)
+        .on('end', dragended));
+}
 
 // Implement centerVisualizationOnce to fit graph to screen
 window.centerVisualizationOnce = function () {

@@ -165,6 +165,40 @@ def api_hierarchy():
     return jsonify(hierarchy_data)
 
 
+@api.route('/api/hierarchy/filtered')
+def api_hierarchy_filtered():
+    """Get filtered hierarchy visualization data"""
+    from models.task import Task
+    
+    # Get filter parameters
+    tag_search = request.args.get('tag_search', '')
+    status = request.args.get('status', '')
+    date_field = request.args.get('date_field', 'due')
+    date_start = request.args.get('date_start', '')
+    date_end = request.args.get('date_end', '')
+    
+    # Parse tag search (comma-separated)
+    tag_filters = data_manager.parse_chart_tag_filter(tag_search)
+    
+    tasks = get_current_tasks()
+    task_objects = [Task.from_dict(t) for t in tasks]
+    
+    # Get filtered hierarchy data
+    if tag_filters or status or date_start or date_end:
+        hierarchy_data = data_manager.get_filtered_hierarchy_data(
+            task_objects,
+            tag_filters=tag_filters,
+            status_filter=status or None,
+            date_field=date_field,
+            date_start=date_start or None,
+            date_end=date_end or None
+        )
+    else:
+        hierarchy_data = data_manager.get_hierarchy_data(task_objects)
+    
+    return jsonify(hierarchy_data)
+
+
 @api.route('/api/tasks/<task_id>')
 def get_task(task_id):
     """Get a specific task"""

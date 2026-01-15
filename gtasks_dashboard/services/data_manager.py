@@ -394,6 +394,124 @@ class DataManager:
         
         return {'nodes': nodes, 'links': links}
     
+    def parse_chart_tag_filter(self, tag_string: str) -> List[str]:
+        """Parse chart tag filter string with comma-separated tags
+        
+        Args:
+            tag_string: Comma-separated tag search terms (e.g., "pras,prod")
+        
+        Returns:
+            List of normalized tag search terms
+        """
+        if not tag_string:
+            return []
+        
+        # Split by comma and normalize
+        tags = [t.strip().lower() for t in tag_string.split(',')]
+        
+        # Filter out empty strings and short tags (< 2 chars)
+        return [t for t in tags if t and len(t) >= 2]
+    
+    def get_filtered_hierarchy_data(
+        self,
+        tasks: List[Task],
+        tag_filters: Optional[List[str]] = None,
+        status_filter: Optional[str] = None,
+        date_field: str = 'due',
+        date_start: Optional[str] = None,
+        date_end: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Generate filtered hierarchy visualization data from tasks
+        
+        Args:
+            tasks: List of Task objects
+            tag_filters: List of tag search terms to filter by
+            status_filter: Status to filter by (pending, in_progress, completed)
+            date_field: Field to filter by ('due', 'created_at', 'modified_at')
+            date_start: Start date (YYYY-MM-DD)
+            date_end: End date (YYYY-MM-DD)
+        
+        Returns:
+            Dictionary with 'nodes' and 'links' lists
+        """
+        # Apply filters to get filtered tasks
+        filtered_tasks = tasks
+        
+        # Apply status filter
+        if status_filter:
+            filtered_tasks = [t for t in filtered_tasks if t.status == status_filter]
+        
+        # Apply date filters
+        if date_start or date_end:
+            filtered_tasks = self._filter_tasks_by_date_range(
+                filtered_tasks, 
+                date_field, 
+                date_start, 
+                date_end
+            )
+        
+        # Apply tag filters
+        if tag_filters:
+            filtered_tasks = self._filter_tasks_by_chart_tags(filtered_tasks, tag_filters)
+        
+        # Generate hierarchy from filtered tasks
+        return self.get_hierarchy_data(filtered_tasks)
+    
+    def _filter_tasks_by_date_range(
+        self, 
+        tasks: List[Task],
+        date_field: str,
+        date_start: Optional[str],
+        date_end: Optional[str]
+    ) -> List[Task]:
+        """Filter tasks by date range"""
+        filtered_tasks = []
+        
+        for task in tasks:
+            task_date = getattr(task, date_field, None) or task.due
+            if not task_date:
+                continue
+            
+            task_date_obj = datetime.fromisoformat(task_date).date() if isinstance(task_date, str) else task_date
+            
+            if date_start:
+                start_date = datetime.fromisoformat(date_start).date() if isinstance(date_start, str) else date_start
+                if task_date_obj < start_date:
+                    continue
+            
+            if date_end:
+                end_date = datetime.fromisoformat(date_end).date() if isinstance(date_end, str) else date_end
+                if task_date_obj > end_date:
+                    continue
+            
+            filtered_tasks.append(task)
+        
+        return filtered_tasks
+    
+    def _filter_tasks_by_chart_tags(self, tasks: List[Task], tag_filters: List[str]) -> List[Task]:
+        """Filter tasks by chart tag search terms - matches tags that START with search term"""
+        if not tag_filters:
+            return tasks
+        
+        filtered_tasks = []
+        
+        for task in tasks:
+            if not task.hybrid_tags:
+                continue
+            
+            task_tags = task.hybrid_tags.to_list()
+            
+            # Check if any task tag starts with any filter
+            matches = any(
+                any(task_tag.lower().startswith(tag_filter.lower()) for task_tag in task_tags)
+                for tag_filter in tag_filters
+            )
+            
+            if matches:
+                filtered_tasks.append(task)
+        
+        return filtered_tasks
+    
     # ============================================
     # ENHANCED FEATURES (Controlled by Feature Flags)
     # ============================================

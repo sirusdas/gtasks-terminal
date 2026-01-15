@@ -569,6 +569,179 @@
         .dark-mode .date-label {
             color: var(--text-secondary) !important;
         }
+        
+        /* Hierarchy Chart Filter Panel Styles */
+        .hierarchy-filter-panel {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border: 1px solid #bae6fd;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(14, 165, 233, 0.15);
+        }
+        
+        .hierarchy-filter-panel label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #0369a1;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .hierarchy-filter-panel .filter-input {
+            padding: 8px 12px;
+            border: 1px solid #7dd3fc;
+            border-radius: 6px;
+            font-size: 13px;
+            background-color: #ffffff;
+            color: #0c4a6e;
+            min-width: 180px;
+            transition: all 0.2s ease;
+        }
+        
+        .hierarchy-filter-panel .filter-input:focus {
+            outline: none;
+            border-color: #0284c7;
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+        }
+        
+        .hierarchy-filter-panel .filter-input::placeholder {
+            color: #94a3b8;
+        }
+        
+        .hierarchy-filter-panel .filter-select {
+            padding: 8px 12px;
+            border: 1px solid #7dd3fc;
+            border-radius: 6px;
+            font-size: 13px;
+            background-color: #ffffff;
+            color: #0c4a6e;
+            cursor: pointer;
+            min-width: 140px;
+            transition: all 0.2s ease;
+        }
+        
+        .hierarchy-filter-panel .filter-select:focus {
+            outline: none;
+            border-color: #0284c7;
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+        }
+        
+        .hierarchy-filter-panel .filter-btn {
+            padding: 8px 16px;
+            border: 1px solid #7dd3fc;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .hierarchy-filter-panel .filter-btn:hover {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(14, 165, 233, 0.3);
+        }
+        
+        .hierarchy-filter-panel .clear-btn {
+            padding: 8px 16px;
+            border: 1px solid #fecaca;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .hierarchy-filter-panel .clear-btn:hover {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+        }
+        
+        /* Filter panel in fullscreen mode */
+        .viz-container.fullscreen-mode .hierarchy-filter-panel {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            right: 16px;
+            z-index: 100;
+            max-width: 600px;
+            margin: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        /* Filter toggle button in header */
+        .filter-toggle-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            font-size: 14px;
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+        }
+        
+        .filter-toggle-btn:hover {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+            transform: translateY(-1px);
+        }
+        
+        .filter-toggle-btn.active {
+            background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+        }
+        
+        .filter-toggle-btn i {
+            font-size: 14px;
+        }
+        
+        /* Dark mode for hierarchy filter panel */
+        .dark-mode .hierarchy-filter-panel {
+            background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
+            border-color: #3b82f6;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+        }
+        
+        .dark-mode .hierarchy-filter-panel label {
+            color: #60a5fa;
+        }
+        
+        .dark-mode .hierarchy-filter-panel .filter-input {
+            background-color: #1e293b;
+            border-color: #3b82f6;
+            color: #e2e8f0;
+        }
+        
+        .dark-mode .hierarchy-filter-panel .filter-input::placeholder {
+            color: #64748b;
+        }
+        
+        .dark-mode .hierarchy-filter-panel .filter-select {
+            background-color: #1e293b;
+            border-color: #3b82f6;
+            color: #e2e8f0;
+        }
     </style>
 </head>
 <body>
@@ -688,6 +861,10 @@
                 <div class="header">
                     <h1><i class="fas fa-project-diagram mr-2"></i>Hierarchical Task Visualization</h1>
                     <div class="header-actions">
+                        <button class="filter-toggle-btn" onclick="toggleChartFilters()" title="Toggle Filter Panel">
+                            <i class="fas fa-filter"></i>
+                            <span>Filters</span>
+                        </button>
                         <select id="hierarchy-account-selector" class="account-selector" onchange="switchAccountForHierarchy(this.value)">
                             <option value="">Loading accounts...</option>
                         </select>
@@ -700,6 +877,37 @@
                             Fullscreen
                         </button>
                     </div>
+                </div>
+
+                <!-- Chart Filter Panel -->
+                <div class="hierarchy-filter-panel" id="hierarchy-filter-panel" style="display: none;">
+                    <div>
+                        <label>Search Tags</label>
+                        <input type="text" id="hierarchy-tag-search" class="filter-input" placeholder="e.g., pras,prod (3+ chars)">
+                    </div>
+                    <div>
+                        <label>Status</label>
+                        <select id="hierarchy-status-filter" class="filter-select">
+                            <option value="">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Date Range</label>
+                        <input type="date" id="hierarchy-date-start" class="filter-input" style="width: 130px;" placeholder="Start">
+                        <span style="color: #6b7280;">to</span>
+                        <input type="date" id="hierarchy-date-end" class="filter-input" style="width: 130px;" placeholder="End">
+                    </div>
+                    <button class="filter-btn" onclick="applyChartFilters()">
+                        <i class="fas fa-search"></i>
+                        Apply
+                    </button>
+                    <button class="clear-btn" onclick="clearChartFilters()">
+                        <i class="fas fa-times"></i>
+                        Clear
+                    </button>
                 </div>
 
                 <!-- Visualization -->
@@ -1663,6 +1871,11 @@
                 const response = await fetch('/api/hierarchy');
                 hierarchyData = await response.json();
                 updateHierarchyVisualization();
+                
+                // Initialize filter event listeners
+                if (window.initHierarchyFilters) {
+                    window.initHierarchyFilters();
+                }
             } catch (error) {
                 console.error('Error loading hierarchy:', error);
             }
@@ -1682,10 +1895,46 @@
                     e.preventDefault();
                     toggleSidebar();
                 }
+                if (e.ctrlKey && e.key === 'f') {
+                    e.preventDefault();
+                    toggleFullscreen();
+                    // Show filter panel in fullscreen mode
+                    if (isFullscreen) {
+                        document.getElementById('hierarchy-filter-panel').style.display = 'flex';
+                    }
+                }
                 if (e.key === 'Escape' && isFullscreen) {
                     toggleFullscreen();
                 }
             });
+        }
+
+        // Toggle chart filter panel visibility
+        function toggleChartFilters() {
+            const filterPanel = document.getElementById('hierarchy-filter-panel');
+            const toggleBtn = document.querySelector('.filter-toggle-btn');
+            
+            if (filterPanel.style.display === 'none') {
+                filterPanel.style.display = 'flex';
+                toggleBtn.classList.add('active');
+            } else {
+                filterPanel.style.display = 'none';
+                toggleBtn.classList.remove('active');
+            }
+        }
+
+        // Apply chart filters - triggers API call
+        function applyChartFilters() {
+            if (window.refreshHierarchyVisualization) {
+                window.refreshHierarchyVisualization();
+            }
+        }
+
+        // Clear chart filters
+        function clearChartFilters() {
+            if (window.clearHierarchyFilters) {
+                window.clearHierarchyFilters();
+            }
         }
 
         // Close task panel
