@@ -22,6 +22,10 @@ import {
     refreshHierarchyVisualization, hierarchyFilters,
     filterHierarchyByTags, filterHierarchyByDate, filterHierarchyByStatus
 } from './hierarchy-filters.js';
+import { 
+    renderLedger, updateLedgerWithFilters,
+    clearLedgerSelection, highlightLedgerNode, initLedgerView
+} from './hierarchy-ledger.js';
 
 console.log('[Hierarchy] All imports resolved successfully');
 
@@ -36,6 +40,16 @@ async function loadHierarchy() {
         const response = await fetch('/api/hierarchy');
         hierarchyData = await response.json();
         renderHierarchy(hierarchyData);
+        
+        // Also render the ledger
+        if (typeof renderLedger === 'function') {
+            renderLedger(hierarchyData);
+        }
+        
+        // Initialize ledger view based on saved preference
+        if (typeof initLedgerView === 'function') {
+            setTimeout(initLedgerView, 100);
+        }
         
         // Initialize filter event listeners
         initHierarchyFilters();
@@ -112,6 +126,23 @@ window.selectedNode = null;
 window.loadNodeTasksHierarchy = loadNodeTasks;
 window.filterNodeTasksHierarchy = filterNodeTasks;
 
+// Wrap updateHierarchyVisualization to also update the ledger
+const originalUpdateHierarchyVisualization = updateHierarchyVisualization;
+window.updateHierarchyVisualization = function(hierarchyData) {
+    console.log('[Hierarchy] Wrapped updateHierarchyVisualization called');
+    
+    // Update the graph
+    if (typeof originalUpdateHierarchyVisualization === 'function') {
+        originalUpdateHierarchyVisualization(hierarchyData);
+    }
+    
+    // Also update the ledger with filtered data
+    if (typeof window.updateLedgerWithFilters === 'function') {
+        console.log('[Hierarchy] Updating ledger with filtered data');
+        window.updateLedgerWithFilters(hierarchyData);
+    }
+};
+
 // Re-export for ES6 module imports
 export {
     renderHierarchy,
@@ -127,7 +158,13 @@ export {
     setHierarchyData,
     getHierarchyData,
     getSelectedNode,
-    setSelectedNode
+    setSelectedNode,
+    // Ledger exports
+    renderLedger,
+    updateLedgerWithFilters,
+    clearLedgerSelection,
+    highlightLedgerNode,
+    initLedgerView
 };
 
 // Make functions available for dashboard.js
@@ -144,3 +181,24 @@ window.showTaskPanel = showTaskPanel;
 window.closeTaskPanel = closeTaskPanel;
 window.getSelectedNode = getSelectedNode;
 window.setSelectedNode = setSelectedNode;
+
+// Add graph-to-ledger synchronization: when a graph node is clicked, highlight the ledger row
+const originalHighlightSelectedNode = highlightSelectedNode;
+window.highlightSelectedNode = function(node) {
+    // Call original function
+    if (typeof originalHighlightSelectedNode === 'function') {
+        originalHighlightSelectedNode(node);
+    }
+    
+    // Also highlight the corresponding ledger row
+    if (node && typeof highlightLedgerNode === 'function') {
+        highlightLedgerNode(node.id);
+    }
+};
+
+// Additional ledger function exports (for redundancy)
+window.renderLedger = renderLedger;
+window.updateLedgerWithFilters = updateLedgerWithFilters;
+window.clearLedgerSelection = clearLedgerSelection;
+window.highlightLedgerNode = highlightLedgerNode;
+window.initLedgerView = initLedgerView;

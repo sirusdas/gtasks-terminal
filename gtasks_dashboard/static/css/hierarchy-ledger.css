@@ -1,0 +1,468 @@
+/**
+ * Hierarchy Ledger Styles
+ * Tabular display for hierarchy node information
+ */
+
+/* Main ledger panel */
+.ledger-panel {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin: 16px 0;
+    overflow: hidden;
+}
+
+.ledger-header {
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border-bottom: 1px solid #bae6fd;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.ledger-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #0369a1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ledger-title::before {
+    content: '📋';
+    font-size: 16px;
+}
+
+.ledger-search {
+    padding: 6px 12px;
+    border: 1px solid #7dd3fc;
+    border-radius: 6px;
+    font-size: 13px;
+    min-width: 200px;
+    background: white;
+    color: #0c4a6e;
+    transition: all 0.2s ease;
+}
+
+.ledger-search:focus {
+    outline: none;
+    border-color: #0284c7;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+}
+
+.ledger-search::placeholder {
+    color: #94a3b8;
+}
+
+/* Table styles */
+.ledger-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ledger-th {
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0369a1;
+    text-transform: uppercase;
+    background: #f8fafc;
+    border-bottom: 2px solid #e2e8f0;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.ledger-th:hover {
+    background: #e0f2fe;
+}
+
+.ledger-th .sort-icon {
+    margin-left: 4px;
+    opacity: 0.5;
+}
+
+.ledger-th.sorted .sort-icon {
+    opacity: 1;
+}
+
+.ledger-th.sorted.asc .sort-icon::after {
+    content: '▲';
+}
+
+.ledger-th.sorted.desc .sort-icon::after {
+    content: '▼';
+}
+
+.ledger-td {
+    padding: 10px 12px;
+    font-size: 13px;
+    border-bottom: 1px solid #e2e8f0;
+    color: #374151;
+    vertical-align: middle;
+}
+
+.ledger-row {
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.ledger-row:hover {
+    background: #f1f5f9;
+}
+
+.ledger-row:nth-child(even) {
+    background: #fafafa;
+}
+
+.ledger-row:nth-child(even):hover {
+    background: #f1f5f9;
+}
+
+.ledger-row.selected {
+    background: #dbeafe;
+    border-left: 3px solid #3b82f6;
+}
+
+.ledger-row.selected:nth-child(even) {
+    background: #dbeafe;
+}
+
+/* Type badges */
+.type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.type-badge.priority { 
+    background: #fef3c7; 
+    color: #92400e; 
+    border: 1px solid #fcd34d;
+}
+
+.type-badge.category { 
+    background: #dbeafe; 
+    color: #1e40af; 
+    border: 1px solid #93c5fd;
+}
+
+.type-badge.tag { 
+    background: #d1fae5; 
+    color: #065f46; 
+    border: 1px solid #6ee7b7;
+}
+
+.type-badge.account { 
+    background: #ede9fe; 
+    color: #5b21b6; 
+    border: 1px solid #c4b5fd;
+}
+
+.type-badge.meta { 
+    background: #f3f4f6; 
+    color: #374151; 
+    border: 1px solid #d1d5db;
+}
+
+/* Priority indicators */
+.priority-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.priority-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.priority-dot.critical { 
+    background: #ef4444; 
+    box-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
+}
+
+.priority-dot.high { 
+    background: #f97316; 
+    box-shadow: 0 0 4px rgba(249, 115, 22, 0.5);
+}
+
+.priority-dot.medium { 
+    background: #eab308; 
+    box-shadow: 0 0 4px rgba(234, 179, 8, 0.5);
+}
+
+.priority-dot.low { 
+    background: #6b7280; 
+}
+
+/* Status pills */
+.status-cell {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.status-pill {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+.status-pill.pending { 
+    background: #fef3c7; 
+    color: #92400e; 
+}
+
+.status-pill.completed { 
+    background: #d1fae5; 
+    color: #065f46; 
+}
+
+.status-pill.overdue { 
+    background: #fee2e2; 
+    color: #991b1b; 
+}
+
+/* Task count cell */
+.task-count {
+    font-weight: 600;
+    color: #3b82f6;
+}
+
+/* Name cell styling */
+.name-cell {
+    font-weight: 500;
+    color: #1f2937;
+}
+
+.name-cell .node-id {
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: normal;
+    margin-left: 6px;
+}
+
+/* Ledger footer */
+.ledger-footer {
+    padding: 8px 16px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    font-size: 12px;
+    color: #6b7280;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.ledger-info {
+    display: flex;
+    gap: 16px;
+}
+
+.ledger-info span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Empty state */
+.ledger-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: #6b7280;
+}
+
+.ledger-empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+.ledger-empty-text {
+    font-size: 14px;
+}
+
+/* View toggle in ledger header */
+.ledger-view-toggle {
+    display: flex;
+    gap: 4px;
+    background: white;
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.ledger-view-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    background: transparent;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.ledger-view-btn:hover {
+    background: #f3f4f6;
+}
+
+.ledger-view-btn.active {
+    background: #3b82f6;
+    color: white;
+}
+
+/* Related tasks panel for ledger */
+#ledger-tasks-panel {
+    margin-top: 16px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    background: white;
+    overflow: hidden;
+}
+
+#ledger-tasks-panel .task-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border-bottom: 1px solid #bae6fd;
+}
+
+#ledger-tasks-panel .task-panel-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #0369a1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#ledger-tasks-panel .task-panel-title::before {
+    content: '📌';
+}
+
+#ledger-tasks-panel .close-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #6b7280;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+#ledger-tasks-panel .close-btn:hover {
+    background: #fee2e2;
+    color: #ef4444;
+}
+
+#ledger-tasks-panel .task-panel-content {
+    padding: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Loading state */
+.ledger-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: #6b7280;
+}
+
+.ledger-loading::after {
+    content: '';
+    width: 20px;
+    height: 20px;
+    border: 2px solid #e2e8f0;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    margin-left: 12px;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .ledger-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .ledger-search {
+        min-width: 100%;
+    }
+    
+    .ledger-table {
+        font-size: 12px;
+    }
+    
+    .ledger-th, .ledger-td {
+        padding: 8px 6px;
+    }
+    
+    .ledger-view-toggle {
+        justify-content: center;
+    }
+}
+
+/* Scrollable table container */
+.ledger-scroll-container {
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.ledger-scroll-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.ledger-scroll-container::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+.ledger-scroll-container::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.ledger-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* Animation for row selection */
+@keyframes flash-row {
+    0% { background: #dbeafe; }
+    50% { background: #bfdbfe; }
+    100% { background: #dbeafe; }
+}
+
+.ledger-row.flash {
+    animation: flash-row 0.3s ease;
+}

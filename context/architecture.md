@@ -58,6 +58,11 @@ Google Tasks automation tool with CLI and Web Dashboard interfaces for managing 
 | **Task Card** | `task-card.js` | Task card component rendering |
 | **Dashboard** | `dashboard.js` | Main dashboard functionality and initialization |
 | **Hierarchy** | `hierarchy.js` | D3.js hierarchy visualization |
+| **Hierarchy Renderer** | `hierarchy-renderer.js` | D3.js graph rendering logic |
+| **Hierarchy Interactions** | `hierarchy-interactions.js` | Node click, drag, and tooltip handling |
+| **Hierarchy Filters** | `hierarchy-filters.js` | Filtering hierarchy data by tags, status, date |
+| **Hierarchy Task Panel** | `hierarchy-task-panel.js` | Task display panel for selected nodes |
+| **Hierarchy Ledger** | `hierarchy-ledger.js` | Tabular ledger view with click interactions |
 
 **Frontend CSS Modules**:
 
@@ -68,6 +73,7 @@ Google Tasks automation tool with CLI and Web Dashboard interfaces for managing 
 | **Components** | `components.css` | Button, header, toggle styles |
 | **Modal** | `modal.css` | Settings modal and overlay |
 | **Hierarchy Filter** | `hierarchy-filter.css` | Hierarchy filter panel styles |
+| **Hierarchy Ledger** | `hierarchy-ledger.css` | Ledger table and related tasks panel styles |
 
 **Frontend**: HTML + JavaScript with Force-Graph/D3.js for hierarchical visualization + DataTables for task listing
 
