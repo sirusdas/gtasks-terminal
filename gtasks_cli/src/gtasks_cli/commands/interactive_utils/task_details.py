@@ -2,7 +2,7 @@
 Module for viewing task details in interactive mode
 """
 
-from gtasks_cli.models.task import TaskStatus, Priority
+from gtasks_cli.models.task import TaskStatus
 from rich.console import Console
 from rich.panel import Panel
 from rich.markup import escape
@@ -86,6 +86,11 @@ def view_task_details(task):
     
     if project_tags_line:
         panel_content.append(project_tags_line)
+    
+    # Add list name
+    list_title = getattr(task, 'list_title', None)
+    if list_title:
+        panel_content.append(f"📓 List: {list_title}")
     
     # Add recurrence info
     if task.is_recurring:

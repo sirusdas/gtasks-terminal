@@ -748,11 +748,12 @@ export function updateTaskCompletedState(taskId) {
             completeBtn.innerHTML = '✅';
             completeBtn.title = 'Completed';
             completeBtn.onclick = null;
+            completeBtn.style.cursor = 'default';
         }
     }
     
-    // Update in hierarchy task panel
-    const nodeTaskElement = document.querySelector(`.node-task-item[data-task-id="${taskId}"]`);
+    // Update in hierarchy task panel (node-task-card)
+    const nodeTaskElement = document.querySelector(`.node-task-card[data-task-id="${taskId}"]`);
     if (nodeTaskElement) {
         nodeTaskElement.classList.add('completed');
         const completeBtn = nodeTaskElement.querySelector('.task-complete-btn');
@@ -760,6 +761,13 @@ export function updateTaskCompletedState(taskId) {
             completeBtn.innerHTML = '✅';
             completeBtn.title = 'Completed';
             completeBtn.onclick = null;
+            completeBtn.style.cursor = 'default';
+        }
+        // Update status badge
+        const statusElement = nodeTaskElement.querySelector('.node-task-status');
+        if (statusElement) {
+            statusElement.textContent = 'completed';
+            statusElement.classList.add('status-completed');
         }
     }
 }

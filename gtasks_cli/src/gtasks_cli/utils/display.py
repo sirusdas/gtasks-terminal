@@ -173,6 +173,9 @@ def display_tasks_compact(tasks: List[Task]) -> None:
             if description_lines:
                 task_content.extend(description_lines[:3])
             
+            # Add list name for individual task
+            task_content.append(f"[dim]📓 List: {list_title}[/dim]")
+            
             # Add metadata line
             metadata_parts = []
             
@@ -293,6 +296,9 @@ def display_tasks_with_details(tasks: List[Task]) -> None:
             # Add up to 3 lines of description/notes
             if description_lines:
                 panel_content.extend(description_lines[:3])
+            
+            # Add list name for individual task
+            panel_content.append(f"[dim]📓 List: {list_title}[/dim]")
             
             # Add metadata line
             metadata_parts = []

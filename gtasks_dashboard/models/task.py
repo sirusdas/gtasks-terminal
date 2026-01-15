@@ -84,6 +84,7 @@ class Task:
     status: str
     tags: List[str]
     account: str
+    list_title: str
     notes: Optional[str] = None
     created_at: Optional[str] = None
     modified_at: Optional[str] = None
@@ -92,6 +93,7 @@ class Task:
     project: Optional[str] = None
     dependencies: List[str] = field(default_factory=list)
     is_deleted: bool = False
+    tasklist_id: Optional[str] = None
     
     @property
     def has_dependencies(self) -> bool:
@@ -123,6 +125,7 @@ class Task:
             status=data.get('status', 'pending'),
             tags=data.get('tags', []),
             account=data.get('account', ''),
+            list_title=data.get('list_title', ''),
             notes=data.get('notes'),
             created_at=data.get('created_at'),
             modified_at=data.get('modified_at'),
@@ -151,6 +154,7 @@ class Task:
             'status': self.status,
             'tags': self.tags,
             'account': self.account,
+            'list_title': self.list_title,
             'notes': self.notes,
             'created_at': self.created_at,
             'modified_at': self.modified_at,

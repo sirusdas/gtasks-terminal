@@ -212,6 +212,7 @@ export function displayNodeTasks(tasks, node) {
 function createNodeTaskCard(task, node) {
     const card = document.createElement('div');
     card.className = 'node-task-card';
+    card.setAttribute('data-task-id', task.id);
 
     const priorityClass = `priority-${task.calculated_priority || 'medium'}`;
     const priorityIcon = {
@@ -230,8 +231,20 @@ function createNodeTaskCard(task, node) {
     const hasDeps = task.dependencies && task.dependencies.length > 0;
     const depsInfo = hasDeps ? `<small style="color: #f59e0b; font-size: 0.7rem; display: block; margin-top: 0.25rem;"><i class="fas fa-link"></i> ${task.dependencies.length} dependency(ies)</small>` : '';
 
+    // Complete button - show checkmark for incomplete, completed for complete
+    const isCompleted = task.status === 'completed';
+    const completeBtnHtml = `
+        <div class="task-complete-btn ${isCompleted ? 'completed' : ''}" 
+             onclick="${isCompleted ? '' : `completeTask('${task.id}')`}"
+             title="${isCompleted ? 'Completed' : 'Mark as complete'}"
+             style="cursor: ${isCompleted ? 'default' : 'pointer'}; font-size: 1.2rem;">
+            ${isCompleted ? '✅' : '⭕'}
+        </div>
+    `;
+
     card.innerHTML = `
         <div class="node-task-header">
+            ${completeBtnHtml}
             <span class="priority-icon">🔸</span>
             <div class="node-task-title">${task.title}</div>
             ${dateStatusBadge}
@@ -247,7 +260,8 @@ function createNodeTaskCard(task, node) {
         ${depsInfo}
         ${tagsDisplay}
         ${notesSection}
-        ${task.account ? `<small style="color: #9ca3af; font-size: 0.75rem; margin-top: 0.5rem; display: block;">Account: ${task.account}</small>` : ''}
+        ${task.account ? `<small style="color: #9ca3af; font-size: 0.75rem; margin-top: 0.25rem; display: block;">Account: ${task.account}</small>` : ''}
+        ${task.list_title ? `<small style="color: #8b5cf6; font-size: 0.75rem; margin-top: 0.5rem; display: block;"><i class="fas fa-list"></i> List: ${task.list_title}</small>` : ''}
     `;
 
     // Add click handler for expanding notes

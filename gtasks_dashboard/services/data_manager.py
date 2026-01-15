@@ -51,14 +51,21 @@ class DataManager:
         self.gtasks_path = gtasks_path or self._detect_gtasks_path()
     
     def _detect_gtasks_path(self) -> Optional[Path]:
-        """Detect GTasks CLI path"""
-        home_path = Path.home() / '.gtasks'
-        project_path = Path('./gtasks_cli')
+        """Detect GTasks CLI path with multiple fallback locations"""
+        # Check multiple possible locations
+        possible_paths = [
+            Path.home() / '.gtasks',                    # ~/.gtasks
+            Path('./gtasks_cli'),                        # ./gtasks_cli (from dashboard dir)
+            Path(__file__).parent.parent / 'gtasks_cli', # gtasks_cli (from services dir)
+            Path.cwd().parent / 'gtasks_cli',            # parent/gtasks_cli (from dashboard dir)
+        ]
         
-        if home_path.exists():
-            return home_path
-        elif project_path.exists():
-            return project_path
+        for path in possible_paths:
+            if path.exists():
+                print(f"[DataManager] Detected gtasks path: {path}")
+                return path
+        
+        print("[DataManager] No gtasks path found, will use demo data")
         return None
     
     def _extract_tags(self, text: str) -> Dict[str, List[str]]:
@@ -145,11 +152,19 @@ class DataManager:
             try:
                 conn = sqlite3.connect(str(db_path))
                 cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT id, title, description, due, priority, status, tags, notes, 
-                           created_at, modified_at, dependencies
-                    FROM tasks
-                """)
+                
+                # Check if list_title column exists
+                cursor.execute("PRAGMA table_info(tasks)")
+                columns = [col[1] for col in cursor.fetchall()]
+                
+                # Build query based on available columns
+                select_columns = ['id', 'title', 'description', 'due', 'priority', 'status', 'tags', 'notes', 
+                                'created_at', 'modified_at', 'dependencies']
+                if 'list_title' in columns:
+                    select_columns.append('list_title')
+                
+                query = f"SELECT {', '.join(select_columns)} FROM tasks"
+                cursor.execute(query)
                 rows = cursor.fetchall()
                 conn.close()
                 
@@ -160,9 +175,62 @@ class DataManager:
         
         return self._get_demo_tasks(account_id)
     
+    def _load_list_mapping(self, account_id: str) -> Dict[str, str]:
+        """Load list mapping from database (maps task IDs to list titles)"""
+        task_to_list_mapping = {}  # Maps task_id -> list_title
+        
+        if not self.gtasks_path:
+            return task_to_list_mapping
+        
+        db_path = self.gtasks_path / account_id / 'tasks.db'
+        if not db_path.exists():
+            db_path = self.gtasks_path / 'tasks.db'
+        
+        if db_path.exists():
+            try:
+                conn = sqlite3.connect(str(db_path))
+                cursor = conn.cursor()
+                
+                # Load task_lists to get list titles
+                cursor.execute("SELECT task_id, list_name FROM task_lists")
+                for row in cursor.fetchall():
+                    task_to_list_mapping[row[0]] = row[1]
+                
+                conn.close()
+            except Exception as e:
+                print(f"⚠️  Error loading list_mapping for {account_id}: {e}")
+        
+        return task_to_list_mapping
+    
     def _process_task_rows(self, rows: List[tuple], account_id: str) -> List[Task]:
         """Process database rows into Task objects"""
         tasks = []
+        
+        # Get column info to determine which columns are present
+        if self.gtasks_path:
+            db_path = self.gtasks_path / account_id / 'tasks.db'
+            if not db_path.exists():
+                db_path = self.gtasks_path / 'tasks.db'
+            if db_path.exists():
+                try:
+                    conn = sqlite3.connect(str(db_path))
+                    cursor = conn.cursor()
+                    cursor.execute("PRAGMA table_info(tasks)")
+                    columns = [col[1] for col in cursor.fetchall()]
+                    conn.close()
+                except:
+                    columns = ['id', 'title', 'description', 'due', 'priority', 'status', 'tags', 'notes', 
+                              'created_at', 'modified_at', 'dependencies']
+            else:
+                columns = ['id', 'title', 'description', 'due', 'priority', 'status', 'tags', 'notes', 
+                          'created_at', 'modified_at', 'dependencies']
+        else:
+            columns = ['id', 'title', 'description', 'due', 'priority', 'status', 'tags', 'notes', 
+                      'created_at', 'modified_at', 'dependencies']
+        
+        # Load list mapping for populating list_title
+        list_mapping = self._load_list_mapping(account_id)
+        
         for row in rows:
             task_data = {
                 'id': row[0],
@@ -174,10 +242,19 @@ class DataManager:
                 'tags': json.loads(row[6]) if row[6] else [],
                 'notes': row[7] or '',
                 'account': account_id,
+                'list_title': row[columns.index('list_title')] if 'list_title' in columns and len(row) > columns.index('list_title') else '',
                 'created_at': row[8],
                 'modified_at': row[9],
                 'dependencies': json.loads(row[10]) if len(row) > 10 and row[10] else []
             }
+            
+            # If list_title is empty, try to get from list_mapping
+            if not task_data['list_title'] and task_data['id'] in list_mapping:
+                task_data['list_title'] = list_mapping[task_data['id']]
+            
+            # Default list_title if still empty
+            if not task_data['list_title']:
+                task_data['list_title'] = 'Tasks'
             
             # Extract hybrid tags
             task_data['hybrid_tags'] = self._extract_tags(
@@ -206,6 +283,7 @@ class DataManager:
                 'tags': ['api', 'review'],
                 'notes': 'Use #Docker for testing',
                 'account': account_id,
+                'list_title': 'My Thoughts',
                 'dependencies': []
             },
             {
@@ -218,6 +296,7 @@ class DataManager:
                 'tags': ['bug', 'frontend'],
                 'notes': '[P0] production issue - depends on API being stable',
                 'account': account_id,
+                'list_title': 'My Thoughts',
                 'dependencies': [f'{account_id}_1']
             },
             {
@@ -230,6 +309,7 @@ class DataManager:
                 'tags': ['feature', 'theme'],
                 'notes': 'Test on #Staging - waiting for bug fix',
                 'account': account_id,
+                'list_title': 'My Thoughts',
                 'dependencies': [f'{account_id}_2']
             },
             {
@@ -242,6 +322,7 @@ class DataManager:
                 'tags': ['database', 'optimization'],
                 'notes': 'Focus on #Production',
                 'account': account_id,
+                'list_title': 'My Thoughts',
                 'dependencies': [f'{account_id}_1']
             },
             {
@@ -254,6 +335,7 @@ class DataManager:
                 'tags': ['devops', 'automation'],
                 'notes': 'Complete setup',
                 'account': account_id,
+                'list_title': 'My Thoughts',
                 'dependencies': []
             },
             {
@@ -266,6 +348,7 @@ class DataManager:
                 'tags': ['documentation', 'api'],
                 'notes': 'After CI/CD is ready',
                 'account': account_id,
+                'list_title': 'My Thoughts',
                 'dependencies': [f'{account_id}_5']
             }
         ]

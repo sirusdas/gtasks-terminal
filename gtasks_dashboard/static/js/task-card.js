@@ -79,7 +79,8 @@ export function createTaskCard(task, options = {}) {
             ${depsInfo}
             ${tagsDisplay}
             ${notesSection}
-            ${task.account ? `<small style="color: #9ca3af; font-size: 0.75rem; margin-top: 0.5rem; display: block;">Account: ${task.account}</small>` : ''}
+            ${task.account ? `<small style="color: #9ca3af; font-size: 0.75rem; margin-top: 0.25rem; display: block;">Account: ${task.account}</small>` : ''}
+            ${task.list_title ? `<small style="color: #8b5cf6; font-size: 0.75rem; margin-top: 0.5rem; display: block;"><i class="fas fa-list"></i> List: ${task.list_title}</small>` : ''}
         `;
     } else {
         // Main task card HTML
@@ -97,6 +98,7 @@ export function createTaskCard(task, options = {}) {
             ${notesSection}
             <div class="task-card-footer">
                 ${task.due ? `<span class="task-due"><i class="fas fa-calendar"></i> ${task.due}</span>` : ''}
+                ${task.list_title ? `<span class="task-list"><i class="fas fa-list" style="color: #8b5cf6;"></i> ${task.list_title}</span>` : ''}
                 ${task.account ? `<span class="task-account"><i class="fas fa-user"></i> ${task.account}</span>` : ''}
             </div>
         `;

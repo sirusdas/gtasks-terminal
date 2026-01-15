@@ -3,7 +3,7 @@ Module for displaying tasks in interactive mode
 """
 
 from collections import defaultdict
-from gtasks_cli.models.task import TaskStatus, Priority
+from gtasks_cli.models.task import TaskStatus
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -140,6 +140,10 @@ def display_tasks_grouped_by_list(tasks, start_number=1):
             if description_info:
                 for line_text in description_info:
                     console.print(line_text)
+            
+            # Add list name for the task
+            list_title = getattr(task, 'list_title', 'Unknown List')
+            console.print(f"     [dim]📓 List: {list_title}[/dim]")
                 
             all_tasks.append(task)
         task_index += len(list_tasks)
