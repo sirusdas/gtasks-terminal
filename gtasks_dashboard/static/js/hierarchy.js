@@ -556,6 +556,13 @@ function displayNodeTasks(tasks, node) {
         container.innerHTML = '<p style="text-align: center; color: #6b7280; grid-column: 1/-1;">No tasks found for this node.</p>';
         return;
     }
+    
+    // Sort by due date descending (default)
+    tasks.sort((a, b) => {
+        const aDue = a.due ? new Date(a.due).getTime() : -Infinity;
+        const bDue = b.due ? new Date(b.due).getTime() : -Infinity;
+        return bDue - aDue; // Descending order
+    });
 
     tasks.forEach(task => {
         const taskCard = createNodeTaskCard(task, node);

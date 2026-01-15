@@ -979,8 +979,8 @@
                                         <option value="title">Title</option>
                                     </select>
                                     <select id="node-task-sort-order" class="filter-select">
+                                        <option value="desc" selected>Descending</option>
                                         <option value="asc">Ascending</option>
-                                        <option value="desc">Descending</option>
                                     </select>
                                 </div>
                             </div>
@@ -1058,8 +1058,8 @@
                                 <option value="title">Title</option>
                             </select>
                             <select id="task-sort-order" class="filter-select" onchange="filterTasks()">
+                                <option value="desc" selected>Descending</option>
                                 <option value="asc">Ascending</option>
-                                <option value="desc">Descending</option>
                             </select>
                         </div>
                     </div>
@@ -1436,7 +1436,10 @@
                 return;
             }
             
-            tasks.forEach(task => {
+            // Sort by due date descending by default
+            const sortedTasks = sortTasksByField(tasks, 'due', 'desc');
+            
+            sortedTasks.forEach(task => {
                 const card = createTaskCard(task);
                 container.appendChild(card);
             });
@@ -1849,7 +1852,7 @@
             
             // Reset sort order
             const sortOrderFilter = document.getElementById('task-sort-order');
-            if (sortOrderFilter) sortOrderFilter.value = 'asc';
+            if (sortOrderFilter) sortOrderFilter.value = 'desc';
             
             // Re-apply filters
             filterTasks();
@@ -1983,7 +1986,7 @@
             
             // Reset sort order
             const sortOrderFilter = document.getElementById('node-task-sort-order');
-            if (sortOrderFilter) sortOrderFilter.value = 'asc';
+            if (sortOrderFilter) sortOrderFilter.value = 'desc';
             
             // Re-apply filters if a node is selected
             if (window.selectedNode) {
