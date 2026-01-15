@@ -466,3 +466,220 @@
 .ledger-row.flash {
     animation: flash-row 0.3s ease;
 }
+
+/* ============================================
+ * Dark Mode Styles for Ledger
+ * ============================================ */
+
+.dark-mode .ledger-panel {
+    background: var(--bg-secondary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .ledger-header {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
+    border-bottom: 1px solid #3b82f6;
+}
+
+.dark-mode .ledger-title {
+    color: #60a5fa;
+}
+
+.dark-mode .ledger-search {
+    background: #1e293b;
+    border-color: #3b82f6;
+    color: #e2e8f0;
+}
+
+.dark-mode .ledger-search:focus {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.dark-mode .ledger-search::placeholder {
+    color: #64748b;
+}
+
+.dark-mode .ledger-th {
+    background: var(--bg-tertiary);
+    color: #60a5fa;
+    border-bottom-color: var(--border-color);
+}
+
+.dark-mode .ledger-th:hover {
+    background: #374151;
+}
+
+.dark-mode .ledger-td {
+    border-bottom-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+.dark-mode .ledger-row {
+    border-bottom-color: var(--border-color);
+}
+
+.dark-mode .ledger-row:hover {
+    background: var(--hover-bg);
+}
+
+.dark-mode .ledger-row:nth-child(even) {
+    background: var(--bg-secondary);
+}
+
+.dark-mode .ledger-row:nth-child(even):hover {
+    background: var(--hover-bg);
+}
+
+.dark-mode .ledger-row.selected {
+    background: rgba(59, 130, 246, 0.2);
+    border-left-color: #3b82f6;
+}
+
+.dark-mode .ledger-row.selected:nth-child(even) {
+    background: rgba(59, 130, 246, 0.2);
+}
+
+/* Dark mode type badges */
+.dark-mode .type-badge.priority {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+.dark-mode .type-badge.category {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.dark-mode .type-badge.tag {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.dark-mode .type-badge.account {
+    background: rgba(139, 92, 246, 0.2);
+    color: #a78bfa;
+    border-color: rgba(139, 92, 246, 0.3);
+}
+
+.dark-mode .type-badge.meta {
+    background: rgba(107, 114, 128, 0.2);
+    color: #9ca3af;
+    border-color: rgba(107, 114, 128, 0.3);
+}
+
+/* Dark mode status pills */
+.dark-mode .status-pill.pending {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+.dark-mode .status-pill.completed {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+
+.dark-mode .status-pill.overdue {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+.dark-mode .task-count {
+    color: #60a5fa;
+}
+
+.dark-mode .name-cell {
+    color: var(--text-primary);
+}
+
+.dark-mode .name-cell .node-id {
+    color: var(--text-muted);
+}
+
+.dark-mode .ledger-footer {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    border-top-color: var(--border-color);
+}
+
+.dark-mode .ledger-empty {
+    color: var(--text-muted);
+}
+
+/* Dark mode ledger view toggle */
+.dark-mode .ledger-view-toggle {
+    background: #1e293b;
+    border-color: #3b82f6;
+}
+
+.dark-mode .ledger-view-btn {
+    background: transparent;
+    color: #94a3b8;
+}
+
+.dark-mode .ledger-view-btn:hover {
+    background: var(--hover-bg);
+    color: #e2e8f0;
+}
+
+.dark-mode .ledger-view-btn.active {
+    background: #3b82f6;
+    color: white;
+}
+
+.dark-mode .ledger-view-btn.active:hover {
+    background: #60a5fa;
+}
+
+/* Dark mode scrollbar */
+.dark-mode .ledger-scroll-container::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+}
+
+.dark-mode .ledger-scroll-container::-webkit-scrollbar-thumb {
+    background: #4b5563;
+}
+
+.dark-mode .ledger-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+}
+
+/* Dark mode ledger tasks panel */
+.dark-mode #ledger-tasks-panel {
+    background: var(--bg-secondary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode #ledger-tasks-panel .task-panel-header {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
+    border-bottom: 1px solid #3b82f6;
+}
+
+.dark-mode #ledger-tasks-panel .task-panel-title {
+    color: #60a5fa;
+}
+
+.dark-mode #ledger-tasks-panel .close-btn {
+    color: var(--text-muted);
+}
+
+.dark-mode #ledger-tasks-panel .close-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+.dark-mode #ledger-tasks-panel .task-panel-content {
+    background: var(--bg-secondary);
+}
+
+.dark-mode .ledger-loading {
+    color: var(--text-muted);
+}
+
+.dark-mode .ledger-loading::after {
+    border-color: var(--border-color);
+    border-top-color: #3b82f6;
+}

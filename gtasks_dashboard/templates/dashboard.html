@@ -180,16 +180,16 @@
                 </div>
 
                 <!-- View Toggle Control -->
-                <div class="hierarchy-view-toggle" id="hierarchy-view-toggle" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1px solid #bae6fd; border-radius: 10px; margin-bottom: 16px;">
-                    <span style="font-size: 12px; font-weight: 600; color: #0369a1; text-transform: uppercase;">View Mode:</span>
-                    <div style="display: flex; gap: 4px; background: white; padding: 4px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                        <button class="view-btn active" data-view="graph" onclick="window.switchHierarchyView('graph')" style="padding: 6px 12px; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; background: #3b82f6; color: white; cursor: pointer;">
+                <div class="hierarchy-view-toggle" id="hierarchy-view-toggle">
+                    <span class="view-mode-label">View Mode:</span>
+                    <div class="view-mode-buttons">
+                        <button class="view-mode-btn active" data-view="graph" onclick="window.switchHierarchyView('graph')">
                             📊 Graph
                         </button>
-                        <button class="view-btn" data-view="both" onclick="window.switchHierarchyView('both')" style="padding: 6px 12px; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; background: transparent; color: #6b7280; cursor: pointer;">
+                        <button class="view-mode-btn" data-view="both" onclick="window.switchHierarchyView('both')">
                             🔀 Both
                         </button>
-                        <button class="view-btn" data-view="ledger" onclick="window.switchHierarchyView('ledger')" style="padding: 6px 12px; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; background: transparent; color: #6b7280; cursor: pointer;">
+                        <button class="view-mode-btn" data-view="ledger" onclick="window.switchHierarchyView('ledger')">
                             📋 Ledger
                         </button>
                     </div>
