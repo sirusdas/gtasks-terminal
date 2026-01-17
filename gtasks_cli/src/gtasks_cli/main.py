@@ -23,6 +23,7 @@ from gtasks_cli.commands.config import config
 from gtasks_cli.commands.ai import ai
 from gtasks_cli.commands.mcp import mcp
 from gtasks_cli.commands.tasklist import tasklist
+from gtasks_cli.commands.remote import remote_commands
 from gtasks_cli.utils.logger import setup_logger
 
 # Set up logger
@@ -88,6 +89,7 @@ cli.add_command(config)
 # cli.add_command(ai)
 # cli.add_command(mcp)
 cli.add_command(tasklist)
+cli.add_command(remote_commands)
 
 
 def main():

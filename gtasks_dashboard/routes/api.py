@@ -830,3 +830,466 @@ def api_sync_status():
             'success': False,
             'message': f'Error getting sync status: {str(e)}'
         }), 500
+
+
+# ============================================
+# REMOTE SYNC ENDPOINTS
+# ============================================
+
+@api.route('/api/remote/status')
+def api_remote_status():
+    """
+    Get the status of remote sync feature.
+    
+    Response:
+        {
+            "success": True,
+            "data": {
+                "enabled": True/False,
+                "remote_dbs": [...],
+                "local_db_exists": True/False,
+                "connection_status": "connected|local_only|offline",
+                "last_sync": "ISO timestamp or null"
+            }
+        }
+    """
+    from services.remote_sync_service import RemoteSyncService
+    
+    try:
+        status = RemoteSyncService.get_remote_status()
+        return jsonify({
+            'success': True,
+            'data': status
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error getting remote status: {str(e)}'
+        }), 500
+
+
+@api.route('/api/remote/databases', methods=['GET'])
+def api_remote_databases():
+    """
+    List all configured remote databases.
+    
+    Response:
+        {
+            "success": True,
+            "data": [
+                {
+                    "id": "db_id",
+                    "name": "Database Name",
+                    "url": "libsql://...",
+                    "active": True/False,
+                    "last_sync": "ISO timestamp or null"
+                },
+                ...
+            ]
+        }
+    """
+    from services.remote_sync_service import RemoteSyncService
+    
+    try:
+        databases = RemoteSyncService.list_remote_databases()
+        return jsonify({
+            'success': True,
+            'data': databases
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error listing remote databases: {str(e)}'
+        }), 500
+
+
+@api.route('/api/remote/databases', methods=['POST'])
+def api_add_remote_database():
+    """
+    Add a new remote database configuration.
+    
+    Request body:
+        {
+            "url": "libsql://gtaskssqllite-sirusdas.aws-ap-south-1.turso.io",
+            "name": "Optional Database Name",
+            "token": "optional_auth_token (or use GTASKS_TURSO_TOKEN env var)"
+        }
+        
+    Response:
+        {
+            "success": True,
+            "data": {
+                "id": "new_db_id",
+                "name": "Database Name"
+            },
+            "message": "Database added successfully"
+        }
+    """
+    from services.remote_sync_service import RemoteSyncService
+    
+    try:
+        data = request.get_json()
+        url = data.get('url')
+        name = data.get('name')
+        token = data.get('token')
+        
+        if not url:
+            return jsonify({
+                'success': False,
+                'message': 'URL is required'
+            }), 400
+        
+        result = RemoteSyncService.add_remote_db(url, name, token)
+        
+        return jsonify({
+            'success': True,
+            'data': result,
+            'message': 'Remote database added successfully'
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error adding remote database: {str(e)}'
+        }), 500
+
+
+@api.route('/api/remote/databases/<db_id>', methods=['DELETE'])
+def api_remove_remote_database(db_id):
+    """
+    Remove a remote database configuration.
+    
+    Path parameters:
+        db_id: Database ID to remove
+        
+    Response:
+        {
+            "success": True,
+            "message": "Database removed successfully"
+        }
+    """
+    from services.remote_sync_service import RemoteSyncService
+    
+    try:
+        RemoteSyncService.remove_remote_db(db_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Remote database removed successfully'
+        })
+    
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 404
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error removing remote database: {str(e)}'
+        }), 500
+
+
+@api.route('/api/remote/databases/<db_id>/activate', methods=['POST'])
+def api_activate_remote_database(db_id):
+    """
+    Activate a remote database for sync.
+    
+    Path parameters:
+        db_id: Database ID to activate
+        
+    Response:
+        {
+            "success": True,
+            "message": "Database activated successfully"
+        }
+    """
+    from services.remote_sync_service import RemoteSyncService
+    
+    try:
+        RemoteSyncService.activate_remote_db(db_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Remote database activated successfully'
+        })
+    
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 404
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error activating remote database: {str(e)}'
+        }), 500
+
+
+@api.route('/api/remote/databases/<db_id>/deactivate', methods=['POST'])
+def api_deactivate_remote_database(db_id):
+    """
+    Deactivate a remote database for sync.
+    
+    Path parameters:
+        db_id: Database ID to deactivate
+        
+    Response:
+        {
+            "success": True,
+            "message": "Database deactivated successfully"
+        }
+    """
+    from services.remote_sync_service import RemoteSyncService
+    
+    try:
+        RemoteSyncService.deactivate_remote_db(db_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Remote database deactivated successfully'
+        })
+    
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 404
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error deactivating remote database: {str(e)}'
+        }), 500
+
+
+@api.route('/api/remote/sync', methods=['POST'])
+def api_remote_sync():
+    """
+    Perform a full sync with all active remote databases.
+    
+    Request body (optional):
+        {
+            "push": True,  # Push local changes to remote
+            "pull": True   # Pull remote changes to local
+        }
+        
+    Response:
+        {
+            "success": True,
+            "data": {
+                "sync_id": "unique_sync_id",
+                "status": "completed",
+                "results": [
+                    {
+                        "db_id": "...",
+                        "db_name": "...",
+                        "pushed": 5,
+                        "pulled": 3,
+                        "conflicts_resolved": 2,
+                        "success": True,
+                        "error": null
+                    },
+                    ...
+                ]
+            },
+            "message": "Sync completed successfully"
+        }
+    """
+    from services.remote_sync_service import RemoteSyncService
+    from services.sync_service import SyncService
+    
+    try:
+        data = request.get_json() or {}
+        push = data.get('push', True)
+        pull = data.get('pull', True)
+        
+        if not push and not pull:
+            return jsonify({
+                'success': False,
+                'message': 'At least one of push or pull must be True'
+            }), 400
+        
+        # Start sync via SyncService for progress tracking
+        sync_id = SyncService.start_advanced_sync(sync_type='both', account='remote')
+        
+        # Perform the actual sync
+        result = RemoteSyncService.sync_all(push=pull, pull=pull)
+        
+        # Update sync status
+        SyncService._sync_results[sync_id] = {
+            'status': 'completed',
+            'message': f'Synced with {len(result)} remote database(s)',
+            'results': result
+        }
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'sync_id': sync_id,
+                'status': 'completed',
+                'results': result
+            },
+            'message': 'Remote sync completed successfully'
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error syncing with remote databases: {str(e)}'
+        }), 500
+
+
+@api.route('/api/remote/push', methods=['POST'])
+def api_remote_push():
+    """
+    Push local changes to remote databases.
+    
+    Request body (optional):
+        {
+            "db_id": "specific_db_id"  # Push to specific DB, or all if not provided
+        }
+        
+    Response:
+        {
+            "success": True,
+            "data": {
+                "results": [
+                    {
+                        "db_id": "...",
+                        "db_name": "...",
+                        "pushed": 5,
+                        "success": True,
+                        "error": null
+                    },
+                    ...
+                ]
+            },
+            "message": "Push completed successfully"
+        }
+    """
+    from services.remote_sync_service import RemoteSyncService
+    
+    try:
+        data = request.get_json() or {}
+        db_id = data.get('db_id')
+        
+        if db_id:
+            result = RemoteSyncService.push_to_remote(db_id)
+            results = [result]
+        else:
+            results = RemoteSyncService.push_all()
+        
+        return jsonify({
+            'success': True,
+            'data': {'results': results},
+            'message': 'Push to remote databases completed'
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error pushing to remote databases: {str(e)}'
+        }), 500
+
+
+@api.route('/api/remote/pull', methods=['POST'])
+def api_remote_pull():
+    """
+    Pull remote changes to local database.
+    
+    Request body (optional):
+        {
+            "db_id": "specific_db_id"  # Pull from specific DB, or all if not provided
+        }
+        
+    Response:
+        {
+            "success": True,
+            "data": {
+                "results": [
+                    {
+                        "db_id": "...",
+                        "db_name": "...",
+                        "pulled": 3,
+                        "success": True,
+                        "error": null
+                    },
+                    ...
+                ]
+            },
+            "message": "Pull completed successfully"
+        }
+    """
+    from services.remote_sync_service import RemoteSyncService
+    
+    try:
+        data = request.get_json() or {}
+        db_id = data.get('db_id')
+        
+        if db_id:
+            result = RemoteSyncService.pull_from_remote(db_id)
+            results = [result]
+        else:
+            results = RemoteSyncService.pull_all()
+        
+        return jsonify({
+            'success': True,
+            'data': {'results': results},
+            'message': 'Pull from remote databases completed'
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error pulling from remote databases: {str(e)}'
+        }), 500
+
+
+@api.route('/api/remote/tasks', methods=['GET'])
+def api_remote_load_tasks():
+    """
+    Load tasks from remote database when local DB is missing.
+    
+    Query parameters:
+        db_id: Optional specific database ID
+        
+    Response:
+        {
+            "success": True,
+            "data": {
+                "tasks": [...],
+                "source": "remote_db_name",
+                "loaded_from": "remote"
+            }
+        }
+    """
+    from services.remote_sync_service import RemoteSyncService
+    from models.task import Task
+    
+    try:
+        db_id = request.args.get('db_id')
+        
+        if db_id:
+            tasks = RemoteSyncService.load_tasks_from_remote(db_id)
+        else:
+            tasks = RemoteSyncService.load_tasks_from_any_remote()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'tasks': [t.to_dict() if hasattr(t, 'to_dict') else t for t in tasks],
+                'source': 'remote',
+                'loaded_from': 'remote'
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error loading tasks from remote: {str(e)}'
+        }), 500

@@ -9,3 +9,72 @@ gtasks_cli/qdrant_storage/*
 gtasks_cli/src/gtasks_cli/__pycache__/*
 gtasks_dashboard/gtasks-dashboard/lib/*
 gtasks_dashboard/gtasks-dashboard/bin/*
+
+# ============================================
+# Remote Sync - Token & Database Security
+# ============================================
+
+# Turso/Remote database tokens and credentials
+*.token
+*.auth
+*turso*
+*libsql*
+*.jwt
+*.credentials
+
+# Remote database configuration files
+remote_db_*.yaml
+remote_db_*.json
+remote_db_*.yml
+sync_config_*.yaml
+sync_config_*.json
+sync_config_*.yml
+
+# Environment files (never commit!)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.gtasks_tokens
+.gtasks_tokens/*
+!gtasks_cli/config/default_config.yaml
+
+# Sync metadata (may contain sensitive timestamps/data)
+sync_metadata.json
+*.sync
+.sync/
+
+# Database files (should be local only)
+*.db
+*.sqlite
+*.sqlite3
+tasks.db
+gtasks.db
+
+# Session and cache files
+*.session
+*.cache
+__pycache__
+.pytest_cache
+*.egg-info
+.DS_Store
+Thumbs.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Pre-commit hook to prevent token commits (add this to .pre-commit-config.yaml)
+# See: https://pre-commit.com/
+# .pre-commit-config.yaml should include:
+# - repo: https://github.com/pre-commit/pre-commit-hooks
+#   rev: v4.4.0
+#   hooks:
+#   - id: check-secret-files
+#     name: Check for secret files
+#     files: '.*token|.*auth|.*credentials|.*turso|.*libsql'
+#     stages: [pre-commit]

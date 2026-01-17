@@ -156,8 +156,8 @@ class SQLiteStorage:
                         task.get('tasklist_id')
                     ))
                     
-                    # Save list mapping if available
-                    if 'list_name' in task:
+                    # Save list mapping if available and not None
+                    if 'list_name' in task and task.get('list_name') is not None:
                         cursor.execute('''
                             INSERT OR REPLACE INTO task_lists (task_id, list_name)
                             VALUES (?, ?)

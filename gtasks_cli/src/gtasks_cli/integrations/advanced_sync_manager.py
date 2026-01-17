@@ -174,7 +174,7 @@ class AdvancedSyncManager:
             task_signature = create_task_signature(
                 title=task.title or "",
                 description=description,
-                due_date=task.due,
+                created_date=task.created_at,
                 status=task.status
             )
             
@@ -238,7 +238,7 @@ class AdvancedSyncManager:
                 signature = create_task_signature(
                     title=task.title or "",
                     description=description,
-                    due_date=task.due,
+                    created_date=task.created_at,
                     status=task.status
                 )
                 google_signatures.add(signature)
@@ -255,7 +255,7 @@ class AdvancedSyncManager:
                 signature = create_task_signature(
                     title=task.title or "",
                     description=description,
-                    due_date=task.due,
+                    created_date=task.created_at,
                     status=task.status
                 )
                 local_signatures.add(signature)
@@ -486,7 +486,7 @@ class AdvancedSyncManager:
                 local_signature = create_task_signature(
                     title=local_task.title or "",
                     description=description,
-                    due_date=local_task.due,
+                    created_date=local_task.created_at,
                     status=local_task.status
                 )
                 
@@ -526,7 +526,7 @@ class AdvancedSyncManager:
                 google_signature = create_task_signature(
                     title=google_task.title or "",
                     description=description,
-                    due_date=google_task.due,
+                    created_date=google_task.created_at,
                     status=google_task.status
                 )
                 
@@ -634,7 +634,7 @@ class AdvancedSyncManager:
                 local_signature = create_task_signature(
                     title=local_task.title or "",
                     description=description,
-                    due_date=local_task.due,
+                    created_date=local_task.created_at,
                     status=local_task.status
                 )
                 
@@ -678,7 +678,7 @@ class AdvancedSyncManager:
                 google_signature = create_task_signature(
                     title=google_task.title or "",
                     description=description,
-                    due_date=google_task.due,
+                    created_date=google_task.created_at,
                     status=google_task.status
                 )
                 
@@ -718,7 +718,7 @@ class AdvancedSyncManager:
             signature = create_task_signature(
                 title=task.title or "",
                 description=description,
-                due_date=task.due,
+                created_date=task.created_at,
                 status=task.status
             )
             if signature not in signature_map:
@@ -919,7 +919,7 @@ class AdvancedSyncManager:
                         signature = create_task_signature(
                             title=task.title or "",
                             description=description,
-                            due_date=task.due,
+                            created_date=task.created_at,
                             status=task.status
                         )
                         self._google_signatures.add(signature)
