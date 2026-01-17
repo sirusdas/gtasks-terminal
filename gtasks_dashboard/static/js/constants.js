@@ -103,6 +103,7 @@ export const apiEndpoints = {
     hierarchy: '/api/hierarchy',
     hierarchyFiltered: '/api/hierarchy/filtered',
     accountsSwitch: (accountId) => `/api/accounts/${accountId}/switch`,
+    refresh: '/api/refresh',
     sync: {
         advanced: '/api/sync/advanced',
         progress: '/api/sync/progress',

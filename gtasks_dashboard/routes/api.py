@@ -94,8 +94,9 @@ def _sync_task_to_google_background(task_id: str, account_id: str):
             traceback.print_exc()
 
 
-def init_dashboard_state():
-    """Initialize dashboard state"""
+def refresh_dashboard_cache():
+    """Refresh the in-memory dashboard cache from database"""
+    print('[Cache] Refreshing dashboard cache...')
     _dashboard_state['accounts'] = data_manager.detect_accounts()
     
     # Set first account as active
@@ -106,9 +107,32 @@ def init_dashboard_state():
     for account in _dashboard_state['accounts']:
         tasks = data_manager.load_tasks_for_account(account.id)
         _dashboard_state['tasks'][account.id] = [t.to_dict() for t in tasks]
-        account.task_count = len(tasks)
-        account.completed_count = len([t for t in tasks if t.status == 'completed'])
-        account.completion_rate = (account.completed_count / account.task_count * 100) if account.task_count > 0 else 0.0
+    
+    print(f'[Cache] ✅ Cache refreshed with {len(_dashboard_state.get("tasks", {}))} accounts')
+    return True
+
+
+def init_dashboard_state():
+    """Initialize dashboard state"""
+    refresh_dashboard_cache()
+
+
+@api.route('/api/refresh', methods=['POST'])
+def api_refresh_cache():
+    """Refresh the dashboard cache (called when refresh button is clicked)"""
+    try:
+        refresh_dashboard_cache()
+        return jsonify({
+            'success': True,
+            'message': 'Dashboard cache refreshed successfully',
+            'accounts_count': len(_dashboard_state['accounts']),
+            'total_tasks': sum(len(tasks) for tasks in _dashboard_state['tasks'].values())
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error refreshing cache: {str(e)}'
+        }), 500
 
 
 def get_current_tasks():
@@ -738,6 +762,10 @@ def api_sync_complete():
         
         result = SyncService.wait_for_sync_completion(sync_id=sync_id, timeout=timeout)
         
+        # Refresh dashboard cache after sync completes
+        if result.get('status') == 'completed':
+            refresh_dashboard_cache()
+        
         return jsonify({
             'success': True,
             'data': result
@@ -1120,6 +1148,9 @@ def api_remote_sync():
         # Perform the actual sync
         result = RemoteSyncService.sync_all(push=pull, pull=pull)
         
+        # Refresh dashboard cache after sync completes
+        refresh_dashboard_cache()
+        
         # Update sync status
         SyncService._sync_results[sync_id] = {
             'status': 'completed',
@@ -1184,6 +1215,9 @@ def api_remote_push():
         else:
             results = RemoteSyncService.push_all()
         
+        # Refresh dashboard cache after push completes
+        refresh_dashboard_cache()
+        
         return jsonify({
             'success': True,
             'data': {'results': results},
@@ -1236,6 +1270,9 @@ def api_remote_pull():
             results = [result]
         else:
             results = RemoteSyncService.pull_all()
+        
+        # Refresh dashboard cache after pull completes
+        refresh_dashboard_cache()
         
         return jsonify({
             'success': True,

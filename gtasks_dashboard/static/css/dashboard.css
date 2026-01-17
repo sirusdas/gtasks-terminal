@@ -957,6 +957,92 @@ body {
     animation: spin 1s linear infinite;
 }
 
+/* ========== Refresh Dropdown ========== */
+.refresh-dropdown {
+    position: relative;
+    display: inline-flex;
+    align-items: stretch;
+}
+
+.header-refresh-btn {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right: none;
+}
+
+.refresh-dropdown-toggle {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0 8px 8px 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-speed);
+}
+
+.refresh-dropdown-toggle:hover {
+    background: var(--primary-dark);
+}
+
+.refresh-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    min-width: 180px;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.2s ease;
+    margin-top: 0.25rem;
+}
+
+.refresh-dropdown-menu.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.refresh-dropdown-menu a {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: background var(--transition-speed);
+    border-radius: 8px;
+    margin: 0.25rem;
+}
+
+.refresh-dropdown-menu a:hover {
+    background: var(--bg-primary);
+}
+
+.refresh-dropdown-menu a:first-child {
+    border-radius: 8px 8px 0 0;
+}
+
+.refresh-dropdown-menu a:last-child {
+    border-radius: 0 0 8px 8px;
+}
+
+.refresh-dropdown-menu a i {
+    width: 20px;
+    text-align: center;
+    color: var(--primary-color);
+}
+
+.refresh-dropdown-menu a:last-child i {
+    color: var(--success-color);
+}
+
 /* ========== D3 Visualization Styles ========== */
 .hierarchy-svg circle {
     cursor: pointer;

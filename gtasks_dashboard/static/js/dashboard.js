@@ -296,8 +296,16 @@ async function pollSyncProgress(syncId) {
 
             console.log('[Sync] Sync completed successfully');
 
-            // Wait a moment then refresh dashboard and hide UI
+            // Wait a moment then refresh cache and dashboard
             setTimeout(async () => {
+                // First refresh the cache on the server
+                try {
+                    await fetch(apiEndpoints.refresh, { method: 'POST' });
+                } catch (e) {
+                    console.warn('[Sync] Cache refresh failed, continuing with loadDashboard:', e);
+                }
+                
+                // Then reload the dashboard data
                 await loadDashboard();
                 stopSyncProgressUI();
                 showNotification('Data refreshed successfully! ✅', 'success');
@@ -435,6 +443,72 @@ export function stopSyncProgressUI() {
  */
 export async function refreshWithAdvancedSync() {
     await startAdvancedSync();
+}
+
+/**
+ * Simple cache refresh - reloads data from database without full sync
+ * This is called when the refresh button is clicked
+ */
+export async function simpleCacheRefresh() {
+    console.log('[Dashboard] Simple cache refresh...');
+    try {
+        const response = await fetch(apiEndpoints.refresh, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            console.log('[Dashboard] Cache refreshed successfully:', data);
+            // Reload dashboard data to reflect changes
+            await loadDashboard();
+            showNotification('Dashboard refreshed! ✅', 'success');
+        } else {
+            console.error('[Dashboard] Cache refresh failed:', data.message);
+            showNotification(data.message || 'Refresh failed', 'error');
+        }
+    } catch (error) {
+        console.error('[Dashboard] Error during cache refresh:', error);
+        showNotification('Error refreshing dashboard', 'error');
+    }
+}
+
+// ========== Refresh Dropdown Functions ==========
+
+/**
+ * Toggle the refresh dropdown menu
+ */
+export function toggleRefreshDropdown() {
+    const dropdown = document.getElementById('refresh-dropdown-menu');
+    if (dropdown) {
+        dropdown.classList.toggle('active');
+    }
+}
+
+/**
+ * Sync data and refresh cache
+ * This is called when "Sync Data" option is selected
+ */
+export async function syncAndRefresh() {
+    console.log('[Dashboard] Sync and refresh...');
+    // Start advanced sync - this will automatically refresh cache when complete
+    await startAdvancedSync();
+}
+
+/**
+ * Close refresh dropdown when clicking outside
+ */
+export function setupRefreshDropdown() {
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('refresh-dropdown-menu');
+        const toggle = document.querySelector('.refresh-dropdown-toggle');
+        if (dropdown && toggle && !dropdown.contains(e.target) && !toggle.contains(e.target)) {
+            dropdown.classList.remove('active');
+        }
+    });
 }
 
 /**
@@ -1126,32 +1200,35 @@ export function applyUrlParams() {
  */
 export async function initDashboard() {
     console.log('[Dashboard] initDashboard called');
-    
+
     // Initialize state from storage
     stateManager.initFromStorage();
     stateManager.initDarkMode();
-    
+
     // Load settings
     initSettings();
-    
+
+    // Setup refresh dropdown click-outside listener
+    setupRefreshDropdown();
+
     // Apply URL query parameters before loading dashboard data
     applyUrlParams();
-    
+
     // Detect section from URL path (takes precedence over URL params)
     const pathSection = getCurrentSectionFromPath();
     console.log('[Dashboard] Detected section from path:', pathSection);
-    
+
     // Show the appropriate section based on URL path
     if (pathSection) {
         showSection(pathSection);
     }
-    
+
     // Load dashboard data
     await loadDashboard();
-    
+
     // Setup keyboard shortcuts
     setupKeyboardShortcuts();
-    
+
     console.log('Dashboard initialized');
 }
 
@@ -1438,7 +1515,7 @@ window.switchAccountForTasks = switchAccountForTasks;
 window.loadTasks = loadTasks;
 window.filterTasks = filterTasks;
 window.clearTasksFilters = clearTasksFilters;
-window.refreshData = refreshWithAdvancedSync;  // Changed to use advanced sync
+window.refreshData = simpleCacheRefresh;  // Use simple cache refresh instead of full sync
 window.refreshHierarchy = refreshHierarchy;
 window.loadHierarchy = loadHierarchy;
 window.initSettings = initSettings;
@@ -1466,6 +1543,10 @@ window.startAdvancedSync = startAdvancedSync;
 window.updateSyncProgressUI = updateSyncProgressUI;
 window.stopSyncProgressUI = stopSyncProgressUI;
 window.refreshWithAdvancedSync = refreshWithAdvancedSync;
+window.simpleCacheRefresh = simpleCacheRefresh;
+window.toggleRefreshDropdown = toggleRefreshDropdown;
+window.syncAndRefresh = syncAndRefresh;
+window.setupRefreshDropdown = setupRefreshDropdown;
 window.getListsWithCounts = getListsWithCounts;
 window.getTagsWithCounts = getTagsWithCounts;
 window.updateFilteredMultiselect = updateFilteredMultiselect;
@@ -1481,7 +1562,8 @@ export default {
     switchAccount,
     loadTasks,
     filterTasks,
-    loadHierarchy
+    loadHierarchy,
+    simpleCacheRefresh
 };
 
 // Initialize the dashboard when DOM is ready

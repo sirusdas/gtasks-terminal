@@ -55,10 +55,23 @@
                             <i class="fas fa-moon moon-icon"></i>
                             <span class="mode-text"><span class="sun-icon">Light</span><span class="moon-icon">Dark</span></span>
                         </div>
-                        <button class="header-refresh-btn" onclick="refreshData()" title="Refresh Data">
-                            <i class="fas fa-sync-alt"></i>
-                            <span>Refresh</span>
-                        </button>
+                        <div class="refresh-dropdown">
+                            <button class="header-refresh-btn" onclick="refreshData()" title="Refresh Data">
+                                <i class="fas fa-sync-alt"></i>
+                                <span>Refresh</span>
+                            </button>
+                            <button class="refresh-dropdown-toggle" onclick="toggleRefreshDropdown()" title="More options">
+                                <i class="fas fa-caret-down"></i>
+                            </button>
+                            <div class="refresh-dropdown-menu" id="refresh-dropdown-menu">
+                                <a href="#" onclick="refreshData(); toggleRefreshDropdown(); return false;">
+                                    <i class="fas fa-database"></i> Refresh Cache
+                                </a>
+                                <a href="#" onclick="syncAndRefresh(); toggleRefreshDropdown(); return false;">
+                                    <i class="fas fa-sync"></i> Sync Data
+                                </a>
+                            </div>
+                        </div>
                         <button class="settings-btn" onclick="openSettings()" title="Settings">
                             <i class="fas fa-cog"></i>
                         </button>
