@@ -12,6 +12,7 @@ import {
     debounce 
 } from './utils.js';
 import { createTaskCard, renderTasksGrid } from './task-card.js';
+import { createMultiselect, getUniqueLists, getUniqueTags } from './multiselect.js';
 import { 
     renderHierarchy,
     initHierarchy,
@@ -245,6 +246,9 @@ export function loadTasks() {
         return;
     }
     
+    // Initialize multiselect filters with available options
+    initMultiselectFilters(tasks);
+    
     // Sort by due date descending by default
     const sortedTasks = sortTasksByField(filteredTasks, 'due', 'desc');
     
@@ -255,21 +259,108 @@ export function loadTasks() {
 }
 
 /**
+ * Initialize multiselect filters
+ */
+let listMultiselect = null;
+let tagsMultiselect = null;
+
+export function initMultiselectFilters(tasks) {
+    // Get unique lists and tags
+    const lists = getUniqueLists(tasks);
+    const tags = getUniqueTags(tasks);
+    
+    console.log('[Dashboard] initMultiselectFilters - Tasks count:', tasks.length);
+    console.log('[Dashboard] Unique lists found:', lists);
+    console.log('[Dashboard] Unique tags found:', tags);
+    
+    // Initialize List filter (was "Filter by Project")
+    const listContainer = document.getElementById('task-list-filter-container');
+    if (listContainer) {
+        // Clear existing content
+        listContainer.innerHTML = '';
+        
+        listMultiselect = createMultiselect({
+            id: 'task-list-filter',
+            placeholder: 'Filter by List...',
+            options: lists,
+            initialValues: [],
+            onChange: (values) => {
+                console.log('[Dashboard] List filter changed:', values);
+                filterTasks();
+            },
+            searchMinChars: 0
+        });
+        listContainer.appendChild(listMultiselect);
+    }
+    
+    // Initialize Tags filter
+    const tagsContainer = document.getElementById('task-tags-filter-container');
+    if (tagsContainer) {
+        // Clear existing content
+        tagsContainer.innerHTML = '';
+        
+        tagsMultiselect = createMultiselect({
+            id: 'task-tags-filter',
+            placeholder: 'Filter by Tags...',
+            options: tags,
+            initialValues: [],
+            onChange: (values) => {
+                console.log('[Dashboard] Tags filter changed:', values);
+                filterTasks();
+            },
+            searchMinChars: 0
+        });
+        tagsContainer.appendChild(tagsMultiselect);
+    }
+}
+
+/**
  * Filter tasks with advanced filters
  */
 export function filterTasks() {
+    // Get values from multiselect filters
+    const listFilterEl = document.getElementById('task-list-filter');
+    const tagsFilterEl = document.getElementById('task-tags-filter');
+    
+    let listValues = [];
+    let tagValues = [];
+    
+    if (listFilterEl) {
+        console.log('[Dashboard] List filter element value:', listFilterEl.value);
+        try {
+            listValues = listFilterEl.value ? JSON.parse(listFilterEl.value) : [];
+            console.log('[Dashboard] Parsed list values:', listValues);
+        } catch (e) {
+            console.error('[Dashboard] Error parsing list filter:', e);
+            listValues = [];
+        }
+    }
+    
+    if (tagsFilterEl) {
+        console.log('[Dashboard] Tags filter element value:', tagsFilterEl.value);
+        try {
+            tagValues = tagsFilterEl.value ? JSON.parse(tagsFilterEl.value) : [];
+            console.log('[Dashboard] Parsed tag values:', tagValues);
+        } catch (e) {
+            console.error('[Dashboard] Error parsing tags filter:', e);
+            tagValues = [];
+        }
+    }
+    
     const filters = {
         search: document.getElementById('task-search-filter')?.value.toLowerCase() || '',
         status: document.getElementById('task-status-filter')?.value || '',
         priority: document.getElementById('task-priority-filter')?.value || '',
-        project: document.getElementById('task-project-filter')?.value.toLowerCase() || '',
-        tags: document.getElementById('task-tags-filter')?.value.toLowerCase() || '',
+        list: listValues,
+        tags: tagValues,
         dateField: document.getElementById('task-date-field')?.value || 'due',
         dateStart: document.getElementById('task-date-start')?.value || '',
         dateEnd: document.getElementById('task-date-end')?.value || '',
         sortField: document.getElementById('task-sort-field')?.value || 'due',
         sortOrder: document.getElementById('task-sort-order')?.value || 'asc'
     };
+    
+    console.log('[Dashboard] Applying filters:', filters);
     
     let filteredTasks = dashboardData.tasks || [];
     const container = document.getElementById('tasks-grid');
@@ -282,6 +373,8 @@ export function filterTasks() {
     
     // Apply filters
     filteredTasks = filterTasksByCriteria(filteredTasks, filters);
+    
+    console.log('[Dashboard] Filtered tasks count:', filteredTasks.length);
     
     if (filteredTasks.length === 0) {
         container.innerHTML = '<p style="text-align: center; color: #6b7280;">No tasks match your filters.</p>';
@@ -310,13 +403,15 @@ export function clearTasksFilters() {
     const priorityFilter = document.getElementById('task-priority-filter');
     if (priorityFilter) priorityFilter.value = '';
     
-    // Reset project filter
-    const projectFilter = document.getElementById('task-project-filter');
-    if (projectFilter) projectFilter.value = '';
+    // Reset list filter (was project filter)
+    if (listMultiselect) {
+        listMultiselect.clear();
+    }
     
     // Reset tags filter
-    const tagsFilter = document.getElementById('task-tags-filter');
-    if (tagsFilter) tagsFilter.value = '';
+    if (tagsMultiselect) {
+        tagsMultiselect.clear();
+    }
     
     // Reset date field filter
     const dateFieldFilter = document.getElementById('task-date-field');

@@ -1,0 +1,230 @@
+/**
+ * Multiselect Component Styles
+ * Searchable multiselect dropdown with tags
+ */
+
+/* Filter multiselect wrapper */
+.filter-multiselect {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 180px;
+}
+
+.filter-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #374151;
+    padding-left: 4px;
+}
+
+.dark-mode .filter-label {
+    color: #9ca3af;
+}
+
+/* Container */
+.multiselect-container {
+    position: relative;
+    width: 100%;
+    min-width: 200px;
+}
+
+/* Selection area (selected tags) */
+.multiselect-selection {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px;
+    min-height: 36px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: white;
+    margin-bottom: 4px;
+}
+
+.dark-mode .multiselect-selection {
+    background: #1f2937;
+    border-color: #4b5563;
+}
+
+/* Selected tag */
+.multiselect-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: #3b82f6;
+    color: white;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.multiselect-tag .multiselect-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: none;
+    background: transparent;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    border-radius: 50%;
+    transition: background 0.2s ease;
+}
+
+.multiselect-tag .multiselect-remove:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Input wrapper */
+.multiselect-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+/* Search input */
+.multiselect-search {
+    width: 100%;
+    padding: 8px 36px 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.multiselect-search:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.dark-mode .multiselect-search {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #f3f4f6;
+}
+
+.dark-mode .multiselect-search::placeholder {
+    color: #9ca3af;
+}
+
+/* Toggle button */
+.multiselect-toggle {
+    position: absolute;
+    right: 4px;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.multiselect-toggle:hover {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.dark-mode .multiselect-toggle:hover {
+    background: #374151;
+    color: #e5e7eb;
+}
+
+.multiselect-toggle i {
+    font-size: 12px;
+}
+
+/* Dropdown */
+.multiselect-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 250px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    margin-top: 4px;
+}
+
+.dark-mode .multiselect-dropdown {
+    background: #1f2937;
+    border-color: #4b5563;
+}
+
+/* Dropdown option */
+.multiselect-option {
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #374151;
+    transition: background 0.15s ease;
+}
+
+.multiselect-option:hover {
+    background: #f3f4f6;
+}
+
+.dark-mode .multiselect-option:hover {
+    background: #374151;
+}
+
+.dark-mode .multiselect-option {
+    color: #f3f4f6;
+}
+
+/* Empty state */
+.multiselect-empty {
+    padding: 12px;
+    text-align: center;
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.dark-mode .multiselect-empty {
+    color: #9ca3af;
+}
+
+/* Filter bar specific styles */
+.task-filters-bar .multiselect-container {
+    min-width: 180px;
+}
+
+.task-filters-bar .multiselect-selection {
+    min-height: 32px;
+}
+
+.task-filters-bar .multiselect-search {
+    padding: 6px 32px 6px 10px;
+    font-size: 13px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .multiselect-container {
+        width: 100%;
+    }
+    
+    .task-filters-bar {
+        flex-direction: column;
+    }
+    
+    .task-filters-bar .multiselect-container {
+        width: 100%;
+    }
+}

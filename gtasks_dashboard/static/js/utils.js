@@ -292,24 +292,38 @@ export function filterTasksByCriteria(tasks, filters) {
         );
     }
     
-    // Apply project filter
-    if (filters.project) {
-        filteredTasks = filteredTasks.filter(task =>
-            task.project && task.project.toLowerCase().includes(filters.project)
-        );
+    // Apply list filter (was "Filter by Project" -> "Filter by List")
+    // FIX: Use correct property name 'list_title' as defined in data_manager.py
+    if (filters.list && filters.list.length > 0) {
+        console.log('[Utils] Applying list filter:', filters.list);
+        filteredTasks = filteredTasks.filter(task => {
+            // The correct property is 'list_title' as defined in data_manager.py
+            const taskList = task.list_title || '';
+            console.log('[Utils] Task:', task.title, '| List:', taskList);
+            const matches = filters.list.some(filterList => 
+                taskList.toLowerCase().includes(filterList.toLowerCase())
+            );
+            console.log('[Utils] Task matches list filter:', matches);
+            return matches;
+        });
+        console.log('[Utils] Tasks after list filter:', filteredTasks.length);
     }
     
-    // Apply tags filter
-    if (filters.tags) {
-        const tagsArray = filters.tags.split(',').map(tag => tag.trim()).filter(tag => tag);
-        if (tagsArray.length > 0) {
-            filteredTasks = filteredTasks.filter(task => {
-                const taskTags = getAllTags(task);
-                return tagsArray.some(filterTag =>
-                    taskTags.some(taskTag => taskTag.toLowerCase().includes(filterTag))
-                );
-            });
-        }
+    // Apply tags filter (now array-based from multiselect)
+    // FIX: Changed to exact match instead of partial match
+    if (filters.tags && filters.tags.length > 0) {
+        console.log('[Utils] Applying tags filter (exact match):', filters.tags);
+        filteredTasks = filteredTasks.filter(task => {
+            const taskTags = getAllTags(task);
+            console.log('[Utils] Task:', task.title, '| Tags:', taskTags);
+            // Exact match: filterTag must exactly equal taskTag (case-insensitive)
+            const matches = filters.tags.every(filterTag =>
+                taskTags.some(taskTag => taskTag.toLowerCase() === filterTag.toLowerCase())
+            );
+            console.log('[Utils] Task matches filter:', matches);
+            return matches;
+        });
+        console.log('[Utils] Tasks after tags filter:', filteredTasks.length);
     }
     
     // Apply date filter

@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="/static/css/components.css">
     <link rel="stylesheet" href="/static/css/modal.css">
     <link rel="stylesheet" href="/static/css/hierarchy-filter.css">
-    <link rel="stylesheet" href="/static/css/hierarchy-ledger.css">
+    <link rel="stylesheet" href="/static/css/multiselect.css">
 </head>
 <body>
     <div class="dashboard-container">
@@ -316,8 +316,18 @@
                         <option value="medium">Medium</option>
                         <option value="low">Low</option>
                     </select>
-                    <input type="text" id="task-project-filter" class="filter-input" placeholder="Filter by project..." oninput="filterTasks()">
-                    <input type="text" id="task-tags-filter" class="filter-input" placeholder="Filter by tags (comma separated)..." oninput="filterTasks()">
+                    <div class="filter-multiselect">
+                        <label class="filter-label">Filter by List</label>
+                        <div class="multiselect-container" id="task-list-filter-container">
+                            <!-- Multiselect will be initialized here -->
+                        </div>
+                    </div>
+                    <div class="filter-multiselect">
+                        <label class="filter-label">Filter by Tags</label>
+                        <div class="multiselect-container" id="task-tags-filter-container">
+                            <!-- Multiselect will be initialized here -->
+                        </div>
+                    </div>
                     
                     <!-- Date Filter Section -->
                     <div class="filter-section date-filter-section">
