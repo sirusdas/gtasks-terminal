@@ -402,6 +402,132 @@ export function getFilteredListsByTags(tasks, selectedTags) {
     return getListsWithCounts(filteredTasks);
 }
 
+/**
+ * Get filtered tasks based on search text and date range
+ * @param {Array} tasks - All tasks
+ * @param {string} searchText - Search text to filter by (title/description)
+ * @param {string} dateField - Field to filter by ('due', 'created', 'completed')
+ * @param {string} dateStart - Start date (ISO format)
+ * @param {string} dateEnd - End date (ISO format)
+ * @returns {Array} - Filtered tasks
+ */
+export function getFilteredTasksBySearchAndDate(tasks, searchText, dateField, dateStart, dateEnd) {
+    if (!tasks || !Array.isArray(tasks)) return [];
+    
+    let filteredTasks = tasks;
+    
+    // Filter by search text (case-insensitive, match title/description)
+    if (searchText && searchText.trim()) {
+        const searchLower = searchText.toLowerCase().trim();
+        filteredTasks = filteredTasks.filter(task => {
+            const titleMatch = task.title && task.title.toLowerCase().includes(searchLower);
+            const descriptionMatch = task.description && task.description.toLowerCase().includes(searchLower);
+            return titleMatch || descriptionMatch;
+        });
+    }
+    
+    // Filter by date range
+    if (dateStart || dateEnd) {
+        filteredTasks = filteredTasks.filter(task => {
+            const dateValue = task[dateField];
+            if (!dateValue) return false; // Skip tasks without the specified date field
+            
+            const taskDate = new Date(dateValue);
+            
+            // Check start date
+            if (dateStart) {
+                const startDate = new Date(dateStart);
+                if (taskDate < startDate) return false;
+            }
+            
+            // Check end date
+            if (dateEnd) {
+                const endDate = new Date(dateEnd);
+                // Set end date to end of day for inclusive comparison
+                endDate.setHours(23, 59, 59, 999);
+                if (taskDate > endDate) return false;
+            }
+            
+            return true;
+        });
+    }
+    
+    return filteredTasks;
+}
+
+/**
+ * Get filtered lists based on selected tags and search/date criteria
+ * Returns lists that have tasks matching all criteria, with pending task counts
+ * @param {Array} tasks - Array of task objects
+ * @param {Array} selectedTags - Array of selected tag names
+ * @param {string} searchText - Search text to filter by
+ * @param {string} dateField - Field to filter by ('due', 'created', 'completed')
+ * @param {string} dateStart - Start date (ISO format)
+ * @param {string} dateEnd - End date (ISO format)
+ * @returns {Array} - Array of list objects with label and count, sorted by count descending
+ */
+export function getFilteredListsByTagsAndCriteria(tasks, selectedTags, searchText, dateField, dateStart, dateEnd) {
+    if (!tasks || !Array.isArray(tasks)) return [];
+    
+    // First filter by search and date criteria
+    let filteredTasks = getFilteredTasksBySearchAndDate(tasks, searchText, dateField, dateStart, dateEnd);
+    
+    // If no tags selected, return all lists with counts from filtered tasks
+    if (!selectedTags || selectedTags.length === 0) {
+        return getListsWithCounts(filteredTasks);
+    }
+    
+    // Further filter tasks to only those with selected tags
+    filteredTasks = filteredTasks.filter(task => {
+        // Collect all tags from task
+        const taskTags = new Set();
+        if (task.hybrid_tags) {
+            task.hybrid_tags.bracket?.forEach(t => taskTags.add(t));
+            task.hybrid_tags.hash?.forEach(t => taskTags.add(t));
+            task.hybrid_tags.user?.forEach(t => taskTags.add(t));
+        }
+        task.tags?.forEach(t => taskTags.add(t));
+        
+        // Check if task has any of the selected tags
+        return [...taskTags].some(tag => selectedTags.includes(tag));
+    });
+    
+    // Get lists with counts from filtered tasks
+    return getListsWithCounts(filteredTasks);
+}
+
+/**
+ * Get filtered tags based on selected lists and search/date criteria
+ * Returns tags that exist in tasks matching all criteria, with pending task counts
+ * @param {Array} tasks - Array of task objects
+ * @param {Array} selectedLists - Array of selected list names
+ * @param {string} searchText - Search text to filter by
+ * @param {string} dateField - Field to filter by ('due', 'created', 'completed')
+ * @param {string} dateStart - Start date (ISO format)
+ * @param {string} dateEnd - End date (ISO format)
+ * @returns {Array} - Array of tag objects with label and count, sorted by count descending
+ */
+export function getFilteredTagsByListsAndCriteria(tasks, selectedLists, searchText, dateField, dateStart, dateEnd) {
+    if (!tasks || !Array.isArray(tasks)) return [];
+    
+    // First filter by search and date criteria
+    let filteredTasks = getFilteredTasksBySearchAndDate(tasks, searchText, dateField, dateStart, dateEnd);
+    
+    // If no lists selected, return all tags with counts from filtered tasks
+    if (!selectedLists || selectedLists.length === 0) {
+        return getTagsWithCounts(filteredTasks);
+    }
+    
+    // Further filter tasks to only those in selected lists
+    filteredTasks = filteredTasks.filter(task => {
+        const listName = task.list_title || '';
+        return selectedLists.includes(listName);
+    });
+    
+    // Get tags with counts from filtered tasks
+    return getTagsWithCounts(filteredTasks);
+}
+
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -412,6 +538,9 @@ if (typeof module !== 'undefined' && module.exports) {
         getListsWithCounts,
         getTagsWithCounts,
         getFilteredTagsByLists,
-        getFilteredListsByTags
+        getFilteredListsByTags,
+        getFilteredTasksBySearchAndDate,
+        getFilteredListsByTagsAndCriteria,
+        getFilteredTagsByListsAndCriteria
     };
 }

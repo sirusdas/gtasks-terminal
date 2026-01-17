@@ -12,7 +12,7 @@ import {
     debounce 
 } from './utils.js';
 import { createTaskCard, renderTasksGrid } from './task-card.js';
-import { createMultiselect, getUniqueLists, getUniqueTags, getListsWithCounts, getTagsWithCounts, getFilteredTagsByLists, getFilteredListsByTags } from './multiselect.js';
+import { createMultiselect, getUniqueLists, getUniqueTags, getListsWithCounts, getTagsWithCounts, getFilteredTagsByLists, getFilteredListsByTags, getFilteredTasksBySearchAndDate, getFilteredListsByTagsAndCriteria, getFilteredTagsByListsAndCriteria } from './multiselect.js';
 import { 
     renderHierarchy,
     initHierarchy,
@@ -611,23 +611,100 @@ export function initMultiselectFilters(tasks) {
         });
         tagsContainer.appendChild(tagsMultiselect);
     }
+    
+    // Add event listeners for search and date filters to update multiselect options
+    setupFilterEventListeners();
+}
+
+/**
+ * Setup event listeners for search and date filters
+ * These listeners trigger updateFilteredMultiselect() to provide bidirectional filtering
+ */
+function setupFilterEventListeners() {
+    // Search filter input listener
+    const searchFilter = document.getElementById('task-search-filter');
+    if (searchFilter) {
+        searchFilter.addEventListener('input', debounce((e) => {
+            console.log('[Dashboard] Search filter changed:', e.target.value);
+            updateFilteredMultiselect(
+                e.target.value,
+                document.getElementById('task-date-start')?.value || '',
+                document.getElementById('task-date-end')?.value || '',
+                document.getElementById('task-date-field')?.value || 'due'
+            );
+            filterTasks();
+        }, 300)); // Debounce to avoid too frequent updates
+    }
+    
+    // Date field listener
+    const dateFieldFilter = document.getElementById('task-date-field');
+    if (dateFieldFilter) {
+        dateFieldFilter.addEventListener('change', (e) => {
+            console.log('[Dashboard] Date field filter changed:', e.target.value);
+            updateFilteredMultiselect(
+                document.getElementById('task-search-filter')?.value || '',
+                document.getElementById('task-date-start')?.value || '',
+                document.getElementById('task-date-end')?.value || '',
+                e.target.value
+            );
+            filterTasks();
+        });
+    }
+    
+    // Date start listener
+    const dateStartFilter = document.getElementById('task-date-start');
+    if (dateStartFilter) {
+        dateStartFilter.addEventListener('change', (e) => {
+            console.log('[Dashboard] Date start filter changed:', e.target.value);
+            updateFilteredMultiselect(
+                document.getElementById('task-search-filter')?.value || '',
+                e.target.value,
+                document.getElementById('task-date-end')?.value || '',
+                document.getElementById('task-date-field')?.value || 'due'
+            );
+            filterTasks();
+        });
+    }
+    
+    // Date end listener
+    const dateEndFilter = document.getElementById('task-date-end');
+    if (dateEndFilter) {
+        dateEndFilter.addEventListener('change', (e) => {
+            console.log('[Dashboard] Date end filter changed:', e.target.value);
+            updateFilteredMultiselect(
+                document.getElementById('task-search-filter')?.value || '',
+                document.getElementById('task-date-start')?.value || '',
+                e.target.value,
+                document.getElementById('task-date-field')?.value || 'due'
+            );
+            filterTasks();
+        });
+    }
 }
 
 /**
  * Update filtered multiselect options based on current selections
  * Implements bidirectional filtering between List and Tags filters
+ * Also considers search text and date range filters
+ * @param {string} searchText - Search text from task-search-filter
+ * @param {string} dateStart - Start date from task-date-start
+ * @param {string} dateEnd - End date from task-date-end
+ * @param {string} dateField - Date field from task-date-field
  */
-export function updateFilteredMultiselect() {
+export function updateFilteredMultiselect(searchText = '', dateStart = '', dateEnd = '', dateField = 'due') {
     // Get current selections from both multiselects
     const selectedLists = listMultiselect ? listMultiselect.getSelectedValues() : [];
     const selectedTags = tagsMultiselect ? tagsMultiselect.getSelectedValues() : [];
     
     console.log('[Dashboard] updateFilteredMultiselect - Selected lists:', selectedLists);
     console.log('[Dashboard] updateFilteredMultiselect - Selected tags:', selectedTags);
+    console.log('[Dashboard] updateFilteredMultiselect - Search text:', searchText);
+    console.log('[Dashboard] updateFilteredMultiselect - Date range:', dateStart, 'to', dateEnd);
+    console.log('[Dashboard] updateFilteredMultiselect - Date field:', dateField);
     
-    // Get filtered options based on selections
-    const filteredTags = getFilteredTagsByLists(allTasks, selectedLists);
-    const filteredLists = getFilteredListsByTags(allTasks, selectedTags);
+    // Get filtered options based on selections and search/date criteria
+    const filteredTags = getFilteredTagsByListsAndCriteria(allTasks, selectedLists, searchText, dateField, dateStart, dateEnd);
+    const filteredLists = getFilteredListsByTagsAndCriteria(allTasks, selectedTags, searchText, dateField, dateStart, dateEnd);
     
     console.log('[Dashboard] updateFilteredMultiselect - Filtered tags:', filteredTags);
     console.log('[Dashboard] updateFilteredMultiselect - Filtered lists:', filteredLists);
@@ -799,6 +876,9 @@ export function clearTasksFilters() {
     if (tagsMultiselect) {
         tagsMultiselect.setOptions(allTags);
     }
+    
+    // Update filtered multiselects with no search/date criteria to restore bidirectional filtering
+    updateFilteredMultiselect('', '', '', 'due');
     
     // Re-apply filters
     filterTasks();
