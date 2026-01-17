@@ -8,7 +8,7 @@ import os
 import sqlite3
 import tempfile
 import traceback
-from typing import List, Dict, Optional, Set, Tuple
+from typing import List, Dict, Optional, Set, Tuple, Callable
 from datetime import datetime
 import hashlib
 import json
@@ -26,7 +26,7 @@ logger = setup_logger(__name__)
 class AdvancedSyncManager:
     """Advanced synchronization manager for Google Tasks with SQLite storage backend."""
     
-    def __init__(self, storage, google_client, pull_range_days=None):
+    def __init__(self, storage, google_client, pull_range_days=None, progress_callback=None):
         """
         Initialize the AdvancedSyncManager.
         
@@ -34,10 +34,14 @@ class AdvancedSyncManager:
             storage: An instance of a storage backend (e.g., LocalStorage, SQLiteStorage)
             google_client: An instance of GoogleTasksClient
             pull_range_days: Number of days to look back for incremental sync (None for full sync)
+            progress_callback: Optional callback function for progress updates
+                Callback signature: callback(percentage: int, message: str, status: str)
+                status can be: 'running', 'completed', 'error'
         """
         self.local_storage = storage
         self.google_client = google_client
         self.pull_range_days = pull_range_days
+        self.progress_callback = progress_callback
         self.sync_metadata_file = os.path.join(
             os.path.expanduser("~"), ".gtasks", "advanced_sync_metadata.json"
         )
@@ -45,6 +49,30 @@ class AdvancedSyncManager:
             os.path.expanduser("~"), ".gtasks", "deletion_log.json"
         )
         self.sync_metadata = self._load_sync_metadata()
+    
+    def set_progress_callback(self, callback: Callable[[int, str, str], None]):
+        """
+        Set the progress callback function.
+        
+        Args:
+            callback: Function with signature: callback(percentage: int, message: str, status: str)
+        """
+        self.progress_callback = callback
+    
+    def _report_progress(self, percentage: int, message: str, status: str = 'running'):
+        """
+        Report progress to the callback if set.
+        
+        Args:
+            percentage: Progress percentage (0-100)
+            message: Description of current operation
+            status: Status string ('running', 'completed', 'error')
+        """
+        if self.progress_callback:
+            try:
+                self.progress_callback(percentage, message, status)
+            except Exception as e:
+                logger.warning(f"Error in progress callback: {e}")
     
     def _load_sync_metadata(self) -> Dict:
         """
@@ -174,17 +202,30 @@ class AdvancedSyncManager:
         """
         logger.info("Starting simplified bidirectional synchronization process")
         
+        # Determine sync type for progress reporting
+        if push_only:
+            sync_type = 'push'
+        elif pull_only:
+            sync_type = 'pull'
+        else:
+            sync_type = 'both'
+        
+        self._report_progress(0, f"Initializing {sync_type} sync...", 'running')
+        
         try:
             # Connect to Google Tasks
             if not self.google_client.connect():
                 logger.error("Failed to connect to Google Tasks")
+                self._report_progress(0, "Failed to connect to Google Tasks", 'error')
                 return False
             
             # Step 1: Pull all remote records once and save to memory
             logger.info("Step 1: Loading all Google Tasks into memory")
+            self._report_progress(10, "Loading Google Tasks...", 'running')
             all_google_tasks = self._load_all_google_tasks_once()
             if all_google_tasks is None:
                 logger.error("Failed to load Google Tasks")
+                self._report_progress(0, "Failed to load Google Tasks", 'error')
                 return False
             
             logger.info(f"Loaded {len(all_google_tasks)} Google Tasks into memory")
@@ -224,6 +265,7 @@ class AdvancedSyncManager:
             
             # Step 2: Compare records based on latest changes using cached versions
             logger.info("Step 2: Comparing records based on latest changes")
+            self._report_progress(25, "Comparing local and remote tasks...", 'running')
             sync_plan = self._compare_and_plan_changes_with_cache(local_tasks, all_google_tasks)
             
             # Short-circuit if there's nothing to do
@@ -254,21 +296,25 @@ class AdvancedSyncManager:
             
             # Step 4: Execute all changes
             logger.info("Step 4: Executing all changes")
+            self._report_progress(50, "Executing sync operations...", 'running')
             success = self._execute_sync_plan(sync_plan, push_only, pull_only)
             
             if success:
                 logger.info("Simplified bidirectional synchronization completed successfully")
+                self._report_progress(100, "Sync completed successfully", 'completed')
                 # Update sync metadata
                 self.sync_metadata["last_sync"] = datetime.utcnow().isoformat()
                 self._save_sync_metadata()
                 return True
             else:
                 logger.error("Simplified bidirectional synchronization failed")
+                self._report_progress(0, "Sync failed during execution", 'error')
                 return False
                 
         except Exception as e:
             logger.error(f"Error during simplified synchronization: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
+            self._report_progress(0, f"Sync error: {str(e)}", 'error')
             return False
     
     def _create_task_version(self, task: Task) -> str:
@@ -1083,6 +1129,7 @@ class AdvancedSyncManager:
             bool: True if push was successful, False otherwise
         """
         logger.info("Starting push to Google Tasks process")
+        self._report_progress(0, "Starting push to Google Tasks...", 'running')
         
         # Use the simplified sync approach with push_only flag
         return self.sync(push_only=True, pull_only=False)
@@ -1096,6 +1143,7 @@ class AdvancedSyncManager:
             bool: True if pull was successful, False otherwise
         """
         logger.info("Starting pull from Google Tasks process")
+        self._report_progress(0, "Starting pull from Google Tasks...", 'running')
         
         # Use the simplified sync approach with pull_only flag
         return self.sync(push_only=False, pull_only=True)

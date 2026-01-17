@@ -665,6 +665,22 @@ body {
     margin-top: 1.5rem;
 }
 
+/* ========== Task Count Display ========== */
+.tasks-count-display {
+    background: var(--bg-secondary);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.tasks-count-display #tasks-count-text {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
 .task-card {
     background: var(--bg-secondary);
     border-radius: 12px;
@@ -808,6 +824,137 @@ body {
 .loading-overlay p {
     margin-top: 1rem;
     color: var(--text-secondary);
+}
+
+/* ========== Sync Progress Overlay ========== */
+.sync-progress-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.sync-progress-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.sync-progress-modal {
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    padding: 2rem;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+}
+
+.sync-progress-overlay.active .sync-progress-modal {
+    transform: scale(1);
+}
+
+.sync-progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sync-progress-header i {
+    font-size: 1.5rem;
+    color: var(--primary-color);
+}
+
+.sync-progress-content {
+    text-align: center;
+}
+
+.sync-progress-bar-container {
+    background: var(--border-color);
+    border-radius: 10px;
+    height: 12px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.sync-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+    border-radius: 10px;
+    transition: width 0.3s ease;
+}
+
+.sync-progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+#sync-progress-percentage {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+#sync-progress-message {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.sync-progress-status {
+    display: inline-block;
+    padding: 0.375rem 1rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.sync-progress-status.status-running {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.sync-progress-status.status-completed {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.sync-progress-status.status-error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Disabled refresh button */
+.btn.disabled,
+.header-refresh-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+    pointer-events: none;
+}
+
+.header-refresh-btn {
+    transition: all var(--transition-speed);
+}
+
+.header-refresh-btn.disabled i {
+    animation: spin 1s linear infinite;
 }
 
 /* ========== D3 Visualization Styles ========== */

@@ -61,3 +61,4 @@ gtasks interactive -- list --filter 08122025:due_date
 
 # Kill all Python processes listening on ports
 lsof -i -P -n | grep LISTEN | grep Python | awk '{print $2}' | xargs kill -9
+lsof -i -P -n | grep LISTEN | grep python | awk '{print $2}' | xargs kill -9

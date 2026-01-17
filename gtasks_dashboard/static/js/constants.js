@@ -102,7 +102,12 @@ export const apiEndpoints = {
     data: '/api/data',
     hierarchy: '/api/hierarchy',
     hierarchyFiltered: '/api/hierarchy/filtered',
-    accountsSwitch: (accountId) => `/api/accounts/${accountId}/switch`
+    accountsSwitch: (accountId) => `/api/accounts/${accountId}/switch`,
+    sync: {
+        advanced: '/api/sync/advanced',
+        progress: '/api/sync/progress',
+        complete: '/api/sync/complete'
+    }
 };
 
 // Event names for custom events

@@ -12,7 +12,7 @@ import {
     debounce 
 } from './utils.js';
 import { createTaskCard, renderTasksGrid } from './task-card.js';
-import { createMultiselect, getUniqueLists, getUniqueTags } from './multiselect.js';
+import { createMultiselect, getUniqueLists, getUniqueTags, getListsWithCounts, getTagsWithCounts } from './multiselect.js';
 import { 
     renderHierarchy,
     initHierarchy,
@@ -36,6 +36,11 @@ let isFullscreen = false;
 let hierarchyData = {};
 let selectedNode = null;
 let autoRefreshInterval = null;
+
+// Sync state variables
+let isSyncing = false;
+let syncProgress = { percentage: 0, message: '', status: 'idle' };
+let syncPollInterval = null;
 
 // Export for backward compatibility
 export function getDashboardData() {
@@ -76,27 +81,62 @@ export function showLoading(show) {
 }
 
 /**
- * Show section
+ * Get current section from URL path
+ * @returns {string} - The section name ('dashboard', 'hierarchy', 'tasks')
  */
-export function showSection(section) {
-    document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+export function getCurrentSectionFromPath() {
+    const path = window.location.pathname;
+    if (path === '/hierarchy' || path.startsWith('/hierarchy')) {
+        return 'hierarchy';
+    } else if (path === '/tasks' || path.startsWith('/tasks')) {
+        return 'tasks';
+    } else if (path === '/dashboard' || path === '/') {
+        return 'dashboard';
+    }
+    return 'dashboard'; // Default to dashboard
+}
+
+/**
+ * Update navigation active state based on current section
+ * @param {string} section - The current section name
+ */
+export function updateNavActiveState(section) {
+    // Remove active class from all nav items
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    
+    // Add active class to current section's nav item
+    const navItem = document.getElementById(`nav-${section}`);
+    if (navItem) {
+        navItem.classList.add('active');
+    }
+}
+
+/**
+ * Show section
+ * @param {string} section - The section name to show
+ * @param {boolean} updateUrl - Whether to update the URL (default: true)
+ */
+export function showSection(section, updateUrl = true) {
+    document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
     
     const sectionEl = document.getElementById(`${section}-section`);
     if (sectionEl) {
         sectionEl.style.display = 'block';
     }
     
-    const navItem = document.querySelector(`.nav-item[onclick="showSection('${section}')"]`);
-    if (navItem) {
-        navItem.classList.add('active');
+    // Update navigation active state
+    updateNavActiveState(section);
+    
+    // Update URL without full page reload (only if updateUrl is true)
+    if (updateUrl) {
+        const newUrl = `/${section === 'dashboard' ? '' : section}`;
+        window.history.replaceState({}, '', newUrl);
     }
     
     stateManager.setCurrentSection(section);
     
     if (section === 'hierarchy') {
         // Add a small delay to allow the browser to calculate layout dimensions
-        // after changing display from none to block
         setTimeout(() => {
             loadHierarchy();
         }, 50);
@@ -137,20 +177,264 @@ export async function loadDashboard() {
         const response = await fetch(apiEndpoints.data);
         const data = await response.json();
         setDashboardData(data);
-        
+
         updateStats();
         updateAccountSelectors();
         loadTasks();
-        
+
         // Load hierarchy data
         await loadHierarchy();
-        
+
         console.log('Dashboard loaded successfully');
     } catch (error) {
         console.error('Error loading dashboard:', error);
     } finally {
         showLoading(false);
     }
+}
+
+// ========== Advanced Sync ==========
+
+/**
+ * Start an advanced sync operation
+ */
+export async function startAdvancedSync() {
+    // Prevent multiple simultaneous sync operations
+    if (isSyncing) {
+        console.log('[Sync] Sync already in progress, ignoring duplicate request');
+        showNotification('Sync already in progress...', 'warning');
+        return;
+    }
+
+    isSyncing = true;
+    syncProgress = { percentage: 0, message: 'Starting sync...', status: 'running' };
+
+    // Disable refresh button
+    const refreshBtn = document.querySelector('.header-refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.disabled = true;
+        refreshBtn.classList.add('disabled');
+    }
+
+    // Show progress UI
+    updateSyncProgressUI();
+
+    try {
+        console.log('[Sync] Starting advanced sync...');
+
+        // Start the advanced sync
+        const startResponse = await fetch(apiEndpoints.sync.advanced, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ sync_type: 'both' })
+        });
+
+        if (!startResponse.ok) {
+            throw new Error(`Failed to start sync: ${startResponse.status}`);
+        }
+
+        const startData = await startResponse.json();
+        console.log('[Sync] Advanced sync started:', startData);
+
+        const syncId = startData.sync_id;
+
+        // Start polling for progress
+        syncPollInterval = setInterval(async () => {
+            await pollSyncProgress(syncId);
+        }, 500);
+
+    } catch (error) {
+        console.error('[Sync] Error starting advanced sync:', error);
+        syncProgress = { percentage: 0, message: error.message, status: 'error' };
+        updateSyncProgressUI();
+
+        // Re-enable refresh button after a delay
+        setTimeout(() => {
+            stopSyncProgressUI();
+        }, 3000);
+    }
+}
+
+/**
+ * Poll sync progress
+ * @param {string} syncId - The sync operation ID
+ */
+async function pollSyncProgress(syncId) {
+    try {
+        const response = await fetch(`${apiEndpoints.sync.progress}?sync_id=${syncId}`);
+        if (!response.ok) {
+            throw new Error(`Failed to get sync progress: ${response.status}`);
+        }
+
+        const progressData = await response.json();
+        console.log('[Sync] Progress update:', progressData);
+
+        // Extract progress from data object (API returns data nested in 'data' property)
+        const progress = progressData.data || progressData;
+
+        // Update progress state
+        syncProgress = {
+            percentage: progress.percentage || 0,
+            message: progress.message || 'Processing...',
+            status: progress.status || 'running'
+        };
+
+        // Update UI
+        updateSyncProgressUI();
+
+        // Check if sync is complete or error
+        if (progress.status === 'completed') {
+            clearInterval(syncPollInterval);
+            syncPollInterval = null;
+
+            // Show completion message
+            syncProgress.message = 'Sync completed successfully!';
+            syncProgress.status = 'completed';
+            updateSyncProgressUI();
+
+            console.log('[Sync] Sync completed successfully');
+
+            // Wait a moment then refresh dashboard and hide UI
+            setTimeout(async () => {
+                await loadDashboard();
+                stopSyncProgressUI();
+                showNotification('Data refreshed successfully! ✅', 'success');
+            }, 1000);
+        } else if (progressData.status === 'error') {
+            clearInterval(syncPollInterval);
+            syncPollInterval = null;
+
+            syncProgress.message = progressData.message || 'Sync failed';
+            syncProgress.status = 'error';
+            updateSyncProgressUI();
+
+            console.error('[Sync] Sync error:', progressData.message);
+
+            // Re-enable refresh button after showing error
+            setTimeout(() => {
+                stopSyncProgressUI();
+                showNotification(`Sync failed: ${progressData.message}`, 'error');
+            }, 3000);
+        }
+    } catch (error) {
+        console.error('[Sync] Error polling sync progress:', error);
+        syncProgress.message = error.message;
+        syncProgress.status = 'error';
+        updateSyncProgressUI();
+    }
+}
+
+/**
+ * Update the sync progress UI
+ */
+export function updateSyncProgressUI() {
+    let overlay = document.getElementById('sync-progress-overlay');
+
+    // Create overlay if it doesn't exist
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'sync-progress-overlay';
+        overlay.className = 'sync-progress-overlay';
+        document.body.appendChild(overlay);
+
+        overlay.innerHTML = `
+            <div class="sync-progress-modal">
+                <div class="sync-progress-header">
+                    <i class="fas fa-sync-alt fa-spin"></i>
+                    <span>Syncing Data</span>
+                </div>
+                <div class="sync-progress-content">
+                    <div class="sync-progress-bar-container">
+                        <div class="sync-progress-bar" id="sync-progress-bar" style="width: 0%"></div>
+                    </div>
+                    <div class="sync-progress-info">
+                        <span id="sync-progress-percentage">0%</span>
+                        <span id="sync-progress-message">Starting sync...</span>
+                    </div>
+                    <div class="sync-progress-status" id="sync-progress-status">Running</div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Update progress bar
+    const progressBar = document.getElementById('sync-progress-bar');
+    const percentageText = document.getElementById('sync-progress-percentage');
+    const messageText = document.getElementById('sync-progress-message');
+    const statusText = document.getElementById('sync-progress-status');
+    const headerIcon = overlay.querySelector('.sync-progress-header i');
+
+    if (progressBar) {
+        progressBar.style.width = `${syncProgress.percentage}%`;
+    }
+
+    if (percentageText) {
+        percentageText.textContent = `${syncProgress.percentage}%`;
+    }
+
+    if (messageText) {
+        messageText.textContent = syncProgress.message;
+    }
+
+    if (statusText) {
+        statusText.textContent = syncProgress.status.charAt(0).toUpperCase() + syncProgress.status.slice(1);
+        statusText.className = `sync-progress-status status-${syncProgress.status}`;
+    }
+
+    // Update header icon based on status
+    if (headerIcon) {
+        if (syncProgress.status === 'completed') {
+            headerIcon.className = 'fas fa-check-circle';
+            headerIcon.style.color = 'var(--success-color)';
+        } else if (syncProgress.status === 'error') {
+            headerIcon.className = 'fas fa-exclamation-circle';
+            headerIcon.style.color = 'var(--danger-color)';
+        } else {
+            headerIcon.className = 'fas fa-sync-alt fa-spin';
+            headerIcon.style.color = 'var(--primary-color)';
+        }
+    }
+
+    // Show overlay
+    overlay.classList.add('active');
+}
+
+/**
+ * Stop sync progress UI and reset state
+ */
+export function stopSyncProgressUI() {
+    // Clear poll interval
+    if (syncPollInterval) {
+        clearInterval(syncPollInterval);
+        syncPollInterval = null;
+    }
+
+    // Reset sync state
+    isSyncing = false;
+    syncProgress = { percentage: 0, message: '', status: 'idle' };
+
+    // Hide overlay
+    const overlay = document.getElementById('sync-progress-overlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
+
+    // Re-enable refresh button
+    const refreshBtn = document.querySelector('.header-refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.classList.remove('disabled');
+    }
+}
+
+/**
+ * Refresh data using advanced sync
+ * This is the new function that replaces direct loadDashboard() call
+ */
+export async function refreshWithAdvancedSync() {
+    await startAdvancedSync();
 }
 
 /**
@@ -241,6 +525,9 @@ export function loadTasks() {
     
     container.innerHTML = '';
     
+    // Initialize task count display
+    updateTasksCountDisplay(filteredTasks.length, tasks.length);
+    
     if (filteredTasks.length === 0) {
         container.innerHTML = '<p style="text-align: center; color: #6b7280;">No tasks found for this account.</p>';
         return;
@@ -265,13 +552,17 @@ let listMultiselect = null;
 let tagsMultiselect = null;
 
 export function initMultiselectFilters(tasks) {
-    // Get unique lists and tags
+    // Get unique lists and tags with pending task counts (sorted by count descending)
+    const listsWithCounts = getListsWithCounts(tasks);
+    const tagsWithCounts = getTagsWithCounts(tasks);
+    
+    // Also get plain lists for backward compatibility
     const lists = getUniqueLists(tasks);
     const tags = getUniqueTags(tasks);
     
     console.log('[Dashboard] initMultiselectFilters - Tasks count:', tasks.length);
-    console.log('[Dashboard] Unique lists found:', lists);
-    console.log('[Dashboard] Unique tags found:', tags);
+    console.log('[Dashboard] Lists with counts:', listsWithCounts);
+    console.log('[Dashboard] Tags with counts:', tagsWithCounts);
     
     // Initialize List filter (was "Filter by Project")
     const listContainer = document.getElementById('task-list-filter-container');
@@ -282,13 +573,14 @@ export function initMultiselectFilters(tasks) {
         listMultiselect = createMultiselect({
             id: 'task-list-filter',
             placeholder: 'Filter by List...',
-            options: lists,
+            options: listsWithCounts,
             initialValues: [],
             onChange: (values) => {
                 console.log('[Dashboard] List filter changed:', values);
                 filterTasks();
             },
-            searchMinChars: 0
+            searchMinChars: 0,
+            showCounts: true
         });
         listContainer.appendChild(listMultiselect);
     }
@@ -302,15 +594,38 @@ export function initMultiselectFilters(tasks) {
         tagsMultiselect = createMultiselect({
             id: 'task-tags-filter',
             placeholder: 'Filter by Tags...',
-            options: tags,
+            options: tagsWithCounts,
             initialValues: [],
             onChange: (values) => {
                 console.log('[Dashboard] Tags filter changed:', values);
                 filterTasks();
             },
-            searchMinChars: 0
+            searchMinChars: 0,
+            showCounts: true
         });
         tagsContainer.appendChild(tagsMultiselect);
+    }
+}
+
+/**
+ * Update task count display
+ * @param {number} filteredCount - Number of filtered tasks
+ * @param {number} totalCount - Total number of tasks
+ */
+export function updateTasksCountDisplay(filteredCount, totalCount) {
+    const countDisplay = document.getElementById('tasks-count-display');
+    const countText = document.getElementById('tasks-count-text');
+    
+    if (countText) {
+        if (filteredCount === totalCount) {
+            countText.textContent = `Showing all ${totalCount} tasks`;
+        } else {
+            countText.textContent = `Showing ${filteredCount} of ${totalCount} tasks`;
+        }
+    }
+    
+    if (countDisplay) {
+        countDisplay.style.display = 'block';
     }
 }
 
@@ -363,6 +678,7 @@ export function filterTasks() {
     console.log('[Dashboard] Applying filters:', filters);
     
     let filteredTasks = dashboardData.tasks || [];
+    const totalTasks = filteredTasks.length;
     const container = document.getElementById('tasks-grid');
     if (!container) return;
     
@@ -375,6 +691,9 @@ export function filterTasks() {
     filteredTasks = filterTasksByCriteria(filteredTasks, filters);
     
     console.log('[Dashboard] Filtered tasks count:', filteredTasks.length);
+    
+    // Update task count display
+    updateTasksCountDisplay(filteredTasks.length, totalTasks);
     
     if (filteredTasks.length === 0) {
         container.innerHTML = '<p style="text-align: center; color: #6b7280;">No tasks match your filters.</p>';
@@ -524,9 +843,13 @@ export function initSettings() {
         stateManager.startAutoRefresh(settings.refreshInterval);
     }
     
-    // Apply default view
-    if (settings.defaultView && settings.defaultView !== 'dashboard') {
-        showSection(settings.defaultView);
+    // Apply default view only when accessing root URL (not /dashboard)
+    // URL path takes precedence over saved default view setting
+    const path = window.location.pathname;
+    
+    // Only apply default view on root URL, not on /dashboard
+    if (settings.defaultView && settings.defaultView !== 'dashboard' && path === '/') {
+        showSection(settings.defaultView, false);
     }
 }
 
@@ -616,6 +939,60 @@ export function setupKeyboardShortcuts() {
 // ========== Initialize ==========
 
 /**
+ * Parse URL query parameters
+ * @returns {Object} - Key-value pairs of query parameters
+ */
+export function parseUrlParams() {
+    const params = new URLSearchParams(window.location.search);
+    const result = {};
+    for (const [key, value] of params) {
+        result[key] = value;
+    }
+    return result;
+}
+
+/**
+ * Apply URL query parameters to dashboard
+ */
+export function applyUrlParams() {
+    const params = parseUrlParams();
+    
+    // Handle account parameter
+    if (params.account) {
+        console.log('[Dashboard] Applying account from URL:', params.account);
+        const accountSelector = document.getElementById('account-selector');
+        if (accountSelector) {
+            // Check if the account exists in the selector
+            const options = accountSelector.options;
+            let found = false;
+            for (let i = 0; i < options.length; i++) {
+                if (options[i].value === params.account || options[i].text === params.account) {
+                    accountSelector.selectedIndex = i;
+                    found = true;
+                    break;
+                }
+            }
+            
+            // If not found, still try to switch
+            if (!found) {
+                console.log('[Dashboard] Account not found in selector, attempting to switch:', params.account);
+                switchAccount(params.account);
+            } else {
+                switchAccount(params.account);
+            }
+        }
+    }
+    
+    // Handle default view parameter
+    if (params.view) {
+        console.log('[Dashboard] Applying view from URL:', params.view);
+        if (['dashboard', 'hierarchy', 'tasks'].includes(params.view)) {
+            showSection(params.view);
+        }
+    }
+}
+
+/**
  * Initialize the dashboard
  */
 export async function initDashboard() {
@@ -627,6 +1004,18 @@ export async function initDashboard() {
     
     // Load settings
     initSettings();
+    
+    // Apply URL query parameters before loading dashboard data
+    applyUrlParams();
+    
+    // Detect section from URL path (takes precedence over URL params)
+    const pathSection = getCurrentSectionFromPath();
+    console.log('[Dashboard] Detected section from path:', pathSection);
+    
+    // Show the appropriate section based on URL path
+    if (pathSection) {
+        showSection(pathSection);
+    }
     
     // Load dashboard data
     await loadDashboard();
@@ -920,7 +1309,7 @@ window.switchAccountForTasks = switchAccountForTasks;
 window.loadTasks = loadTasks;
 window.filterTasks = filterTasks;
 window.clearTasksFilters = clearTasksFilters;
-window.refreshData = loadDashboard;
+window.refreshData = refreshWithAdvancedSync;  // Changed to use advanced sync
 window.refreshHierarchy = refreshHierarchy;
 window.loadHierarchy = loadHierarchy;
 window.initSettings = initSettings;
@@ -939,6 +1328,17 @@ window.completeTask = completeTask;
 window.updateTaskCompletedState = updateTaskCompletedState;
 window.toggleDarkMode = stateManager.toggleDarkMode;
 window.showNotification = showNotification;
+window.parseUrlParams = parseUrlParams;
+window.applyUrlParams = applyUrlParams;
+window.updateTasksCountDisplay = updateTasksCountDisplay;
+window.getCurrentSectionFromPath = getCurrentSectionFromPath;
+window.updateNavActiveState = updateNavActiveState;
+window.startAdvancedSync = startAdvancedSync;
+window.updateSyncProgressUI = updateSyncProgressUI;
+window.stopSyncProgressUI = stopSyncProgressUI;
+window.refreshWithAdvancedSync = refreshWithAdvancedSync;
+window.getListsWithCounts = getListsWithCounts;
+window.getTagsWithCounts = getTagsWithCounts;
 
 // Export for use in other modules
 export default {

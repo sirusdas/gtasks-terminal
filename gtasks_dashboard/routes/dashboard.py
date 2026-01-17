@@ -1,7 +1,7 @@
 """
 Dashboard Routes
 """
-from flask import Blueprint, render_template, send_from_directory, Response
+from flask import Blueprint, render_template, send_from_directory, Response, request
 import base64
 from routes.api import init_dashboard_state
 
@@ -11,10 +11,43 @@ dashboard = Blueprint('dashboard', __name__)
 init_dashboard_state()
 
 
+def get_default_view():
+    """Get default view from URL query parameter or return 'dashboard'"""
+    return request.args.get('view', 'dashboard')
+
+
+def get_default_account():
+    """Get default account from URL query parameter"""
+    return request.args.get('account', None)
+
+
+def render_dashboard(view='dashboard', account=None):
+    """Render dashboard template with view and account parameters"""
+    return render_template('dashboard.html', default_view=view, default_account=account)
+
+
 @dashboard.route('/')
 def index():
-    """Main dashboard page"""
-    return render_template('dashboard.html')
+    """Main dashboard page - defaults to dashboard view"""
+    return render_dashboard(view='dashboard')
+
+
+@dashboard.route('/dashboard')
+def dashboard_page():
+    """Dashboard page - explicit route for dashboard view"""
+    return render_dashboard(view='dashboard')
+
+
+@dashboard.route('/hierarchy')
+def hierarchy_page():
+    """Hierarchy page - shows hierarchical task visualization"""
+    return render_dashboard(view='hierarchy')
+
+
+@dashboard.route('/tasks')
+def tasks_page():
+    """Tasks page - shows task management view"""
+    return render_dashboard(view='tasks')
 
 
 @dashboard.route('/favicon.ico')

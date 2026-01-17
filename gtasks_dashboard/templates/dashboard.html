@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>GTasks Dashboard - Hierarchical Visualization</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -11,6 +14,7 @@
     <link rel="stylesheet" href="/static/css/components.css">
     <link rel="stylesheet" href="/static/css/modal.css">
     <link rel="stylesheet" href="/static/css/hierarchy-filter.css">
+    <link rel="stylesheet" href="/static/css/hierarchy-ledger.css">
     <link rel="stylesheet" href="/static/css/multiselect.css">
 </head>
 <body>
@@ -24,15 +28,15 @@
                 </button>
             </div>
             <nav class="sidebar-nav">
-                <a href="#" class="nav-item active" onclick="showSection('dashboard')">
+                <a href="/dashboard" class="nav-item" id="nav-dashboard">
                     <i class="fas fa-chart-line"></i>
                     <span>Dashboard</span>
                 </a>
-                <a href="#" class="nav-item" onclick="showSection('hierarchy')">
+                <a href="/hierarchy" class="nav-item" id="nav-hierarchy">
                     <i class="fas fa-project-diagram"></i>
                     <span>Hierarchy</span>
                 </a>
-                <a href="#" class="nav-item" onclick="showSection('tasks')">
+                <a href="/tasks" class="nav-item" id="nav-tasks">
                     <i class="fas fa-tasks"></i>
                     <span>Tasks</span>
                 </a>
@@ -373,6 +377,9 @@
                 </div>
 
                 <!-- Tasks Grid -->
+                <div class="tasks-count-display" id="tasks-count-display">
+                    <span id="tasks-count-text">Loading...</span>
+                </div>
                 <div class="tasks-grid" id="tasks-grid">
                     <!-- Tasks will be populated here -->
                 </div>
@@ -454,6 +461,6 @@
     </div>
 
     <script type="module" src="/static/js/hierarchy.js"></script>
-    <script type="module" src="/static/js/dashboard.js"></script>
+    <script type="module" src="/static/js/dashboard.js?v=4"></script>
 </body>
 </html>

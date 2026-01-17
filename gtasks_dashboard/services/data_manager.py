@@ -706,7 +706,7 @@ class DataManager:
             return 'Other'
     
     def detect_accounts(self) -> List[Account]:
-        """Enhanced account detection with type categorization"""
+        """Enhanced account detection with type categorization and default account selection"""
         accounts = []
         
         if self.gtasks_path and self.gtasks_path.exists():
@@ -721,16 +721,6 @@ class DataManager:
                             account_type=account_type,
                             is_active=True
                         ))
-            
-            # Add default account
-            default_type = self._categorize_account_type('default')
-            accounts.append(Account(
-                id='default',
-                name='Default',
-                email='default@example.com',
-                account_type=default_type,
-                is_active=True
-            ))
         
         # If no accounts found, create demo account
         if not accounts:
@@ -745,7 +735,30 @@ class DataManager:
         self.dashboard_state['accounts'] = accounts
         self._generate_account_types()
         
+        # Set default account:
+        # 1. If "Work" account exists, use it
+        # 2. Otherwise, use the first available account
+        self._set_default_account()
+        
         return accounts
+    
+    def _set_default_account(self):
+        """Set the default account based on priority: Work > first available"""
+        accounts = self.dashboard_state['accounts']
+        
+        # Check if "Work" account exists
+        work_account = next((acc for acc in accounts if acc.id.lower() == 'work'), None)
+        
+        if work_account:
+            self.dashboard_state['current_account'] = work_account.id
+            print(f"[DataManager] Set default account to 'Work'")
+        elif accounts:
+            # Fallback to first available account
+            self.dashboard_state['current_account'] = accounts[0].id
+            print(f"[DataManager] No 'Work' account found, using first available: {accounts[0].name}")
+        else:
+            self.dashboard_state['current_account'] = 'default'
+            print("[DataManager] No accounts found, using default")
     
     # ============================================
     # ADVANCED TAG FILTERING

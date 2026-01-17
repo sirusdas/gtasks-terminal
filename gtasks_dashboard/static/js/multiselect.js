@@ -11,7 +11,8 @@ export function createMultiselect(config) {
         options = [],
         initialValues = [],
         onChange = () => {},
-        searchMinChars = 0
+        searchMinChars = 0,
+        showCounts = false
     } = config;
 
     // Container
@@ -117,16 +118,20 @@ export function createMultiselect(config) {
             return;
         }
 
-        const filtered = currentOptions.filter(opt => 
-            opt.toLowerCase().includes(term) && !selectedValues.includes(opt)
-        );
+        const filtered = currentOptions.filter(opt => {
+            const optLabel = typeof opt === 'object' ? opt.label : opt;
+            return optLabel.toLowerCase().includes(term) && !selectedValues.includes(optLabel);
+        });
 
         if (filtered.length === 0) {
             dropdown.innerHTML = '<div class="multiselect-empty">No results found</div>';
         } else {
-            dropdown.innerHTML = filtered.map(opt => 
-                `<div class="multiselect-option" data-value="${opt}">${opt}</div>`
-            ).join('');
+            dropdown.innerHTML = filtered.map(opt => {
+                const label = typeof opt === 'object' ? opt.label : opt;
+                const count = typeof opt === 'object' && showCounts ? opt.count : null;
+                const countHtml = showCounts && count !== null ? `<span class="multiselect-count">${count}</span>` : '';
+                return `<div class="multiselect-option" data-value="${label}">${label}${countHtml}</div>`;
+            }).join('');
             
             // Add click listeners to options
             dropdown.querySelectorAll('.multiselect-option').forEach(opt => {
@@ -263,6 +268,28 @@ export function getUniqueLists(tasks) {
     return Array.from(lists).sort();
 }
 
+// Get all unique lists with pending task counts, sorted by count descending
+export function getListsWithCounts(tasks) {
+    if (!tasks || !Array.isArray(tasks)) return [];
+    
+    const listCounts = {};
+    
+    tasks.forEach(task => {
+        // Only count pending tasks (status === 'pending')
+        if (task.status === 'pending') {
+            const listName = task.list_title || '';
+            if (listName) {
+                listCounts[listName] = (listCounts[listName] || 0) + 1;
+            }
+        }
+    });
+    
+    // Convert to array and sort by count descending
+    return Object.entries(listCounts)
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count);
+}
+
 // Get all unique tags from tasks
 export function getUniqueTags(tasks) {
     if (!tasks || !Array.isArray(tasks)) return [];
@@ -282,12 +309,48 @@ export function getUniqueTags(tasks) {
     return Array.from(tags).sort();
 }
 
+// Get all unique tags with pending task counts, sorted by count descending
+export function getTagsWithCounts(tasks) {
+    if (!tasks || !Array.isArray(tasks)) return [];
+    
+    const tagCounts = {};
+    
+    tasks.forEach(task => {
+        // Only count pending tasks (status === 'pending')
+        if (task.status === 'pending') {
+            // Collect all tags from hybrid_tags
+            if (task.hybrid_tags) {
+                task.hybrid_tags.bracket?.forEach(t => {
+                    tagCounts[t] = (tagCounts[t] || 0) + 1;
+                });
+                task.hybrid_tags.hash?.forEach(t => {
+                    tagCounts[t] = (tagCounts[t] || 0) + 1;
+                });
+                task.hybrid_tags.user?.forEach(t => {
+                    tagCounts[t] = (tagCounts[t] || 0) + 1;
+                });
+            }
+            // Also check regular tags
+            task.tags?.forEach(t => {
+                tagCounts[t] = (tagCounts[t] || 0) + 1;
+            });
+        }
+    });
+    
+    // Convert to array and sort by count descending
+    return Object.entries(tagCounts)
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count);
+}
+
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         createMultiselect,
         initMultiselectFilter,
         getUniqueLists,
-        getUniqueTags
+        getUniqueTags,
+        getListsWithCounts,
+        getTagsWithCounts
     };
 }

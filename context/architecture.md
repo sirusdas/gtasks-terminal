@@ -36,6 +36,7 @@ Google Tasks automation tool with CLI and Web Dashboard interfaces for managing 
 | **Routes** | `gtasks_dashboard/routes/api.py` | REST API endpoints for task operations |
 | **Routes** | `gtasks_dashboard/routes/dashboard.py` | Page routes and view rendering |
 | **Services** | `gtasks_dashboard/services/data_manager.py` | Business logic, data transformation, task operations |
+| **Services** | `gtasks_dashboard/services/sync_service.py` | Thread-safe sync operations with progress tracking for advanced sync |
 | **Services** | `gtasks_dashboard/services/dashboard_generator.py` | Static HTML dashboard generation (optional export) |
 | **Models** | `gtasks_dashboard/models/` | Data models (Task, Account, DashboardStats, HybridTags) |
 | **Modules** | `gtasks_dashboard/modules/priority_system.py` | Priority calculation and management |

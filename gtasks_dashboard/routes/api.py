@@ -613,3 +613,220 @@ def api_complete_task(task_id):
             'success': False,
             'message': 'Task not found'
         }), 404
+
+
+# ============================================
+# ADVANCED SYNC ENDPOINTS
+# ============================================
+
+@api.route('/api/sync/advanced', methods=['POST'])
+def api_advanced_sync():
+    """
+    Start an advanced sync operation.
+    
+    Request body:
+        {
+            "sync_type": "push|pull|both" (default: "both"),
+            "account": "optional_account_name"
+        }
+        
+    Response:
+        {
+            "success": True,
+            "sync_id": "unique_sync_id",
+            "message": "Sync started"
+        }
+    """
+    from services.sync_service import SyncService
+    
+    try:
+        data = request.get_json() or {}
+        sync_type = data.get('sync_type', 'both')
+        account = data.get('account')
+        
+        # Validate sync_type
+        if sync_type not in ('push', 'pull', 'both'):
+            return jsonify({
+                'success': False,
+                'message': 'Invalid sync_type. Must be "push", "pull", or "both"'
+            }), 400
+        
+        # Start the sync
+        sync_id = SyncService.start_advanced_sync(sync_type=sync_type, account=account)
+        
+        return jsonify({
+            'success': True,
+            'sync_id': sync_id,
+            'message': f'Started {sync_type} sync'
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error starting sync: {str(e)}'
+        }), 500
+
+
+@api.route('/api/sync/progress')
+def api_sync_progress():
+    """
+    Get the current sync progress.
+    
+    Query parameters:
+        sync_id: Optional sync ID to query (uses current sync if not provided)
+        
+    Response:
+        {
+            "success": True,
+            "data": {
+                "percentage": 0-100,
+                "message": "description",
+                "status": "running|completed|error|idle",
+                "sync_type": "push|pull|both",
+                "account": "account_name",
+                "start_time": "ISO timestamp",
+                "error": "error message if any"
+            }
+        }
+    """
+    from services.sync_service import SyncService
+    
+    try:
+        sync_id = request.args.get('sync_id')
+        progress = SyncService.get_sync_progress(sync_id=sync_id)
+        
+        return jsonify({
+            'success': True,
+            'data': progress
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error getting sync progress: {str(e)}'
+        }), 500
+
+
+@api.route('/api/sync/complete', methods=['POST'])
+def api_sync_complete():
+    """
+    Wait for sync to complete and return final status.
+    
+    Request body:
+        {
+            "sync_id": "optional_sync_id",
+            "timeout": 300 (optional, default 300 seconds)
+        }
+        
+    Response:
+        {
+            "success": True,
+            "data": {
+                "percentage": 0-100,
+                "message": "description",
+                "status": "completed|error|timeout",
+                "error": "error message if any"
+            }
+        }
+    """
+    from services.sync_service import SyncService
+    
+    try:
+        data = request.get_json() or {}
+        sync_id = data.get('sync_id')
+        timeout = float(data.get('timeout', 300))
+        
+        result = SyncService.wait_for_sync_completion(sync_id=sync_id, timeout=timeout)
+        
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error waiting for sync completion: {str(e)}'
+        }), 500
+
+
+@api.route('/api/sync/cancel', methods=['POST'])
+def api_sync_cancel():
+    """
+    Cancel a running sync operation.
+    
+    Request body:
+        {
+            "sync_id": "optional_sync_id"
+        }
+        
+    Response:
+        {
+            "success": True,
+            "message": "Sync cancelled"
+        }
+    """
+    from services.sync_service import SyncService
+    
+    try:
+        data = request.get_json() or {}
+        sync_id = data.get('sync_id')
+        
+        cancelled = SyncService.cancel_sync(sync_id=sync_id)
+        
+        if cancelled:
+            return jsonify({
+                'success': True,
+                'message': 'Sync cancelled'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'No running sync to cancel'
+            })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error cancelling sync: {str(e)}'
+        }), 500
+
+
+@api.route('/api/sync/status')
+def api_sync_status():
+    """
+    Get the status of all sync operations or check if a specific sync is running.
+    
+    Query parameters:
+        sync_id: Optional sync ID to check
+        
+    Response:
+        {
+            "success": True,
+            "data": {
+                "running": True/False,
+                "sync_id": "current_sync_id",
+                "all_sync_ids": ["id1", "id2", ...]
+            }
+        }
+    """
+    from services.sync_service import SyncService
+    
+    try:
+        sync_id = request.args.get('sync_id')
+        is_running = SyncService.is_sync_running(sync_id=sync_id)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'running': is_running,
+                'sync_id': sync_id or SyncService._current_sync_id,
+                'all_sync_ids': SyncService.get_all_sync_ids()
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error getting sync status: {str(e)}'
+        }), 500
