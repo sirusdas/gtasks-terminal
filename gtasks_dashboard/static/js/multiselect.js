@@ -343,6 +343,65 @@ export function getTagsWithCounts(tasks) {
         .sort((a, b) => b.count - a.count);
 }
 
+/**
+ * Get filtered tags based on selected lists
+ * Returns tags that exist in tasks belonging to the selected lists, with pending task counts
+ * @param {Array} tasks - Array of task objects
+ * @param {Array} selectedLists - Array of selected list names
+ * @returns {Array} - Array of tag objects with label and count, sorted by count descending
+ */
+export function getFilteredTagsByLists(tasks, selectedLists) {
+    if (!tasks || !Array.isArray(tasks)) return [];
+    
+    // If no lists selected, return all tags with counts
+    if (!selectedLists || selectedLists.length === 0) {
+        return getTagsWithCounts(tasks);
+    }
+    
+    // Filter tasks to only those in selected lists
+    const filteredTasks = tasks.filter(task => {
+        const listName = task.list_title || '';
+        return selectedLists.includes(listName);
+    });
+    
+    // Get tags with counts from filtered tasks
+    return getTagsWithCounts(filteredTasks);
+}
+
+/**
+ * Get filtered lists based on selected tags
+ * Returns lists that have tasks with the selected tags, with pending task counts
+ * @param {Array} tasks - Array of task objects
+ * @param {Array} selectedTags - Array of selected tag names
+ * @returns {Array} - Array of list objects with label and count, sorted by count descending
+ */
+export function getFilteredListsByTags(tasks, selectedTags) {
+    if (!tasks || !Array.isArray(tasks)) return [];
+    
+    // If no tags selected, return all lists with counts
+    if (!selectedTags || selectedTags.length === 0) {
+        return getListsWithCounts(tasks);
+    }
+    
+    // Filter tasks to only those with selected tags
+    const filteredTasks = tasks.filter(task => {
+        // Collect all tags from task
+        const taskTags = new Set();
+        if (task.hybrid_tags) {
+            task.hybrid_tags.bracket?.forEach(t => taskTags.add(t));
+            task.hybrid_tags.hash?.forEach(t => taskTags.add(t));
+            task.hybrid_tags.user?.forEach(t => taskTags.add(t));
+        }
+        task.tags?.forEach(t => taskTags.add(t));
+        
+        // Check if task has any of the selected tags
+        return [...taskTags].some(tag => selectedTags.includes(tag));
+    });
+    
+    // Get lists with counts from filtered tasks
+    return getListsWithCounts(filteredTasks);
+}
+
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -351,6 +410,8 @@ if (typeof module !== 'undefined' && module.exports) {
         getUniqueLists,
         getUniqueTags,
         getListsWithCounts,
-        getTagsWithCounts
+        getTagsWithCounts,
+        getFilteredTagsByLists,
+        getFilteredListsByTags
     };
 }

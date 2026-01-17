@@ -12,7 +12,7 @@ import {
     debounce 
 } from './utils.js';
 import { createTaskCard, renderTasksGrid } from './task-card.js';
-import { createMultiselect, getUniqueLists, getUniqueTags, getListsWithCounts, getTagsWithCounts } from './multiselect.js';
+import { createMultiselect, getUniqueLists, getUniqueTags, getListsWithCounts, getTagsWithCounts, getFilteredTagsByLists, getFilteredListsByTags } from './multiselect.js';
 import { 
     renderHierarchy,
     initHierarchy,
@@ -550,8 +550,12 @@ export function loadTasks() {
  */
 let listMultiselect = null;
 let tagsMultiselect = null;
+let allTasks = []; // Store all tasks for filtering
 
 export function initMultiselectFilters(tasks) {
+    // Store all tasks for filtering
+    allTasks = tasks;
+    
     // Get unique lists and tags with pending task counts (sorted by count descending)
     const listsWithCounts = getListsWithCounts(tasks);
     const tagsWithCounts = getTagsWithCounts(tasks);
@@ -577,6 +581,7 @@ export function initMultiselectFilters(tasks) {
             initialValues: [],
             onChange: (values) => {
                 console.log('[Dashboard] List filter changed:', values);
+                updateFilteredMultiselect();
                 filterTasks();
             },
             searchMinChars: 0,
@@ -598,12 +603,44 @@ export function initMultiselectFilters(tasks) {
             initialValues: [],
             onChange: (values) => {
                 console.log('[Dashboard] Tags filter changed:', values);
+                updateFilteredMultiselect();
                 filterTasks();
             },
             searchMinChars: 0,
             showCounts: true
         });
         tagsContainer.appendChild(tagsMultiselect);
+    }
+}
+
+/**
+ * Update filtered multiselect options based on current selections
+ * Implements bidirectional filtering between List and Tags filters
+ */
+export function updateFilteredMultiselect() {
+    // Get current selections from both multiselects
+    const selectedLists = listMultiselect ? listMultiselect.getSelectedValues() : [];
+    const selectedTags = tagsMultiselect ? tagsMultiselect.getSelectedValues() : [];
+    
+    console.log('[Dashboard] updateFilteredMultiselect - Selected lists:', selectedLists);
+    console.log('[Dashboard] updateFilteredMultiselect - Selected tags:', selectedTags);
+    
+    // Get filtered options based on selections
+    const filteredTags = getFilteredTagsByLists(allTasks, selectedLists);
+    const filteredLists = getFilteredListsByTags(allTasks, selectedTags);
+    
+    console.log('[Dashboard] updateFilteredMultiselect - Filtered tags:', filteredTags);
+    console.log('[Dashboard] updateFilteredMultiselect - Filtered lists:', filteredLists);
+    
+    // Update multiselect options
+    if (tagsMultiselect) {
+        tagsMultiselect.setOptions(filteredTags);
+        console.log('[Dashboard] Updated tags multiselect with', filteredTags.length, 'options');
+    }
+    
+    if (listMultiselect) {
+        listMultiselect.setOptions(filteredLists);
+        console.log('[Dashboard] Updated list multiselect with', filteredLists.length, 'options');
     }
 }
 
@@ -750,6 +787,18 @@ export function clearTasksFilters() {
     // Reset sort order
     const sortOrderFilter = document.getElementById('task-sort-order');
     if (sortOrderFilter) sortOrderFilter.value = 'desc';
+    
+    // Restore all options to multiselects and re-apply filters
+    const allLists = getListsWithCounts(allTasks);
+    const allTags = getTagsWithCounts(allTasks);
+    
+    if (listMultiselect) {
+        listMultiselect.setOptions(allLists);
+    }
+    
+    if (tagsMultiselect) {
+        tagsMultiselect.setOptions(allTags);
+    }
     
     // Re-apply filters
     filterTasks();
@@ -1339,6 +1388,7 @@ window.stopSyncProgressUI = stopSyncProgressUI;
 window.refreshWithAdvancedSync = refreshWithAdvancedSync;
 window.getListsWithCounts = getListsWithCounts;
 window.getTagsWithCounts = getTagsWithCounts;
+window.updateFilteredMultiselect = updateFilteredMultiselect;
 
 // Export for use in other modules
 export default {
