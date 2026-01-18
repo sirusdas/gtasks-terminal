@@ -85,12 +85,17 @@ export function showLoading(show) {
  * @returns {string} - The section name ('dashboard', 'hierarchy', 'tasks')
  */
 export function getCurrentSectionFromPath() {
+    const basePath = window.GTASKS_BASE_PATH || '';
     const path = window.location.pathname;
-    if (path === '/hierarchy' || path.startsWith('/hierarchy')) {
+    
+    // Remove base path from path for comparison
+    const relativePath = path.replace(basePath, '') || '/';
+    
+    if (relativePath === '/hierarchy' || relativePath.startsWith('/hierarchy')) {
         return 'hierarchy';
-    } else if (path === '/tasks' || path.startsWith('/tasks')) {
+    } else if (relativePath === '/tasks' || relativePath.startsWith('/tasks')) {
         return 'tasks';
-    } else if (path === '/dashboard' || path === '/') {
+    } else if (relativePath === '/dashboard' || relativePath === '/') {
         return 'dashboard';
     }
     return 'dashboard'; // Default to dashboard
@@ -129,7 +134,8 @@ export function showSection(section, updateUrl = true) {
     
     // Update URL without full page reload (only if updateUrl is true)
     if (updateUrl) {
-        const newUrl = `/${section === 'dashboard' ? '' : section}`;
+        const basePath = window.GTASKS_BASE_PATH || '';
+        const newUrl = `${basePath}/${section === 'dashboard' ? '' : section}`;
         window.history.replaceState({}, '', newUrl);
     }
     
@@ -1352,7 +1358,8 @@ export async function completeTask(taskId) {
     console.log('[Dashboard] Completing task:', taskId);
     
     try {
-        const response = await fetch(`/api/tasks/${taskId}/complete`, {
+        const basePath = window.GTASKS_BASE_PATH || '';
+        const response = await fetch(`${basePath}/api/tasks/${taskId}/complete`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

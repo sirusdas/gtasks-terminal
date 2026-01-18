@@ -62,3 +62,17 @@ gtasks interactive -- list --filter 08122025:due_date
 # Kill all Python processes listening on ports
 lsof -i -P -n | grep LISTEN | grep Python | awk '{print $2}' | xargs kill -9
 lsof -i -P -n | grep LISTEN | grep python | awk '{print $2}' | xargs kill -9
+
+# python kill
+
+# Find the gunicorn process
+ps aux | grep gunicorn
+
+# Kill all gunicorn processes for this app
+pkill -f "gunicorn.*main_dashboard:app"
+
+# Or kill by the main process ID (the first one listed)
+kill <PID>
+
+# Force kill if needed
+pkill -9 -f "gunicorn.*main_dashboard:app"

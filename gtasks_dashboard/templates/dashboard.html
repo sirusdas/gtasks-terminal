@@ -6,16 +6,20 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    <script>
+        // Global base path for subpath deployment
+        window.GTASKS_BASE_PATH = '{{ base_path }}';
+    </script>
     <title>GTasks Dashboard - Hierarchical Visualization</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <link rel="stylesheet" href="/static/css/dashboard.css">
-    <link rel="stylesheet" href="/static/css/dark-mode.css">
-    <link rel="stylesheet" href="/static/css/components.css">
-    <link rel="stylesheet" href="/static/css/modal.css">
-    <link rel="stylesheet" href="/static/css/hierarchy-filter.css">
-    <link rel="stylesheet" href="/static/css/hierarchy-ledger.css">
-    <link rel="stylesheet" href="/static/css/multiselect.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css">
 </head>
 <body>
     <div class="dashboard-container">
@@ -28,15 +32,15 @@
                 </button>
             </div>
             <nav class="sidebar-nav">
-                <a href="/dashboard" class="nav-item" id="nav-dashboard">
+                <a href="{{ base_path }}/dashboard" class="nav-item" id="nav-dashboard">
                     <i class="fas fa-chart-line"></i>
                     <span>Dashboard</span>
                 </a>
-                <a href="/hierarchy" class="nav-item" id="nav-hierarchy">
+                <a href="{{ base_path }}/hierarchy" class="nav-item" id="nav-hierarchy">
                     <i class="fas fa-project-diagram"></i>
                     <span>Hierarchy</span>
                 </a>
-                <a href="/tasks" class="nav-item" id="nav-tasks">
+                <a href="{{ base_path }}/tasks" class="nav-item" id="nav-tasks">
                     <i class="fas fa-tasks"></i>
                     <span>Tasks</span>
                 </a>
@@ -473,7 +477,7 @@
         <p>Loading...</p>
     </div>
 
-    <script type="module" src="/static/js/hierarchy.js"></script>
-    <script type="module" src="/static/js/dashboard.js?v=4"></script>
+    <script type="module" src="{{ base_path }}/static/js/hierarchy.js"></script>
+    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=4"></script>
 </body>
 </html>

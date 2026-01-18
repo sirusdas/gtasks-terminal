@@ -97,17 +97,19 @@ export const storage = {
     }
 };
 
-// API endpoints
+// API endpoints - use base_path for subpath deployment
+const getBasePath = () => window.GTASKS_BASE_PATH || '';
+
 export const apiEndpoints = {
-    data: '/api/data',
-    hierarchy: '/api/hierarchy',
-    hierarchyFiltered: '/api/hierarchy/filtered',
-    accountsSwitch: (accountId) => `/api/accounts/${accountId}/switch`,
-    refresh: '/api/refresh',
+    data: `${getBasePath()}/api/data`,
+    hierarchy: `${getBasePath()}/api/hierarchy`,
+    hierarchyFiltered: `${getBasePath()}/api/hierarchy/filtered`,
+    accountsSwitch: (accountId) => `${getBasePath()}/api/accounts/${accountId}/switch`,
+    refresh: `${getBasePath()}/api/refresh`,
     sync: {
-        advanced: '/api/sync/advanced',
-        progress: '/api/sync/progress',
-        complete: '/api/sync/complete'
+        advanced: `${getBasePath()}/api/sync/advanced`,
+        progress: `${getBasePath()}/api/sync/progress`,
+        complete: `${getBasePath()}/api/sync/complete`
     }
 };
 

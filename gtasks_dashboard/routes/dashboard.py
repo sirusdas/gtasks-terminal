@@ -5,7 +5,10 @@ from flask import Blueprint, render_template, send_from_directory, Response, req
 import base64
 from routes.api import init_dashboard_state
 
-dashboard = Blueprint('dashboard', __name__)
+# Base path for subpath deployment
+BASE_PATH = '/gtasks/gtasks-terminal/gtasks_dashboard'
+
+dashboard = Blueprint('dashboard', __name__, url_prefix=BASE_PATH)
 
 # Initialize dashboard state
 init_dashboard_state()
@@ -21,9 +24,11 @@ def get_default_account():
     return request.args.get('account', None)
 
 
-def render_dashboard(view='dashboard', account=None):
+def render_dashboard(view='dashboard', account=None, base_path=None):
     """Render dashboard template with view and account parameters"""
-    return render_template('dashboard.html', default_view=view, default_account=account)
+    # Use provided base_path or fall back to BASE_PATH
+    path = base_path if base_path is not None else BASE_PATH
+    return render_template('dashboard.html', default_view=view, default_account=account, base_path=path)
 
 
 @dashboard.route('/')
