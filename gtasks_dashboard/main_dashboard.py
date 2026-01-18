@@ -240,6 +240,13 @@ def api_remote_pull_local():
     return api_remote_pull()
 
 
+@app.route('/api/remote/sync-command', methods=['POST'])
+def api_remote_sync_command_local():
+    """Execute gtasks remote sync command in background (local development)"""
+    from routes.api import api_remote_sync_command
+    return api_remote_sync_command()
+
+
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     """Serve static files"""

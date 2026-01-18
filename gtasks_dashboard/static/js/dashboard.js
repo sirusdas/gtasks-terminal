@@ -505,6 +505,35 @@ export async function syncAndRefresh() {
 }
 
 /**
+ * Run gtasks remote sync command in background thread
+ * This is called when "Sync External DB" option is selected
+ */
+export async function syncRemoteDb() {
+    console.log('[Dashboard] Sync External DB - starting background command...');
+    try {
+        const response = await fetch('/api/remote/sync-command', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            console.log('[Dashboard] Remote sync command started:', data.message);
+            showNotification('Remote sync started in background... ℹ️', 'info');
+        } else {
+            console.error('[Dashboard] Failed to start remote sync:', data.message);
+            showNotification(data.message || 'Failed to start remote sync', 'error');
+        }
+    } catch (error) {
+        console.error('[Dashboard] Error starting remote sync:', error);
+        showNotification('Error starting remote sync', 'error');
+    }
+}
+
+/**
  * Close refresh dropdown when clicking outside
  */
 export function setupRefreshDropdown() {
@@ -1553,6 +1582,7 @@ window.refreshWithAdvancedSync = refreshWithAdvancedSync;
 window.simpleCacheRefresh = simpleCacheRefresh;
 window.toggleRefreshDropdown = toggleRefreshDropdown;
 window.syncAndRefresh = syncAndRefresh;
+window.syncRemoteDb = syncRemoteDb;
 window.setupRefreshDropdown = setupRefreshDropdown;
 window.getListsWithCounts = getListsWithCounts;
 window.getTagsWithCounts = getTagsWithCounts;

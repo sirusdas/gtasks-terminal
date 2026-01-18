@@ -1287,6 +1287,60 @@ def api_remote_pull():
         }), 500
 
 
+@api.route('/api/remote/sync-command', methods=['POST'])
+def api_remote_sync_command():
+    """
+    Execute 'gtasks remote sync' command in a background thread.
+    
+    This endpoint runs the CLI command and returns immediately.
+    The command output will appear in the terminal where the dashboard is running.
+    
+    Response:
+        {
+            "success": True,
+            "message": "Remote sync command started in background"
+        }
+    """
+    import subprocess
+    import threading
+    
+    try:
+        def run_gtasks_remote_sync():
+            """Background function to run gtasks remote sync command."""
+            try:
+                print('[Remote Sync] Starting gtasks remote sync...')
+                result = subprocess.run(
+                    ['gtasks', 'remote', 'sync'],
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout
+                )
+                print(f'[Remote Sync] Command completed with return code: {result.returncode}')
+                if result.stdout:
+                    print(f'[Remote Sync] Output: {result.stdout}')
+                if result.stderr:
+                    print(f'[Remote Sync] Errors: {result.stderr}')
+            except subprocess.TimeoutExpired:
+                print('[Remote Sync] Command timed out after 5 minutes')
+            except Exception as e:
+                print(f'[Remote Sync] Error executing command: {e}')
+        
+        # Start the command in a background thread
+        thread = threading.Thread(target=run_gtasks_remote_sync, daemon=True)
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Remote sync command started in background'
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error starting remote sync: {str(e)}'
+        }), 500
+
+
 @api.route('/api/remote/tasks', methods=['GET'])
 def api_remote_load_tasks():
     """
