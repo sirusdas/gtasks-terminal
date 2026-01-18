@@ -18,7 +18,6 @@ gtasks_dashboard/gtasks-dashboard/bin/*
 *.token
 *.auth
 *turso*
-*libsql*
 *.jwt
 *.credentials
 
@@ -78,3 +77,4 @@ Thumbs.db
 #     name: Check for secret files
 #     files: '.*token|.*auth|.*credentials|.*turso|.*libsql'
 #     stages: [pre-commit]
+gtasks_dashboard/nginx.conf

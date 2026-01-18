@@ -76,3 +76,34 @@ kill <PID>
 
 # Force kill if needed
 pkill -9 -f "gunicorn.*main_dashboard:app"
+
+
+# Ngnix 
+# Test the configuration
+sudo nginx -t
+
+# Reload Nginx (no downtime)
+sudo systemctl reload nginx
+
+# Restart the Flask/Gunicorn service
+sudo systemctl restart gtasks-dashboard
+
+# Dashboard/Gunicorn logs:
+# Live logs
+sudo journalctl -u gtasks-dashboard -f
+
+# Recent logs
+sudo journalctl -u gtasks-dashboard -n 100
+
+# Check for errors
+sudo journalctl -u gtasks-dashboard --since "1 hour ago" | grep -i error
+
+Nginx logs:
+
+sudo tail -f /var/log/nginx/error.log
+sudo tail -f /var/log/nginx/access.log
+Application logs (if configured):
+
+# Check if app writes to file
+tail -f /var/www/html/gtasks/gtasks-terminal/logs/app.log
+

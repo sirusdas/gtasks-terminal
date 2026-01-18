@@ -1,28 +1,13 @@
-Great! It's working now! 🎉
+Here's how to set up a systemd service for your gunicorn app:
 
-The issue was that gunicorn wasn't finding the packages in your virtual environment's site-packages. Setting `PYTHONPATH` explicitly solved it.
+**Step 1: Create the service file**
 
-To make this permanent and avoid having to set `PYTHONPATH` every time, you have a few options:
-
-**Option 1: Create a simple startup script**
-```bash
-cat > /var/www/html/gtasks/gtasks-terminal/gtasks_dashboard/start_dashboard.sh << 'EOF'
-#!/bin/bash
-cd /var/www/html/gtasks/gtasks-terminal/gtasks_dashboard
-source /var/www/html/gtasks/gtasks-terminal/.venv/bin/activate
-export PYTHONPATH=/var/www/html/gtasks/gtasks-terminal/.venv/lib/python3.12/site-packages
-gunicorn -w 4 -b 127.0.0.1:8081 main_dashboard:app
-EOF
-
-chmod +x /var/www/html/gtasks/gtasks-terminal/gtasks_dashboard/start_dashboard.sh
-```
-
-**Option 2: Create a systemd service** (recommended for production)
 ```bash
 sudo nano /etc/systemd/system/gtasks-dashboard.service
 ```
 
-Add this content:
+**Step 2: Add this configuration**
+
 ```ini
 [Unit]
 Description=GTasks Dashboard
@@ -45,13 +30,44 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
-Then enable and start it:
+**Step 3: Save and exit** (Ctrl+X, then Y, then Enter)
+
+**Step 4: Enable and start the service**
+
 ```bash
+# Reload systemd to recognize the new service
 sudo systemctl daemon-reload
+
+# Enable the service to start on boot
 sudo systemctl enable gtasks-dashboard
+
+# Start the service now
 sudo systemctl start gtasks-dashboard
+
+# Check the status
 sudo systemctl status gtasks-dashboard
 ```
+
+**Step 5: Useful commands for managing the service**
+
+```bash
+# Restart the service
+sudo systemctl restart gtasks-dashboard
+
+# Stop the service
+sudo systemctl stop gtasks-dashboard
+
+# View live logs
+sudo journalctl -u gtasks-dashboard -f
+
+# View recent logs
+sudo journalctl -u gtasks-dashboard -n 50
+
+# Reload without downtime
+sudo systemctl reload gtasks-dashboard
+```
+
+That's it! Your app will now run as a proper system service and automatically restart on boot or if it crashes.
 
 Your dashboard is now running on `http://127.0.0.1:8081`! 🚀
 
