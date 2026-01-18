@@ -197,7 +197,7 @@ def init_dashboard_state():
     refresh_dashboard_cache()
 
 
-@api.route('/api/refresh', methods=['POST'])
+@api.route('/refresh', methods=['POST'])
 def api_refresh_cache():
     """Refresh the dashboard cache (called when refresh button is clicked)"""
     try:
@@ -223,7 +223,7 @@ def get_current_tasks():
     return []
 
 
-@api.route('/api/data')
+@api.route('/data')
 def api_data():
     """Get all dashboard data"""
     current_account_id = _dashboard_state.get('current_account')
@@ -252,7 +252,7 @@ def api_data():
     })
 
 
-@api.route('/api/tasks')
+@api.route('/tasks')
 def api_tasks():
     """Get tasks with optional filters"""
     tasks = get_current_tasks()
@@ -286,7 +286,7 @@ def api_tasks():
     })
 
 
-@api.route('/api/accounts')
+@api.route('/accounts')
 def api_accounts():
     """Get all accounts"""
     return jsonify({
@@ -295,7 +295,7 @@ def api_accounts():
     })
 
 
-@api.route('/api/accounts/<account_id>/switch', methods=['POST'])
+@api.route('/accounts/<account_id>/switch', methods=['POST'])
 def switch_account(account_id):
     """Switch to a different account"""
     if account_id in [a.id for a in _dashboard_state['accounts']]:
@@ -314,7 +314,7 @@ def switch_account(account_id):
     return jsonify({'success': False, 'error': 'Account not found'}), 404
 
 
-@api.route('/api/stats')
+@api.route('/stats')
 def api_stats():
     """Get dashboard statistics"""
     from models.task import DashboardStats, Task
@@ -335,7 +335,7 @@ def api_stats():
     })
 
 
-@api.route('/api/hierarchy')
+@api.route('/hierarchy')
 def api_hierarchy():
     """Get hierarchy visualization data"""
     from models.task import Task
@@ -347,7 +347,7 @@ def api_hierarchy():
     return jsonify(hierarchy_data)
 
 
-@api.route('/api/hierarchy/filtered')
+@api.route('/hierarchy/filtered')
 def api_hierarchy_filtered():
     """Get filtered hierarchy visualization data"""
     from models.task import Task
@@ -381,7 +381,7 @@ def api_hierarchy_filtered():
     return jsonify(hierarchy_data)
 
 
-@api.route('/api/tasks/<task_id>')
+@api.route('/tasks/<task_id>')
 def get_task(task_id):
     """Get a specific task"""
     for account_tasks in _dashboard_state['tasks'].values():
@@ -392,7 +392,7 @@ def get_task(task_id):
     return jsonify({'error': 'Task not found'}), 404
 
 
-@api.route('/api/health')
+@api.route('/health')
 def api_health():
     """Health check"""
     import datetime
@@ -409,7 +409,7 @@ def api_health():
 # ENHANCED API ENDPOINTS (Consolidated)
 # ============================================
 
-@api.route('/api/account-types')
+@api.route('/account-types')
 def api_account_types():
     """Get all account types"""
     return jsonify({
@@ -418,7 +418,7 @@ def api_account_types():
     })
 
 
-@api.route('/api/available-tags')
+@api.route('/available-tags')
 def api_available_tags():
     """Get all available tags"""
     return jsonify({
@@ -427,7 +427,7 @@ def api_available_tags():
     })
 
 
-@api.route('/api/priority-stats')
+@api.route('/priority-stats')
 def api_priority_stats():
     """Get priority statistics"""
     return jsonify({
@@ -436,7 +436,7 @@ def api_priority_stats():
     })
 
 
-@api.route('/api/tags/parse-filter', methods=['POST'])
+@api.route('/tags/parse-filter', methods=['POST'])
 def api_parse_tag_filter():
     """Parse tag filter string"""
     data = request.get_json()
@@ -449,7 +449,7 @@ def api_parse_tag_filter():
     })
 
 
-@api.route('/api/tasks/due-today')
+@api.route('/tasks/due-today')
 def api_tasks_due_today():
     """Get tasks due today"""
     due_today_tasks = data_manager.get_tasks_due_today()
@@ -459,7 +459,7 @@ def api_tasks_due_today():
     })
 
 
-@api.route('/api/settings', methods=['GET'])
+@api.route('/settings', methods=['GET'])
 def api_get_settings():
     """Get dashboard settings"""
     return jsonify({
@@ -468,7 +468,7 @@ def api_get_settings():
     })
 
 
-@api.route('/api/settings', methods=['POST'])
+@api.route('/settings', methods=['POST'])
 def api_update_settings():
     """Update dashboard settings"""
     data = request.get_json()
@@ -486,7 +486,7 @@ def api_update_settings():
         }), 500
 
 
-@api.route('/api/tasks/<task_id>/delete', methods=['POST'])
+@api.route('/tasks/<task_id>/delete', methods=['POST'])
 def api_delete_task(task_id):
     """Soft delete a task"""
     data = request.get_json() or {}
@@ -518,7 +518,7 @@ def api_delete_task(task_id):
         }), 500
 
 
-@api.route('/api/tasks/<task_id>/restore', methods=['POST'])
+@api.route('/tasks/<task_id>/restore', methods=['POST'])
 def api_restore_task(task_id):
     """Restore a deleted task"""
     data = request.get_json() or {}
@@ -543,7 +543,7 @@ def api_restore_task(task_id):
         }), 500
 
 
-@api.route('/api/deleted-tasks')
+@api.route('/deleted-tasks')
 def api_deleted_tasks():
     """Get deleted tasks"""
     account_id = request.args.get('account', _dashboard_state.get('current_account'))
@@ -554,7 +554,7 @@ def api_deleted_tasks():
     return jsonify({'success': True, 'data': deleted_tasks})
 
 
-@api.route('/api/reports/types')
+@api.route('/reports/types')
 def api_report_types():
     """Get available report types"""
     return jsonify({
@@ -563,7 +563,7 @@ def api_report_types():
     })
 
 
-@api.route('/api/reports/generate', methods=['POST'])
+@api.route('/reports/generate', methods=['POST'])
 def api_generate_report():
     """Generate a report"""
     data = request.get_json()
@@ -596,7 +596,7 @@ def api_generate_report():
         }), 500
 
 
-@api.route('/api/filter-tasks', methods=['POST'])
+@api.route('/filter-tasks', methods=['POST'])
 def api_filter_tasks():
     """Advanced task filtering"""
     data = request.get_json()
@@ -616,7 +616,7 @@ def api_filter_tasks():
         }), 500
 
 
-@api.route('/api/updates/last')
+@api.route('/updates/last')
 def api_last_update():
     """Get last update timestamp"""
     return jsonify({
@@ -628,7 +628,7 @@ def api_last_update():
     })
 
 
-@api.route('/api/tasks/<task_id>/complete', methods=['POST'])
+@api.route('/tasks/<task_id>/complete', methods=['POST'])
 def api_complete_task(task_id):
     """Mark a task as completed with background sync to Google Tasks"""
     from datetime import datetime
@@ -733,7 +733,7 @@ def api_complete_task(task_id):
 # ADVANCED SYNC ENDPOINTS
 # ============================================
 
-@api.route('/api/sync/advanced', methods=['POST'])
+@api.route('/sync/advanced', methods=['POST'])
 def api_advanced_sync():
     """
     Start an advanced sync operation.
@@ -781,7 +781,7 @@ def api_advanced_sync():
         }), 500
 
 
-@api.route('/api/sync/progress')
+@api.route('/sync/progress')
 def api_sync_progress():
     """
     Get the current sync progress.
@@ -821,7 +821,7 @@ def api_sync_progress():
         }), 500
 
 
-@api.route('/api/sync/complete', methods=['POST'])
+@api.route('/sync/complete', methods=['POST'])
 def api_sync_complete():
     """
     Wait for sync to complete and return final status.
@@ -868,7 +868,7 @@ def api_sync_complete():
         }), 500
 
 
-@api.route('/api/sync/cancel', methods=['POST'])
+@api.route('/sync/cancel', methods=['POST'])
 def api_sync_cancel():
     """
     Cancel a running sync operation.
@@ -910,7 +910,7 @@ def api_sync_cancel():
         }), 500
 
 
-@api.route('/api/sync/status')
+@api.route('/sync/status')
 def api_sync_status():
     """
     Get the status of all sync operations or check if a specific sync is running.
@@ -954,7 +954,7 @@ def api_sync_status():
 # REMOTE SYNC ENDPOINTS
 # ============================================
 
-@api.route('/api/remote/status')
+@api.route('/remote/status')
 def api_remote_status():
     """
     Get the status of remote sync feature.
@@ -987,7 +987,7 @@ def api_remote_status():
         }), 500
 
 
-@api.route('/api/remote/databases', methods=['GET'])
+@api.route('/remote/databases', methods=['GET'])
 def api_remote_databases():
     """
     List all configured remote databases.
@@ -1023,7 +1023,7 @@ def api_remote_databases():
         }), 500
 
 
-@api.route('/api/remote/databases', methods=['POST'])
+@api.route('/remote/databases', methods=['POST'])
 def api_add_remote_database():
     """
     Add a new remote database configuration.
@@ -1074,7 +1074,7 @@ def api_add_remote_database():
         }), 500
 
 
-@api.route('/api/remote/databases/<db_id>', methods=['DELETE'])
+@api.route('/remote/databases/<db_id>', methods=['DELETE'])
 def api_remove_remote_database(db_id):
     """
     Remove a remote database configuration.
@@ -1111,7 +1111,7 @@ def api_remove_remote_database(db_id):
         }), 500
 
 
-@api.route('/api/remote/databases/<db_id>/activate', methods=['POST'])
+@api.route('/remote/databases/<db_id>/activate', methods=['POST'])
 def api_activate_remote_database(db_id):
     """
     Activate a remote database for sync.
@@ -1148,7 +1148,7 @@ def api_activate_remote_database(db_id):
         }), 500
 
 
-@api.route('/api/remote/databases/<db_id>/deactivate', methods=['POST'])
+@api.route('/remote/databases/<db_id>/deactivate', methods=['POST'])
 def api_deactivate_remote_database(db_id):
     """
     Deactivate a remote database for sync.
@@ -1185,7 +1185,7 @@ def api_deactivate_remote_database(db_id):
         }), 500
 
 
-@api.route('/api/remote/sync', methods=['POST'])
+@api.route('/remote/sync', methods=['POST'])
 def api_remote_sync():
     """
     Perform a full sync with all active remote databases.
@@ -1265,7 +1265,7 @@ def api_remote_sync():
         }), 500
 
 
-@api.route('/api/remote/push', methods=['POST'])
+@api.route('/remote/push', methods=['POST'])
 def api_remote_push():
     """
     Push local changes to remote databases.
@@ -1321,7 +1321,7 @@ def api_remote_push():
         }), 500
 
 
-@api.route('/api/remote/pull', methods=['POST'])
+@api.route('/remote/pull', methods=['POST'])
 def api_remote_pull():
     """
     Pull remote changes to local database.
@@ -1377,7 +1377,7 @@ def api_remote_pull():
         }), 500
 
 
-@api.route('/api/remote/sync-command', methods=['POST'])
+@api.route('/remote/sync-command', methods=['POST'])
 def api_remote_sync_command():
     """
     Execute 'gtasks remote sync' command in a background thread.
@@ -1431,7 +1431,7 @@ def api_remote_sync_command():
         }), 500
 
 
-@api.route('/api/remote/tasks', methods=['GET'])
+@api.route('/remote/tasks', methods=['GET'])
 def api_remote_load_tasks():
     """
     Load tasks from remote database when local DB is missing.

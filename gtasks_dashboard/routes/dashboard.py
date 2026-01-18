@@ -8,7 +8,7 @@ from routes.api import init_dashboard_state
 # Base path for subpath deployment
 BASE_PATH = '/gtasks/gtasks-terminal/gtasks_dashboard'
 
-dashboard = Blueprint('dashboard', __name__, url_prefix=BASE_PATH)
+dashboard = Blueprint('dashboard', __name__)
 
 # Initialize dashboard state
 init_dashboard_state()
@@ -31,31 +31,31 @@ def render_dashboard(view='dashboard', account=None, base_path=None):
     return render_template('dashboard.html', default_view=view, default_account=account, base_path=path)
 
 
-@dashboard.route('/')
+@dashboard.route(f'{BASE_PATH}/')
 def index():
     """Main dashboard page - defaults to dashboard view"""
     return render_dashboard(view='dashboard')
 
 
-@dashboard.route('/dashboard')
+@dashboard.route(f'{BASE_PATH}/dashboard')
 def dashboard_page():
     """Dashboard page - explicit route for dashboard view"""
     return render_dashboard(view='dashboard')
 
 
-@dashboard.route('/hierarchy')
+@dashboard.route(f'{BASE_PATH}/hierarchy')
 def hierarchy_page():
     """Hierarchy page - shows hierarchical task visualization"""
     return render_dashboard(view='hierarchy')
 
 
-@dashboard.route('/tasks')
+@dashboard.route(f'{BASE_PATH}/tasks')
 def tasks_page():
     """Tasks page - shows task management view"""
     return render_dashboard(view='tasks')
 
 
-@dashboard.route('/favicon.ico')
+@dashboard.route(f'{BASE_PATH}/favicon.ico')
 def favicon():
     """Serve favicon as SVG data URI"""
     svg_favicon = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
@@ -68,7 +68,7 @@ def favicon():
     )
 
 
-@dashboard.route('/sw.js')
+@dashboard.route(f'{BASE_PATH}/sw.js')
 def service_worker():
     """Serve service worker"""
     return send_from_directory('static', 'sw.js', mimetype='application/javascript')
