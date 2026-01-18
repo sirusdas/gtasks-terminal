@@ -4,10 +4,6 @@
 
 This document outlines the comprehensive implementation plan for adding bidirectional sync capabilities between local SQLite database, remote Turso (libSQL) databases, and Google Tasks API.
 
-**Provided Credentials:**
-- **URL:** `libsql://gtaskssqllite-sirusdas.aws-ap-south-1.turso.io`
-- **Token:** `eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3Njg2NjAwNjksImlkIjoiOGUxMWMyODgtODQzYy00ODMwLTgyMzktZjY2OTdhYjIxMTUwIiwicmlkIjoiMDdiN2FkZmUtYzNiOC00MDk0LThkODMtYjAyNjI2YjE5NzM1In0.9bdu99nd5Xq851Ng_DlThwJyqu150QPBc53l9DfUr3md4G4GXFu6PktLpvwbqMf-qin8Vk1qGw4iua7h3s-ZCQ`
-
 ---
 
 ## Architecture
@@ -1690,8 +1686,8 @@ done
 ## Appendix: Testing with Provided Credentials
 
 **Connection Details:**
-- **URL:** `libsql://gtaskssqllite-sirusdas.aws-ap-south-1.turso.io`
-- **Token:** `eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3Njg2NjAwNjksImlkIjoiOGUxMWMyODgtODQzYy00ODMwLTgyMzktZjY2OTdhYjIxMTUwIiwicmlkIjoiMDdiN2FkZmUtYzNiOC00MDk0LThkODMtYjAyNjI2YjE5NzM1In0.9bdu99nd5Xq851Ng_DlThwJyqu150QPBc53l9DfUr3md4G4GXFu6PktLpvwbqMf-qin8Vk1qGw4iua7h3s-ZCQ`
+- **URL:** `libsql://test.turso.io`
+- **Token:** `testss`
 
 **Test Commands:**
 ```bash
@@ -1699,7 +1695,7 @@ done
 export GTASKS_TURSO_TOKEN="eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9..."
 
 # Add remote database
-python -m gtasks_cli remote add libsql://gtaskssqllite-sirusdas.aws-ap-south-1.turso.io "Test DB"
+python -m gtasks_cli remote add libsql://test.turso.io "Test DB"
 
 # List remote databases
 python -m gtasks_cli remote list
