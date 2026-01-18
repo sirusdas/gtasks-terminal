@@ -52,6 +52,13 @@ class DataManager:
     
     def _detect_gtasks_path(self) -> Optional[Path]:
         """Detect GTasks CLI path with multiple fallback locations"""
+        # Check GTASKS_CONFIG_DIR environment variable first (for remote sync)
+        if os.environ.get('GTASKS_CONFIG_DIR'):
+            config_path = Path(os.environ['GTASKS_CONFIG_DIR'])
+            if config_path.exists():
+                print(f"[DataManager] Using GTASKS_CONFIG_DIR: {config_path}")
+                return config_path
+        
         # Check multiple possible locations
         possible_paths = [
             Path.home() / '.gtasks',                    # ~/.gtasks
