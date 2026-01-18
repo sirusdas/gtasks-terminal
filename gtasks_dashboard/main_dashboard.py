@@ -36,8 +36,8 @@ from routes.dashboard import BASE_PATH
 from routes.api import api, init_dashboard_state
 from routes.dashboard import dashboard
 
-# Set URL prefix for API blueprint
-api.url_prefix = f'{BASE_PATH}/api'
+# Set URL prefix for API blueprint (routes in api.py already have /api prefix, so just use BASE_PATH)
+api.url_prefix = BASE_PATH
 
 app.register_blueprint(api)
 app.register_blueprint(dashboard)
