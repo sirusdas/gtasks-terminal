@@ -94,6 +94,86 @@ def _sync_task_to_google_background(task_id: str, account_id: str):
             traceback.print_exc()
 
 
+def _sync_task_to_turso_background(task_id: str, account_id: str):
+    """Background task to sync task completion to Turso Remote DB (non-blocking)"""
+    try:
+        print(f'[Turso Background Sync] Starting sync for task {task_id} (account: {account_id})')
+        
+        # Import required modules
+        import sys
+        from pathlib import Path
+        
+        # Add gtasks_cli to path
+        gtasks_cli_path = Path(__file__).parent.parent.parent / 'gtasks_cli' / 'src'
+        if str(gtasks_cli_path) not in sys.path:
+            sys.path.insert(0, str(gtasks_cli_path))
+        
+        from gtasks_cli.storage.sqlite_storage import SQLiteStorage
+        from gtasks_cli.storage.sync_config_storage import SyncConfigStorage
+        from gtasks_cli.storage.libsql_storage import LibSQLStorage
+        
+        # Initialize storage and load the task
+        storage = SQLiteStorage(account_name=account_id)
+        task_dicts = storage.load_tasks()
+        task = None
+        for t in task_dicts:
+            if t.get('id') == task_id:
+                task = t
+                break
+        
+        if not task:
+            print(f'[Turso Background Sync] Task {task_id} not found in local storage')
+            return
+        
+        # Get active remote databases
+        config_storage = SyncConfigStorage(account_name=account_id)
+        active_dbs = config_storage.get_active_remote_dbs()
+        
+        if not active_dbs:
+            print(f'[Turso Background Sync] No active remote databases configured')
+            return
+        
+        # Push the task to each active remote DB
+        for db_config in active_dbs:
+            try:
+                remote_storage = LibSQLStorage(url=db_config.url, account_name=account_id)
+                # Get existing remote tasks
+                remote_tasks = remote_storage.load_tasks()
+                
+                # Update or add the task
+                updated_remote_tasks = []
+                task_updated = False
+                for rt in remote_tasks:
+                    if rt.get('id') == task_id:
+                        # Update existing task with completed status
+                        rt['status'] = task['status']
+                        rt['completed_at'] = task['completed_at']
+                        rt['modified_at'] = task.get('modified_at', task['completed_at'])
+                        task_updated = True
+                    updated_remote_tasks.append(rt)
+                
+                if not task_updated:
+                    # Task doesn't exist in remote, add it
+                    updated_remote_tasks.append(task)
+                
+                # Save updated tasks
+                remote_storage.save_tasks(updated_remote_tasks)
+                remote_storage.close()
+                
+                # Update last synced timestamp
+                config_storage.update_last_synced(db_config.url)
+                
+                print(f'[Turso Background Sync] ✅ Synced task {task_id} to {db_config.name}')
+                
+            except Exception as e:
+                print(f'[Turso Background Sync] ❌ Error syncing to {db_config.name}: {e}')
+                
+    except Exception as e:
+        print(f'[Turso Background Sync] ❌ Unexpected error: {e}')
+        import traceback
+        traceback.print_exc()
+
+
 def refresh_dashboard_cache():
     """Refresh the in-memory dashboard cache from database"""
     print('[Cache] Refreshing dashboard cache...')
@@ -619,6 +699,16 @@ def api_complete_task(task_id):
                     )
                     sync_thread.start()
                     print(f'[API] Background sync thread started for task {task_id}')
+                
+                # Trigger background sync to Turso Remote DB (non-blocking)
+                print(f'[API] Starting background sync to Turso Remote DB...')
+                turso_sync_thread = threading.Thread(
+                    target=_sync_task_to_turso_background,
+                    args=(task_id, acc_id),
+                    daemon=True
+                )
+                turso_sync_thread.start()
+                print(f'[API] Background Turso sync thread started for task {task_id}')
                 
                 break
         
