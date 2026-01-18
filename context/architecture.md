@@ -196,3 +196,40 @@ Response/View Rendering
 - **CLI**: `python -m gtasks_cli`
 - **Web**: `python gtasks_dashboard/main_dashboard.py`
 - **AI Sync**: `ctx save` (Run this before `git push`)
+
+---
+
+## 🐛 Route Prefix Bug Fix (2024-01-18)
+
+### Problem
+API routes were returning 404 errors with double `/api/api/` in the path:
+```
+Expected: /gtasks/gtasks-terminal/gtasks_dashboard/api/data
+Actual:   /gtasks/gtasks-terminal/gtasks_dashboard/api/api/data
+```
+
+### Root Cause
+- Routes in `routes/api.py` are defined with `@api.route('/api/data')` (already include `/api`)
+- `main_dashboard.py` set `api.url_prefix = f'{BASE_PATH}/api'`
+- Combined: `BASE_PATH` + `/api` + `/api/data` = double `/api/api/`
+
+### Solution
+Changed line 40 in `main_dashboard.py`:
+```python
+# Before (buggy):
+api.url_prefix = f'{BASE_PATH}/api'
+
+# After (fixed):
+api.url_prefix = BASE_PATH
+```
+
+### URL Path Structure After Fix
+| Environment | BASE_PATH | API Endpoint | Full URL |
+|-------------|-----------|--------------|----------|
+| Production | `/gtasks/gtasks-terminal/gtasks_dashboard` | `/api/data` | `/gtasks/gtasks-terminal/gtasks_dashboard/api/data` |
+| Local Dev | `/api` | `/api/data` | `/api/data` |
+
+### Key Files
+- `gtasks_dashboard/main_dashboard.py`: Flask app initialization, BASE_PATH configuration
+- `gtasks_dashboard/routes/api.py`: API route definitions (already include `/api` prefix)
+- `gtasks_dashboard/nginx.conf`: Reverse proxy configuration for subpath deployment
