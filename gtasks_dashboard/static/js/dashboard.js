@@ -511,7 +511,8 @@ export async function syncAndRefresh() {
 export async function syncRemoteDb() {
     console.log('[Dashboard] Sync External DB - starting background command...');
     try {
-        const response = await fetch('/api/remote/sync-command', {
+        const basePath = window.GTASKS_BASE_PATH || '';
+        const response = await fetch(`${basePath}/api/remote/sync-command`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

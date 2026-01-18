@@ -3,6 +3,10 @@
  * Manages remote sync status and operations in the dashboard header.
  */
 
+// Get base path from global variable (set by Flask template)
+// Falls back to empty string for local development
+const BASE_PATH = typeof window.GTASKS_BASE_PATH !== 'undefined' ? window.GTASKS_BASE_PATH : '';
+
 const SyncStatus = {
     state: {
         connectedDBs: [],
@@ -11,6 +15,13 @@ const SyncStatus = {
         currentSyncId: null,
         localAvailable: true,
         error: null
+    },
+
+    /**
+     * Get the API URL with base path
+     */
+    getApiUrl(path) {
+        return `${BASE_PATH}${path}`;
     },
 
     /**
@@ -33,7 +44,7 @@ const SyncStatus = {
      */
     async loadStatus() {
         try {
-            const response = await fetch('/api/remote/status');
+            const response = await fetch(this.getApiUrl('/api/remote/status'));
             const data = await response.json();
             
             this.state.connectedDBs = data.connected_dbs || [];
@@ -76,7 +87,7 @@ const SyncStatus = {
             this.state.syncInProgress = true;
             this.render();
             
-            const response = await fetch('/api/remote/sync', {
+            const response = await fetch(this.getApiUrl('/api/remote/sync'), {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({})
@@ -103,7 +114,7 @@ const SyncStatus = {
         if (!this.state.currentSyncId) return;
         
         try {
-            const response = await fetch(`/api/remote/sync/progress/${this.state.currentSyncId}`);
+            const response = await fetch(this.getApiUrl(`/api/remote/sync/progress/${this.state.currentSyncId}`));
             const progress = await response.json();
             
             this.renderProgress(progress);
@@ -145,7 +156,7 @@ const SyncStatus = {
      */
     async addRemote(url, name) {
         try {
-            const response = await fetch('/api/remote/add', {
+            const response = await fetch(this.getApiUrl('/api/remote/add'), {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ url, name })
@@ -174,7 +185,7 @@ const SyncStatus = {
         }
         
         try {
-            const response = await fetch('/api/remote/remove', {
+            const response = await fetch(this.getApiUrl('/api/remote/remove'), {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ url })

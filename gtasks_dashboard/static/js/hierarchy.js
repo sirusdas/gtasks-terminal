@@ -37,7 +37,8 @@ let hierarchyData = {};
  */
 async function loadHierarchy() {
     try {
-        const response = await fetch('/api/hierarchy');
+        const basePath = window.GTASKS_BASE_PATH || '';
+        const response = await fetch(`${basePath}/api/hierarchy`);
         hierarchyData = await response.json();
         renderHierarchy(hierarchyData);
         
