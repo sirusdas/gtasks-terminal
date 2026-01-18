@@ -19,6 +19,7 @@ User=root
 WorkingDirectory=/var/www/html/gtasks/gtasks-terminal/gtasks_dashboard
 Environment="PATH=/var/www/html/gtasks/gtasks-terminal/.venv/bin"
 Environment="PYTHONPATH=/var/www/html/gtasks/gtasks-terminal/.venv/lib/python3.12/site-packages"
+Environment="GTASKS_CONFIG_DIR=/root/.gtasks"
 ExecStart=/var/www/html/gtasks/gtasks-terminal/.venv/bin/gunicorn -w 4 -b 127.0.0.1:8081 main_dashboard:app
 ExecReload=/bin/kill -s HUP $MAINPID
 KillMode=mixed

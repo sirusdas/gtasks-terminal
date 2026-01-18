@@ -107,3 +107,6 @@ Application logs (if configured):
 # Check if app writes to file
 tail -f /var/www/html/gtasks/gtasks-terminal/logs/app.log
 
+
+# active env
+source .venv/bin/activate
