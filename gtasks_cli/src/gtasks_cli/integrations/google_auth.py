@@ -138,8 +138,15 @@ class GoogleAuthManager:
                     flow = InstalledAppFlow.from_client_secrets_file(
                         self.credentials_file, self.SCOPES)
                     
-                    # Run local server for the OAuth flow
-                    creds = flow.run_local_server(port=0)
+                    # Run local server for the OAuth flow with fallback
+                    try:
+                        creds = flow.run_local_server(port=0)
+                    except Exception as browser_err:
+                        if "browser" in str(browser_err).lower():
+                            logger.info("Could not launch browser automatically; displaying auth URL instead.")
+                            creds = flow.run_local_server(port=0, open_browser=False)
+                        else:
+                            raise
                 except Exception as e:
                     logger.error(f"Authentication flow failed: {e}")
                     raise

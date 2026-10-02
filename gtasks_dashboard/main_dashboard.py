@@ -556,7 +556,7 @@ def get_enabled_features() -> list:
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8081))  # Default to 8081
+    port = int(os.environ.get('PORT', 48275))  # Default to 48275 (GTASK)
     host = os.environ.get('HOST', '0.0.0.0')
     
     print("=" * 50)

@@ -6,7 +6,7 @@ Centralized configuration and constants
 
 # Dashboard Configuration
 DASHBOARD_CONFIG = {
-    'port': 8081,
+    'port': 48275,
     'debug': False,
     'host': '0.0.0.0',
     'auto_refresh_interval': 60,  # seconds
