@@ -2,11 +2,14 @@
 
 ## Web Dashboard (Browser Interface)
 
-- **URL**: [http://gtasks.com:48275](http://gtasks.com:48275) *(or [http://localhost:48275](http://localhost:48275) / [http://gtasks.local:48275](http://gtasks.local:48275))*
+- **URL**: [http://gtasks.com](http://gtasks.com) *(Direct portless via loopback redirect, or [http://gtasks.com:48275](http://gtasks.com:48275) / [http://localhost:48275](http://localhost:48275))*
+- **Portless Setup**:
+  - Loopback IP: `127.0.0.48` in `/etc/hosts` (`127.0.0.48 gtasks.com gtasks.local`)
+  - Redirect: `127.0.0.48:80 ➔ 48275` via firewalld / iptables NAT (`~/.dotfiles/enable-gtasks-port80.sh`)
+  - Benefit: Isolates port 80 to `127.0.0.48`, so `127.0.0.1:80` stays 100% free for other projects.
 - **Port**: `48275` (mnemonic: spells `GTASK` on keypad: 4-8-2-7-5, avoiding standard web ports)
-- **Hosts Entry**: `127.0.0.1 gtasks.com gtasks.local` in `/etc/hosts`
 - **Shell Aliases**:
-  - `gtasks-web` → opens `http://gtasks.com:48275` in default browser
+  - `gtasks-web` → opens `http://gtasks.com` in default browser
   - `gtasks-ui` → alias to `gtasks-web`
 - **Systemd User Service**: `gtasks-dashboard.service`
   - Location: `~/.config/systemd/user/gtasks-dashboard.service`
@@ -34,6 +37,6 @@
 ## Multi-Tier Architecture
 
 1. **Local CLI & DB**: `gtasks-cli` operating on SQLite database (`~/.gtasks/tasks.db`).
-2. **Web Dashboard**: Flask / Gunicorn REST & UI server at `http://gtasks.com:48275` with interactive D3.js visualization, multi-account filters, and priority metrics.
+2. **Web Dashboard**: Flask / Gunicorn REST & UI server at `http://gtasks.com` with interactive D3.js visualization, multi-account filters, and priority metrics.
 3. **Cloud Remote Sync (Turso)**: Ready for multi-device sync via Turso libSQL (`gtasks remote add <url> <token>`).
 4. **Google Tasks API**: Upstream sync target via `gtasks advanced-sync`.
