@@ -15,4 +15,4 @@ matplotlib>=3.7.0             # Charts (optional)
 prompt-toolkit>=3.0.0         # Advanced prompts
 colorama>=0.4.6               # Cross-platform colors
 litellm>=1.42.0               # AI API library
-mcp>=1.0.0                    # Model Context Protocol server
+mcp>=1.0.0,<2.0.0             # Model Context Protocol server

@@ -42,7 +42,7 @@ dependencies = [
     "prompt-toolkit>=3.0.0",
     "colorama>=0.4.6",
     "litellm>=1.42.0",
-    "mcp>=1.0.0",
+    "mcp>=1.0.0,<2.0.0",
 ]
 
 [project.optional-dependencies]
