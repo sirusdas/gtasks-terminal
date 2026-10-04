@@ -6,7 +6,7 @@ Uses the new `libsql` package (DB-API style) instead of deprecated `libsql-clien
 """
 import json
 import os
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
@@ -174,11 +174,21 @@ class LibSQLStorage:
         try:
             logger.debug(f"Saving {len(tasks)} tasks to remote database")
             
+            def _to_iso(val):
+                if val is None:
+                    return None
+                if isinstance(val, (datetime, date)):
+                    return val.isoformat()
+                return str(val)
+
             cursor = self._conn.cursor()
             for task in tasks:
                 # Serialize list fields to JSON
-                tags_json = json.dumps(task.get('tags', []))
-                dependencies_json = json.dumps(task.get('dependencies', []))
+                raw_tags = task.get('tags', [])
+                tags_json = json.dumps(raw_tags) if isinstance(raw_tags, list) else (raw_tags or '[]')
+                
+                raw_deps = task.get('dependencies', [])
+                dependencies_json = json.dumps(raw_deps) if isinstance(raw_deps, list) else (raw_deps or '[]')
                 
                 # Get or set sync metadata
                 current_time = datetime.utcnow().isoformat()
@@ -192,10 +202,10 @@ class LibSQLStorage:
                         last_synced_at, source, sync_version
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
-                    task.get('id'),
-                    task.get('title'),
+                    str(task.get('id')) if task.get('id') is not None else None,
+                    str(task.get('title')) if task.get('title') is not None else '',
                     task.get('description'),
-                    task.get('due'),
+                    _to_iso(task.get('due')),
                     task.get('priority', 'medium'),
                     task.get('status', 'pending'),
                     task.get('project'),
@@ -203,12 +213,12 @@ class LibSQLStorage:
                     task.get('notes'),
                     dependencies_json,
                     task.get('recurrence_rule'),
-                    task.get('created_at'),
-                    task.get('modified_at'),
-                    task.get('completed_at'),
+                    _to_iso(task.get('created_at')),
+                    _to_iso(task.get('modified_at')),
+                    _to_iso(task.get('completed_at')),
                     task.get('estimated_duration'),
                     task.get('actual_duration'),
-                    task.get('is_recurring', False),
+                    int(bool(task.get('is_recurring'))),
                     task.get('recurring_task_id'),
                     task.get('tasklist_id'),
                     current_time,
@@ -221,7 +231,7 @@ class LibSQLStorage:
                     cursor.execute('''
                         INSERT OR REPLACE INTO task_lists (task_id, list_name)
                         VALUES (?, ?)
-                    ''', (task.get('id'), task.get('list_name')))
+                    ''', (str(task.get('id')), str(task.get('list_name'))))
             
             self._conn.commit()
             cursor.close()
