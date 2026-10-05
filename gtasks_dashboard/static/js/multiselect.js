@@ -290,20 +290,32 @@ export function getListsWithCounts(tasks) {
         .sort((a, b) => b.count - a.count);
 }
 
+// Validate if a tag string is clean (not a JSON blob, newline, quote, or overly long text)
+export function isValidTag(tag) {
+    if (!tag || typeof tag !== 'string') return false;
+    const t = tag.trim();
+    if (t.length === 0 || t.length > 40) return false;
+    if (/[\{\}\"':,\r\n\t]/.test(t)) return false;
+    return true;
+}
+
 // Get all unique tags from tasks
 export function getUniqueTags(tasks) {
     if (!tasks || !Array.isArray(tasks)) return [];
     
     const tags = new Set();
+    const addCleanTag = (t) => {
+        if (isValidTag(t)) tags.add(t.trim().toLowerCase());
+    };
     tasks.forEach(task => {
         // Collect all tags from hybrid_tags
         if (task.hybrid_tags) {
-            task.hybrid_tags.bracket?.forEach(t => tags.add(t));
-            task.hybrid_tags.hash?.forEach(t => tags.add(t));
-            task.hybrid_tags.user?.forEach(t => tags.add(t));
+            task.hybrid_tags.bracket?.forEach(addCleanTag);
+            task.hybrid_tags.hash?.forEach(addCleanTag);
+            task.hybrid_tags.user?.forEach(addCleanTag);
         }
         // Also check regular tags
-        task.tags?.forEach(t => tags.add(t));
+        task.tags?.forEach(addCleanTag);
     });
     
     return Array.from(tags).sort();
@@ -314,26 +326,24 @@ export function getTagsWithCounts(tasks) {
     if (!tasks || !Array.isArray(tasks)) return [];
     
     const tagCounts = {};
+    const countTag = (t) => {
+        if (isValidTag(t)) {
+            const clean = t.trim().toLowerCase();
+            tagCounts[clean] = (tagCounts[clean] || 0) + 1;
+        }
+    };
     
     tasks.forEach(task => {
         // Only count pending tasks (status === 'pending')
         if (task.status === 'pending') {
             // Collect all tags from hybrid_tags
             if (task.hybrid_tags) {
-                task.hybrid_tags.bracket?.forEach(t => {
-                    tagCounts[t] = (tagCounts[t] || 0) + 1;
-                });
-                task.hybrid_tags.hash?.forEach(t => {
-                    tagCounts[t] = (tagCounts[t] || 0) + 1;
-                });
-                task.hybrid_tags.user?.forEach(t => {
-                    tagCounts[t] = (tagCounts[t] || 0) + 1;
-                });
+                task.hybrid_tags.bracket?.forEach(countTag);
+                task.hybrid_tags.hash?.forEach(countTag);
+                task.hybrid_tags.user?.forEach(countTag);
             }
             // Also check regular tags
-            task.tags?.forEach(t => {
-                tagCounts[t] = (tagCounts[t] || 0) + 1;
-            });
+            task.tags?.forEach(countTag);
         }
     });
     
@@ -385,17 +395,20 @@ export function getFilteredListsByTags(tasks, selectedTags) {
     
     // Filter tasks to only those with selected tags
     const filteredTasks = tasks.filter(task => {
-        // Collect all tags from task
+        // Collect all valid tags from task
         const taskTags = new Set();
+        const addCleanTag = (t) => {
+            if (isValidTag(t)) taskTags.add(t.trim().toLowerCase());
+        };
         if (task.hybrid_tags) {
-            task.hybrid_tags.bracket?.forEach(t => taskTags.add(t));
-            task.hybrid_tags.hash?.forEach(t => taskTags.add(t));
-            task.hybrid_tags.user?.forEach(t => taskTags.add(t));
+            task.hybrid_tags.bracket?.forEach(addCleanTag);
+            task.hybrid_tags.hash?.forEach(addCleanTag);
+            task.hybrid_tags.user?.forEach(addCleanTag);
         }
-        task.tags?.forEach(t => taskTags.add(t));
+        task.tags?.forEach(addCleanTag);
         
         // Check if task has any of the selected tags
-        return [...taskTags].some(tag => selectedTags.includes(tag));
+        return [...taskTags].some(tag => selectedTags.map(s => s.toLowerCase()).includes(tag));
     });
     
     // Get lists with counts from filtered tasks
@@ -479,17 +492,20 @@ export function getFilteredListsByTagsAndCriteria(tasks, selectedTags, searchTex
     
     // Further filter tasks to only those with selected tags
     filteredTasks = filteredTasks.filter(task => {
-        // Collect all tags from task
+        // Collect all valid tags from task
         const taskTags = new Set();
+        const addCleanTag = (t) => {
+            if (isValidTag(t)) taskTags.add(t.trim().toLowerCase());
+        };
         if (task.hybrid_tags) {
-            task.hybrid_tags.bracket?.forEach(t => taskTags.add(t));
-            task.hybrid_tags.hash?.forEach(t => taskTags.add(t));
-            task.hybrid_tags.user?.forEach(t => taskTags.add(t));
+            task.hybrid_tags.bracket?.forEach(addCleanTag);
+            task.hybrid_tags.hash?.forEach(addCleanTag);
+            task.hybrid_tags.user?.forEach(addCleanTag);
         }
-        task.tags?.forEach(t => taskTags.add(t));
+        task.tags?.forEach(addCleanTag);
         
         // Check if task has any of the selected tags
-        return [...taskTags].some(tag => selectedTags.includes(tag));
+        return [...taskTags].some(tag => selectedTags.map(s => s.toLowerCase()).includes(tag));
     });
     
     // Get lists with counts from filtered tasks

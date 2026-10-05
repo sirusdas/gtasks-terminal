@@ -59,6 +59,19 @@ export function createTaskCard(task, options = {}) {
         </div>
     `;
 
+    // Quick View button
+    const quickViewBtnHtml = `
+        <div class="task-quick-view-btn" onclick="openQuickView('${task.id}')" title="Quick view task details">
+            <i class="fas fa-eye"></i>
+        </div>
+    `;
+
+    const compactQuickViewBtnHtml = `
+        <button class="compact-action-btn quick-view-btn" onclick="openQuickView('${task.id}'); event.stopPropagation();" title="Quick view task details">
+            <i class="fas fa-eye"></i>
+        </button>
+    `;
+
     // Edit button
     const editBtnHtml = `
         <div class="task-edit-btn" onclick="openEditModal('${task.id}')" title="Edit task">
@@ -72,7 +85,8 @@ export function createTaskCard(task, options = {}) {
             <div class="node-task-header">
                 ${completeBtnHtml}
                 <span class="priority-icon">🔸</span>
-                <div class="node-task-title">${task.title}</div>
+                <div class="node-task-title" onclick="openQuickView('${task.id}')" style="cursor: pointer;" title="Quick view">${task.title}</div>
+                ${quickViewBtnHtml}
                 ${dateStatusBadge}
             </div>
             <div class="node-task-dates">${compactDates}</div>
@@ -98,7 +112,7 @@ export function createTaskCard(task, options = {}) {
             </div>
             <div class="compact-body" onclick="window.toggleCompactDetails('${task.id}')">
                 <div class="compact-title-row">
-                    <span class="compact-title ${isCompleted ? 'line-through' : ''}">${task.title}</span>
+                    <span class="compact-title ${isCompleted ? 'line-through' : ''}" onclick="openQuickView('${task.id}'); event.stopPropagation();" style="cursor: pointer;" title="Quick view details">${task.title}</span>
                     <span class="compact-priority-indicator ${priorityClass}" title="Priority: ${task.calculated_priority || task.priority}">${priorityIcon}</span>
                 </div>
                 <div class="compact-meta-row">
@@ -119,6 +133,7 @@ export function createTaskCard(task, options = {}) {
                 </div>
             </div>
             <div class="compact-actions">
+                ${compactQuickViewBtnHtml}
                 ${editBtnHtml}
                 <button class="compact-expand-btn" onclick="window.toggleCompactDetails('${task.id}'); event.stopPropagation();" title="Toggle details">
                     <i class="fas fa-chevron-down" id="compact-chevron-${task.id}"></i>
@@ -130,6 +145,7 @@ export function createTaskCard(task, options = {}) {
         card.innerHTML = `
             <div class="task-card-actions">
                 ${completeBtnHtml}
+                ${quickViewBtnHtml}
                 ${editBtnHtml}
             </div>
             <div class="task-card-header">
@@ -137,7 +153,7 @@ export function createTaskCard(task, options = {}) {
                 <span class="task-status-badge ${statusClass}">${task.status}</span>
                 ${dateStatusBadge}
             </div>
-            <h4 class="task-card-title">${task.title}</h4>
+            <h4 class="task-card-title" onclick="openQuickView('${task.id}')" style="cursor: pointer;" title="Quick view details">${task.title}</h4>
             <div class="task-card-dates">${compactDates}</div>
             ${task.description ? `<p class="task-card-description">${task.description}</p>` : ''}
             ${tagsDisplay}

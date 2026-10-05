@@ -530,7 +530,8 @@ def api_create_task():
 
     import re
     import json
-    extracted_tags = re.findall(r'\[([^\]]+)\]', f"{title} {notes}")
+    raw_tags = re.findall(r'\[([^\]\r\n]+)\](?!\()', f"{title} {notes}")
+    extracted_tags = [t.strip().lower() for t in raw_tags if t.strip() and len(t.strip()) <= 40 and not any(c in t for c in '{}"\':,\r\n\t')]
 
     task_id = str(uuid.uuid4())
     now_iso = datetime.now().isoformat()
@@ -694,7 +695,8 @@ def update_task(task_id):
         target_task['description'] = data['description']
 
     import re
-    extracted_tags = re.findall(r'\[([^\]]+)\]', f"{target_task.get('title', '')} {target_task.get('notes', '')}")
+    raw_tags = re.findall(r'\[([^\]\r\n]+)\](?!\()', f"{target_task.get('title', '')} {target_task.get('notes', '')}")
+    extracted_tags = [t.strip().lower() for t in raw_tags if t.strip() and len(t.strip()) <= 40 and not any(c in t for c in '{}"\':,\r\n\t')]
     target_task['tags'] = extracted_tags
 
     target_task['modified_at'] = datetime.now().isoformat()

@@ -1,8 +1,6 @@
 import click
 from gtasks_cli.utils.logger import setup_logger
 from gtasks_cli.core.task_manager import TaskManager
-from gtasks_cli.ai.client import AIClient
-
 logger = setup_logger(__name__)
 
 @click.group()
@@ -28,6 +26,7 @@ def ask(ctx, query):
     )
     
     # Initialize AI Client
+    from gtasks_cli.ai.client import AIClient
     client = AIClient(task_manager, account_name)
     
     click.echo("Thinking...")

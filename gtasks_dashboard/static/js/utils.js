@@ -152,33 +152,47 @@ export function getNotesSection(task) {
 }
 
 /**
+ * Validate if a tag string is clean (not a JSON blob, newline, quote, or overly long text)
+ * @param {string} tag
+ * @returns {boolean}
+ */
+export function isValidTag(tag) {
+    if (!tag || typeof tag !== 'string') return false;
+    const t = tag.trim();
+    if (t.length === 0 || t.length > 40) return false;
+    if (/[\{\}\"':,\r\n\t]/.test(t)) return false;
+    return true;
+}
+
+/**
  * Generate tags display HTML for a task
  * @param {Object} task - The task object
  * @returns {string} - The tags HTML
  */
 export function getTagsDisplay(task) {
-    const tags = [];
+    const rawTags = [];
     
     // Add bracket tags
     if (task.hybrid_tags && task.hybrid_tags.bracket) {
-        tags.push(...task.hybrid_tags.bracket);
+        rawTags.push(...task.hybrid_tags.bracket);
     }
     
     // Add hash tags
     if (task.hybrid_tags && task.hybrid_tags.hash) {
-        tags.push(...task.hybrid_tags.hash);
+        rawTags.push(...task.hybrid_tags.hash);
     }
     
     // Add user tags
     if (task.hybrid_tags && task.hybrid_tags.user) {
-        tags.push(...task.hybrid_tags.user);
+        rawTags.push(...task.hybrid_tags.user);
     }
     
     // Add regular tags
     if (task.tags) {
-        tags.push(...task.tags);
+        rawTags.push(...task.tags);
     }
     
+    const tags = rawTags.filter(isValidTag);
     if (tags.length === 0) return '';
     
     const tagsHtml = tags.map(tag => `<span class="task-tag">[${tag}]</span>`).join(' ');
@@ -191,19 +205,19 @@ export function getTagsDisplay(task) {
  * @returns {Array} - Array of all tags
  */
 export function getAllTags(task) {
-    const tags = [];
+    const rawTags = [];
     
     if (task.hybrid_tags) {
-        if (task.hybrid_tags.bracket) tags.push(...task.hybrid_tags.bracket);
-        if (task.hybrid_tags.hash) tags.push(...task.hybrid_tags.hash);
-        if (task.hybrid_tags.user) tags.push(...task.hybrid_tags.user);
+        if (task.hybrid_tags.bracket) rawTags.push(...task.hybrid_tags.bracket);
+        if (task.hybrid_tags.hash) rawTags.push(...task.hybrid_tags.hash);
+        if (task.hybrid_tags.user) rawTags.push(...task.hybrid_tags.user);
     }
     
     if (task.tags) {
-        tags.push(...task.tags);
+        rawTags.push(...task.tags);
     }
     
-    return tags;
+    return rawTags.filter(isValidTag);
 }
 
 /**

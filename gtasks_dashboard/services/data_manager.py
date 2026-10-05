@@ -81,19 +81,31 @@ class DataManager:
         print("[DataManager] No gtasks path found, will use demo data")
         return None
     
+    @staticmethod
+    def _is_valid_tag(tag: str) -> bool:
+        """Validate if a string is a clean tag rather than JSON, code, or link."""
+        if not tag or not isinstance(tag, str):
+            return False
+        t = tag.strip()
+        if not (1 <= len(t) <= 40):
+            return False
+        if any(c in t for c in '{}"\':,\r\n\t'):
+            return False
+        return True
+
     def _extract_tags(self, text: str) -> Dict[str, List[str]]:
         """Extract tags from text"""
         if not text:
             return {'bracket': [], 'hash': [], 'user': []}
         
-        bracket_tags = re.findall(r'\[([^\]]+)\]', text, re.IGNORECASE)
+        bracket_tags = re.findall(r'\[([^\]\r\n]+)\](?!\()', text, re.IGNORECASE)
         hash_tags = re.findall(r'#(\w+)', text, re.IGNORECASE)
         user_tags = re.findall(r'@(\w+)', text, re.IGNORECASE)
         
         return {
-            'bracket': [tag.lower() for tag in bracket_tags],
-            'hash': [tag.lower() for tag in hash_tags],
-            'user': [tag.lower() for tag in user_tags]
+            'bracket': [tag.strip().lower() for tag in bracket_tags if self._is_valid_tag(tag)],
+            'hash': [tag.strip().lower() for tag in hash_tags if self._is_valid_tag(tag)],
+            'user': [tag.strip().lower() for tag in user_tags if self._is_valid_tag(tag)]
         }
     
     def _calculate_priority(self, title: str) -> str:
@@ -256,7 +268,7 @@ class DataManager:
                 'due': row[3],
                 'priority': row[4] or 'medium',
                 'status': row[5] or 'pending',
-                'tags': json.loads(row[6]) if row[6] else [],
+                'tags': [t for t in (json.loads(row[6]) if row[6] else []) if self._is_valid_tag(t)],
                 'notes': row[7] or '',
                 'account': account_id,
                 'list_title': row[columns.index('list_title')] if 'list_title' in columns and len(row) > columns.index('list_title') else '',

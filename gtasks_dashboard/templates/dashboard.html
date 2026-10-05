@@ -684,6 +684,86 @@
         </div>
     </div>
 
+    <!-- Quick View Task Modal -->
+    <div class="modal-overlay" id="quick-view-modal">
+        <div class="modal-content quick-view-modal-content">
+            <div class="modal-header quick-view-modal-header">
+                <div class="quick-view-title-wrap">
+                    <span class="quick-view-header-icon"><i class="fas fa-eye"></i></span>
+                    <h2 id="quick-view-title" class="quick-view-title">Task Details</h2>
+                </div>
+                <button class="modal-close" onclick="closeQuickView()" aria-label="Close modal">&times;</button>
+            </div>
+            <div class="quick-view-modal-body">
+                <!-- Badges Row -->
+                <div class="quick-view-badge-bar" id="quick-view-badges">
+                    <!-- Populated dynamically -->
+                </div>
+
+                <!-- Meta Grid -->
+                <div class="quick-view-meta-grid">
+                    <div class="quick-view-meta-card">
+                        <div class="meta-label"><i class="fas fa-list"></i> List</div>
+                        <div class="meta-value" id="quick-view-list">-</div>
+                    </div>
+                    <div class="quick-view-meta-card">
+                        <div class="meta-label"><i class="fas fa-user"></i> Account</div>
+                        <div class="meta-value" id="quick-view-account">-</div>
+                    </div>
+                    <div class="quick-view-meta-card">
+                        <div class="meta-label"><i class="fas fa-calendar-alt"></i> Due Date</div>
+                        <div class="meta-value" id="quick-view-due">-</div>
+                    </div>
+                    <div class="quick-view-meta-card">
+                        <div class="meta-label"><i class="fas fa-clock"></i> Created</div>
+                        <div class="meta-value" id="quick-view-created">-</div>
+                    </div>
+                </div>
+
+                <!-- Tags Section -->
+                <div class="quick-view-section" id="quick-view-tags-section" style="display: none;">
+                    <div class="quick-view-section-title"><i class="fas fa-tags"></i> Tags</div>
+                    <div class="quick-view-tags" id="quick-view-tags"></div>
+                </div>
+
+                <!-- Details / Notes Section -->
+                <div class="quick-view-section" id="quick-view-notes-section">
+                    <div class="quick-view-section-header">
+                        <div class="quick-view-section-title">
+                            <i class="fas fa-align-left"></i> Details & Notes
+                            <span class="format-badge" id="quick-view-format-badge" style="display: none;"></span>
+                        </div>
+                        <button class="btn-copy-notes" id="quick-view-copy-btn" onclick="copyQuickViewNotes()" title="Copy content to clipboard">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                    <div class="quick-view-notes-container">
+                        <div class="quick-view-notes-body" id="quick-view-notes-body">
+                            <!-- Populated dynamically: formatted Markdown or JSON -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dependencies Section -->
+                <div class="quick-view-section" id="quick-view-deps-section" style="display: none;">
+                    <div class="quick-view-section-title"><i class="fas fa-link"></i> Dependencies</div>
+                    <div class="quick-view-deps-list" id="quick-view-deps-list"></div>
+                </div>
+            </div>
+            <div class="modal-footer quick-view-footer">
+                <button class="btn-secondary-modal" onclick="closeQuickView()">Close</button>
+                <div class="quick-view-footer-actions">
+                    <button id="quick-view-complete-btn" class="btn-action-modal" onclick="quickViewToggleComplete()">
+                        <i class="fas fa-check"></i> <span id="quick-view-complete-text">Complete</span>
+                    </button>
+                    <button class="btn-primary-modal" onclick="quickViewEditTask()">
+                        <i class="fas fa-edit"></i> Edit Task
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading-overlay" style="display: none;">
         <div class="loading-spinner"></div>

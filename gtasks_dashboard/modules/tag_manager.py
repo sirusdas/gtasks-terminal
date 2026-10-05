@@ -31,13 +31,25 @@ class TagManager:
             'Domain': ['#Work', '#Personal', '#Learning', '#Health', '#Finance']
         }
     
+    @staticmethod
+    def is_valid_tag(tag):
+        """Validate if a string is a clean tag rather than JSON, code, or link."""
+        if not tag or not isinstance(tag, str):
+            return False
+        t = tag.strip()
+        if not (1 <= len(t) <= 40):
+            return False
+        if any(c in t for c in '{}"\':,\r\n\t'):
+            return False
+        return True
+
     def extract_hybrid_tags(self, text):
         """Extract tags using both [] and #/@ style"""
         if not text:
             return {'bracket': [], 'hash': [], 'user': []}
         
-        # Extract bracket tags: [tag]
-        bracket_tags = re.findall(r'\[([^\]]+)\]', text, re.IGNORECASE)
+        # Extract bracket tags: [tag] (not markdown link)
+        bracket_tags = re.findall(r'\[([^\]\r\n]+)\](?!\()', text, re.IGNORECASE)
         
         # Extract hash tags: #tag
         hash_tags = re.findall(r'#(\w+)', text, re.IGNORECASE)
@@ -46,9 +58,9 @@ class TagManager:
         user_tags = re.findall(r'@(\w+)', text, re.IGNORECASE)
         
         return {
-            'bracket': [tag.lower() for tag in bracket_tags],
-            'hash': [tag.lower() for tag in hash_tags],
-            'user': [tag.lower() for tag in user_tags]
+            'bracket': [tag.strip().lower() for tag in bracket_tags if self.is_valid_tag(tag)],
+            'hash': [tag.strip().lower() for tag in hash_tags if self.is_valid_tag(tag)],
+            'user': [tag.strip().lower() for tag in user_tags if self.is_valid_tag(tag)]
         }
     
     def categorize_tag(self, tag):

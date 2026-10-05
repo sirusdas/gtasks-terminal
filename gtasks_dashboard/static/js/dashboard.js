@@ -9,7 +9,14 @@ import {
     filterOutDeletedTasks, 
     sortTasksByField, 
     filterTasksByCriteria,
-    debounce 
+    debounce,
+    getDateStatus,
+    getDateStatusBadge,
+    getPriorityClass,
+    getPriorityIcon,
+    getStatusClass,
+    getAllTags,
+    isValidTag
 } from './utils.js';
 import { createTaskCard, renderTasksGrid } from './task-card.js';
 import { createMultiselect, getUniqueLists, getUniqueTags, getListsWithCounts, getTagsWithCounts, getFilteredTagsByLists, getFilteredListsByTags, getFilteredTasksBySearchAndDate, getFilteredListsByTagsAndCriteria, getFilteredTagsByListsAndCriteria } from './multiselect.js';
@@ -2138,6 +2145,281 @@ function switchNotesTab(tab) {
     }
 }
 
+// Utility: escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+// Quick View Functions
+export function openQuickView(taskId) {
+    const tasks = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
+    let task = tasks.find(t => t.id === taskId);
+    if (!task && window._allLoadedTasks) {
+        task = window._allLoadedTasks.find(t => t.id === taskId);
+    }
+    if (!task) return;
+
+    window.quickViewingTaskId = taskId;
+
+    // Title
+    const titleEl = document.getElementById('quick-view-title');
+    if (titleEl) {
+        titleEl.textContent = task.title || 'Untitled Task';
+    }
+
+    // Badges Row: Priority, Status, Date Status
+    const badgesEl = document.getElementById('quick-view-badges');
+    if (badgesEl) {
+        const priorityClass = getPriorityClass(task.calculated_priority || task.priority);
+        const priorityIcon = getPriorityIcon(task.calculated_priority || task.priority);
+        const statusClass = getStatusClass(task.status);
+        const dateStatus = getDateStatus(task.due);
+        const dateBadge = getDateStatusBadge(dateStatus);
+
+        badgesEl.innerHTML = `
+            <span class="task-priority-badge ${priorityClass}">${priorityIcon} ${task.calculated_priority || task.priority || 'medium'}</span>
+            <span class="task-status-badge ${statusClass}">${task.status || 'pending'}</span>
+            ${dateBadge}
+        `;
+    }
+
+    // Meta Grid: List, Account, Due Date, Created Date
+    const listEl = document.getElementById('quick-view-list');
+    if (listEl) listEl.textContent = task.list_title || 'Tasks';
+
+    const accountEl = document.getElementById('quick-view-account');
+    if (accountEl) accountEl.textContent = task.account || window.currentAccountId || 'Default';
+
+    const dueEl = document.getElementById('quick-view-due');
+    if (dueEl) dueEl.textContent = task.due ? task.due : 'No due date';
+
+    const createdEl = document.getElementById('quick-view-created');
+    if (createdEl) {
+        createdEl.textContent = task.created_at ? String(task.created_at).slice(0, 16).replace('T', ' ') : '-';
+    }
+
+    // Tags Section
+    const tagsSection = document.getElementById('quick-view-tags-section');
+    const tagsContainer = document.getElementById('quick-view-tags');
+    if (tagsSection && tagsContainer) {
+        const tags = getAllTags(task);
+        if (tags && tags.length > 0) {
+            tagsContainer.innerHTML = tags.map(tag => `<span class="quick-view-tag">[${escapeHtml(tag)}]</span>`).join(' ');
+            tagsSection.style.display = 'block';
+        } else {
+            tagsContainer.innerHTML = '';
+            tagsSection.style.display = 'none';
+        }
+    }
+
+    // Notes / Details Section
+    const notesContent = task.notes || task.description || '';
+    const notesBody = document.getElementById('quick-view-notes-body');
+    const formatBadge = document.getElementById('quick-view-format-badge');
+    const copyBtn = document.getElementById('quick-view-copy-btn');
+
+    window._currentQuickViewNotesText = notesContent;
+
+    if (notesBody) {
+        const trimmed = notesContent.trim();
+        let isJson = false;
+
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                const prettyJson = JSON.stringify(parsed, null, 2);
+                window._currentQuickViewNotesText = prettyJson;
+                isJson = true;
+                notesBody.innerHTML = `<pre class="json-code-block"><code>${escapeHtml(prettyJson)}</code></pre>`;
+                if (formatBadge) {
+                    formatBadge.innerHTML = '<i class="fas fa-code"></i> JSON Payload';
+                    formatBadge.style.display = 'inline-flex';
+                }
+            } catch (e) {
+                isJson = false;
+            }
+        }
+
+        if (!isJson) {
+            if (formatBadge) formatBadge.style.display = 'none';
+
+            if (!trimmed) {
+                notesBody.innerHTML = '<div class="quick-view-empty-notes"><i class="fas fa-info-circle"></i> No notes or details provided for this task.</div>';
+                if (copyBtn) copyBtn.style.display = 'none';
+            } else {
+                if (copyBtn) copyBtn.style.display = 'inline-flex';
+                if (typeof marked !== 'undefined') {
+                    try {
+                        notesBody.innerHTML = marked.parse(trimmed);
+                        notesBody.querySelectorAll('a').forEach(a => {
+                            a.setAttribute('target', '_blank');
+                            a.setAttribute('rel', 'noopener noreferrer');
+                        });
+                    } catch (e) {
+                        notesBody.innerHTML = `<p style="white-space: pre-wrap;">${escapeHtml(trimmed)}</p>`;
+                    }
+                } else {
+                    notesBody.innerHTML = `<p style="white-space: pre-wrap;">${escapeHtml(trimmed)}</p>`;
+                }
+            }
+        } else {
+            if (copyBtn) copyBtn.style.display = 'inline-flex';
+        }
+    }
+
+    // Dependencies Section
+    const depsSection = document.getElementById('quick-view-deps-section');
+    const depsList = document.getElementById('quick-view-deps-list');
+    if (depsSection && depsList) {
+        if (task.dependencies && task.dependencies.length > 0) {
+            depsList.innerHTML = task.dependencies.map(dep => `
+                <span class="dependency-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; background: rgba(245, 158, 11, 0.1); color: #d97706; font-size: 0.8rem; margin-right: 6px;">
+                    <i class="fas fa-link"></i> ${escapeHtml(dep)}
+                </span>
+            `).join('');
+            depsSection.style.display = 'block';
+        } else {
+            depsList.innerHTML = '';
+            depsSection.style.display = 'none';
+        }
+    }
+
+    // Complete / Pending Button
+    const completeBtn = document.getElementById('quick-view-complete-btn');
+    if (completeBtn) {
+        if (task.status === 'completed') {
+            completeBtn.classList.add('completed');
+            completeBtn.innerHTML = '<i class="fas fa-undo"></i> <span id="quick-view-complete-text">Mark Pending</span>';
+        } else {
+            completeBtn.classList.remove('completed');
+            completeBtn.innerHTML = '<i class="fas fa-check"></i> <span id="quick-view-complete-text">Complete</span>';
+        }
+    }
+
+    // Show modal
+    const modal = document.getElementById('quick-view-modal');
+    if (modal) {
+        modal.classList.add('active');
+    }
+}
+
+export function closeQuickView() {
+    const modal = document.getElementById('quick-view-modal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+    window.quickViewingTaskId = null;
+}
+
+export async function quickViewToggleComplete() {
+    const taskId = window.quickViewingTaskId;
+    if (!taskId) return;
+
+    const tasks = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    if (task.status === 'completed') {
+        try {
+            const basePath = window.GTASKS_BASE_PATH || '';
+            let response = await fetch(`${basePath}/api/tasks/${taskId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'pending' })
+            });
+            if (response.status === 405 || response.status === 404) {
+                response = await fetch(`/api/tasks/${taskId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'pending' })
+                });
+            }
+            const data = await response.json();
+            if (data.success) {
+                task.status = 'pending';
+                showNotification('Task marked as pending ⭕', 'success');
+                openQuickView(taskId);
+                if (typeof window.filterTasks === 'function') {
+                    window.filterTasks();
+                }
+            } else {
+                showNotification(data.message || 'Failed to update task', 'error');
+            }
+        } catch (error) {
+            console.error('Error reopening task:', error);
+            showNotification('Error updating task', 'error');
+        }
+    } else {
+        await completeTask(taskId);
+        task.status = 'completed';
+        openQuickView(taskId);
+    }
+}
+
+export function quickViewEditTask() {
+    const taskId = window.quickViewingTaskId;
+    closeQuickView();
+    if (taskId && typeof window.openEditModal === 'function') {
+        window.openEditModal(taskId);
+    }
+}
+
+export async function copyQuickViewNotes() {
+    const text = window._currentQuickViewNotesText || '';
+    if (!text) return;
+
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+        }
+
+        const copyBtn = document.getElementById('quick-view-copy-btn');
+        if (copyBtn) {
+            const origHtml = copyBtn.innerHTML;
+            copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            copyBtn.classList.add('copied');
+            setTimeout(() => {
+                copyBtn.innerHTML = origHtml;
+                copyBtn.classList.remove('copied');
+            }, 2000);
+        }
+    } catch (e) {
+        console.error('Failed to copy to clipboard:', e);
+    }
+}
+
+// Attach backdrop and escape key listeners for quick-view modal
+if (typeof document !== 'undefined') {
+    document.addEventListener('click', (e) => {
+        const modal = document.getElementById('quick-view-modal');
+        if (modal && e.target === modal) {
+            closeQuickView();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const qvModal = document.getElementById('quick-view-modal');
+            if (qvModal && qvModal.classList.contains('active')) {
+                closeQuickView();
+            }
+        }
+    });
+}
+
 // Expose functions globally for inline HTML onclick handlers
 window.toggleSidebar = toggleSidebar;
 window.closeSidebar = closeSidebar;
@@ -2149,6 +2431,13 @@ window.setTaskViewMode = setTaskViewMode;
 window.clearTaskSearch = clearTaskSearch;
 window.removeFilterChip = removeFilterChip;
 window.clearTasksFilters = clearTasksFilters;
+
+// Quick View Window Exports
+window.openQuickView = openQuickView;
+window.closeQuickView = closeQuickView;
+window.quickViewToggleComplete = quickViewToggleComplete;
+window.quickViewEditTask = quickViewEditTask;
+window.copyQuickViewNotes = copyQuickViewNotes;
 
 // Export for use in other modules
 export default {
@@ -2170,7 +2459,12 @@ export default {
     loadTasks,
     filterTasks,
     loadHierarchy,
-    simpleCacheRefresh
+    simpleCacheRefresh,
+    openQuickView,
+    closeQuickView,
+    quickViewToggleComplete,
+    quickViewEditTask,
+    copyQuickViewNotes
 };
 
 // Initialize the dashboard when DOM is ready (or immediately if already parsed)

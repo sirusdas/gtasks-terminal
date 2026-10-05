@@ -7,6 +7,18 @@ from typing import List
 from gtasks_cli.models.task import Task
 
 
+def _is_valid_tag(tag: str) -> bool:
+    """Validate if a string is a clean tag rather than JSON, code, or link."""
+    if not tag or not isinstance(tag, str):
+        return False
+    t = tag.strip()
+    if not (1 <= len(t) <= 40):
+        return False
+    if any(c in t for c in '{}"\':,\r\n\t'):
+        return False
+    return True
+
+
 def extract_tags_from_text(text: str) -> List[str]:
     """
     Extract tags from text. Tags are identified as text within square brackets.
@@ -20,10 +32,10 @@ def extract_tags_from_text(text: str) -> List[str]:
     if not text:
         return []
     
-    # Pattern to match text within square brackets
-    pattern = r'\[([^\]]+)\]'
+    # Pattern to match text within square brackets (ignoring markdown links [text](...))
+    pattern = r'\[([^\]\r\n]+)\](?!\()'
     matches = re.findall(pattern, text)
-    return matches
+    return [m.strip() for m in matches if _is_valid_tag(m)]
 
 
 def remove_tags_from_text(text: str) -> str:
@@ -39,9 +51,9 @@ def remove_tags_from_text(text: str) -> str:
     if not text:
         return ""
     
-    # Pattern to match text within square brackets and remove them
-    pattern = r'\[[^\]]+\]'
-    return re.sub(pattern, '', text).strip()
+    # Only remove valid tags, not JSON arrays or markdown links
+    pattern = r'\[([^\]\r\n]+)\](?!\()'
+    return re.sub(pattern, lambda m: '' if _is_valid_tag(m.group(1)) else m.group(0), text).strip()
 
 
 def extract_tags_from_task(task: Task) -> List[str]:
