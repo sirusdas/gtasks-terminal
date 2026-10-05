@@ -147,6 +147,10 @@ export function showSection(section, updateUrl = true) {
         setTimeout(() => {
             loadHierarchy();
         }, 50);
+    } else if (section === 'tasks') {
+        if (dashboardData && dashboardData.tasks) {
+            filterTasks();
+        }
     }
 }
 
@@ -939,28 +943,47 @@ export function toggleFilterDrawer() {
     const backdrop = document.getElementById('filter-drawer-backdrop');
     if (!drawer) return;
     
-    const isOpen = drawer.classList.contains('open');
-    if (isOpen) {
-        closeFilterDrawer();
+    if (window.innerWidth <= 768) {
+        const isOpen = drawer.classList.contains('open');
+        if (isOpen) {
+            closeFilterDrawer();
+        } else {
+            openFilterDrawer();
+        }
     } else {
-        openFilterDrawer();
+        const isHidden = drawer.style.display === 'none';
+        drawer.style.display = isHidden ? 'flex' : 'none';
+        const toggleBtn = document.getElementById('filter-drawer-toggle-btn');
+        if (toggleBtn) {
+            toggleBtn.classList.toggle('active', isHidden);
+        }
     }
 }
 
 export function openFilterDrawer() {
     const drawer = document.getElementById('task-filters-drawer');
     const backdrop = document.getElementById('filter-drawer-backdrop');
-    if (drawer) drawer.classList.add('open');
-    if (backdrop) backdrop.classList.add('active');
-    document.body.classList.add('drawer-open');
+    if (!drawer) return;
+    if (window.innerWidth <= 768) {
+        drawer.classList.add('open');
+        if (backdrop) backdrop.classList.add('active');
+        document.body.classList.add('drawer-open');
+    } else {
+        drawer.style.display = 'flex';
+    }
 }
 
 export function closeFilterDrawer() {
     const drawer = document.getElementById('task-filters-drawer');
     const backdrop = document.getElementById('filter-drawer-backdrop');
-    if (drawer) drawer.classList.remove('open');
-    if (backdrop) backdrop.classList.remove('active');
-    document.body.classList.remove('drawer-open');
+    if (!drawer) return;
+    if (window.innerWidth <= 768) {
+        drawer.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('active');
+        document.body.classList.remove('drawer-open');
+    } else {
+        drawer.style.display = 'none';
+    }
 }
 
 export function clearTaskSearch() {
@@ -1067,6 +1090,9 @@ export function updateActiveFilterChips(filters) {
         });
     }
     
+    const mobileBadge = document.getElementById('mobile-filter-badge');
+    const mobileToggleBtn = document.getElementById('mobile-top-filter-btn');
+    
     if (badge) {
         if (activeCount > 0) {
             badge.textContent = activeCount;
@@ -1075,6 +1101,17 @@ export function updateActiveFilterChips(filters) {
         } else {
             badge.style.display = 'none';
             if (toggleBtn) toggleBtn.classList.remove('has-filters');
+        }
+    }
+    
+    if (mobileBadge) {
+        if (activeCount > 0) {
+            mobileBadge.textContent = activeCount;
+            mobileBadge.style.display = 'inline-flex';
+            if (mobileToggleBtn) mobileToggleBtn.classList.add('has-filters');
+        } else {
+            mobileBadge.style.display = 'none';
+            if (mobileToggleBtn) mobileToggleBtn.classList.remove('has-filters');
         }
     }
     
@@ -2136,7 +2173,11 @@ export default {
     simpleCacheRefresh
 };
 
-// Initialize the dashboard when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize the dashboard when DOM is ready (or immediately if already parsed)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        initDashboard();
+    });
+} else {
     initDashboard();
-});
+}

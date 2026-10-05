@@ -186,11 +186,23 @@ body {
  * Task Complete Button Styles
  * ============================================ */
 
-/* Complete button - positioned in top-left of task cards */
-.task-complete-btn {
+/* Complete button - positioned in top-left of standard task cards */
+.task-card .task-complete-btn {
     position: absolute;
     top: 12px;
     left: 12px;
+}
+
+.task-card-compact .task-complete-btn {
+    position: static;
+    top: auto;
+    left: auto;
+    background: transparent;
+    box-shadow: none;
+    z-index: auto;
+}
+
+.task-complete-btn {
     width: 28px;
     height: 28px;
     display: flex;

@@ -1124,6 +1124,7 @@ body {
 }
 
 .task-card-compact {
+    position: relative;
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
@@ -1149,6 +1150,34 @@ body {
 .compact-left {
     flex-shrink: 0;
     margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+}
+
+.task-card-compact .task-complete-btn {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    width: 26px !important;
+    height: 26px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 1.15rem !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    cursor: pointer;
+    z-index: auto !important;
+}
+
+.task-card-compact .task-complete-btn:hover {
+    transform: scale(1.15);
+    background: transparent !important;
 }
 
 .compact-body {

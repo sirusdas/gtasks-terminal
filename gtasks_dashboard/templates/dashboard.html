@@ -13,13 +13,13 @@
     <title>GTasks Dashboard - Hierarchical Visualization</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css?v=6">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css?v=6">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css?v=6">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=6">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=6">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=6">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=6">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -33,6 +33,11 @@
             <span class="mobile-title">GTasks</span>
         </div>
         <div class="mobile-header-actions">
+            <!-- Mobile Top Filter Button -->
+            <button class="mobile-action-btn mobile-filter-btn" id="mobile-top-filter-btn" onclick="toggleFilterDrawer()" title="Filter Tasks">
+                <i class="fas fa-filter"></i>
+                <span class="filter-count-badge" id="mobile-filter-badge" style="display: none;">0</span>
+            </button>
             <div id="mobileDarkModeToggle" class="mobile-dark-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
                 <i class="fas fa-sun sun-icon"></i>
                 <i class="fas fa-moon moon-icon"></i>
@@ -56,15 +61,15 @@
                 </button>
             </div>
             <nav class="sidebar-nav">
-                <a href="{{ base_path }}/dashboard" class="nav-item" id="nav-dashboard" onclick="closeSidebarOnMobile()">
+                <a href="{{ base_path }}/dashboard" class="nav-item {% if not default_view or default_view == 'dashboard' %}active{% endif %}" id="nav-dashboard" onclick="closeSidebarOnMobile()">
                     <i class="fas fa-chart-line"></i>
                     <span>Dashboard</span>
                 </a>
-                <a href="{{ base_path }}/hierarchy" class="nav-item" id="nav-hierarchy" onclick="closeSidebarOnMobile()">
+                <a href="{{ base_path }}/hierarchy" class="nav-item {% if default_view == 'hierarchy' %}active{% endif %}" id="nav-hierarchy" onclick="closeSidebarOnMobile()">
                     <i class="fas fa-project-diagram"></i>
                     <span>Hierarchy</span>
                 </a>
-                <a href="{{ base_path }}/tasks" class="nav-item" id="nav-tasks" onclick="closeSidebarOnMobile()">
+                <a href="{{ base_path }}/tasks" class="nav-item {% if default_view == 'tasks' %}active{% endif %}" id="nav-tasks" onclick="closeSidebarOnMobile()">
                     <i class="fas fa-tasks"></i>
                     <span>Tasks</span>
                 </a>
@@ -74,7 +79,7 @@
         <!-- Main Content -->
         <main class="main-content" id="main-content">
             <!-- Dashboard Section -->
-            <section id="dashboard-section" class="section">
+            <section id="dashboard-section" class="section" {% if default_view and default_view != 'dashboard' %}style="display: none;"{% endif %}>
                 <div class="header">
                     <h1><i class="fas fa-tasks mr-2"></i>GTasks Dashboard</h1>
                     <div class="header-actions">
@@ -174,7 +179,7 @@
             </section>
 
             <!-- Hierarchy Section -->
-            <section id="hierarchy-section" class="section" style="display: none;">
+            <section id="hierarchy-section" class="section" {% if default_view != 'hierarchy' %}style="display: none;"{% endif %}>
                 <div class="header">
                     <h1><i class="fas fa-project-diagram mr-2"></i>Hierarchical Task Visualization</h1>
                     <div class="header-actions">
@@ -338,7 +343,7 @@
             </section>
 
             <!-- Tasks Section -->
-            <section id="tasks-section" class="section" style="display: none;">
+            <section id="tasks-section" class="section" {% if default_view != 'tasks' %}style="display: none;"{% endif %}>
                 <div class="header">
                     <h1><i class="fas fa-tasks mr-2"></i>Task Management</h1>
                     <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
@@ -363,14 +368,14 @@
                     <div class="tasks-toolbar-controls">
                         <!-- Filters Hamburger Button -->
                         <button class="filter-drawer-toggle-btn" id="filter-drawer-toggle-btn" onclick="toggleFilterDrawer()" title="Filter & Sort Tasks">
-                            <i class="fas fa-sliders-h"></i>
+                            <i class="fas fa-bars"></i>
                             <span>Filters</span>
                             <span class="filter-count-badge" id="filter-count-badge" style="display: none;">0</span>
                         </button>
                         <!-- View Mode Toggle (Compact vs Cards) -->
                         <div class="view-mode-toggle" id="task-view-mode-toggle" title="Switch view layout">
                             <button class="view-btn active" id="view-mode-compact" onclick="setTaskViewMode('compact')" title="Compact List View">
-                                <i class="fas fa-bars"></i>
+                                <i class="fas fa-list"></i>
                             </button>
                             <button class="view-btn" id="view-mode-card" onclick="setTaskViewMode('card')" title="Card Grid View">
                                 <i class="fas fa-th-large"></i>
@@ -685,7 +690,7 @@
         <p>Loading...</p>
     </div>
 
-    <script type="module" src="{{ base_path }}/static/js/hierarchy.js"></script>
-    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=5"></script>
+    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=6"></script>
+    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=6"></script>
 </body>
 </html>
