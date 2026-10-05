@@ -692,7 +692,12 @@
                     <span class="quick-view-header-icon"><i class="fas fa-eye"></i></span>
                     <h2 id="quick-view-title" class="quick-view-title">Task Details</h2>
                 </div>
-                <button class="modal-close" onclick="closeQuickView()" aria-label="Close modal">&times;</button>
+                <div class="quick-view-header-controls">
+                    <button class="modal-expand-btn" id="quick-view-modal-expand-btn" onclick="toggleQuickViewFullscreen()" title="Toggle full screen" aria-label="Toggle full screen">
+                        <i class="fas fa-expand" id="quick-view-modal-expand-icon"></i>
+                    </button>
+                    <button class="modal-close" onclick="closeQuickView()" aria-label="Close modal">&times;</button>
+                </div>
             </div>
             <div class="quick-view-modal-body">
                 <!-- Badges Row -->
@@ -733,9 +738,18 @@
                             <i class="fas fa-align-left"></i> Details & Notes
                             <span class="format-badge" id="quick-view-format-badge" style="display: none;"></span>
                         </div>
-                        <button class="btn-copy-notes" id="quick-view-copy-btn" onclick="copyQuickViewNotes()" title="Copy content to clipboard">
-                            <i class="fas fa-copy"></i> Copy
-                        </button>
+                        <div class="quick-view-notes-actions">
+                            <div class="font-size-controls" title="Adjust text size">
+                                <button class="font-btn" onclick="adjustQuickViewFontSize(-1)" title="Smaller font" aria-label="Decrease font size">A-</button>
+                                <button class="font-btn" onclick="adjustQuickViewFontSize(1)" title="Larger font" aria-label="Increase font size">A+</button>
+                            </div>
+                            <button class="btn-notes-action" id="quick-view-notes-expand-btn" onclick="toggleQuickViewFullscreen()" title="Toggle full screen reading mode">
+                                <i class="fas fa-expand" id="quick-view-notes-expand-icon"></i> <span id="quick-view-notes-expand-text">Full Screen</span>
+                            </button>
+                            <button class="btn-copy-notes" id="quick-view-copy-btn" onclick="copyQuickViewNotes()" title="Copy content to clipboard">
+                                <i class="fas fa-copy"></i> Copy
+                            </button>
+                        </div>
                     </div>
                     <div class="quick-view-notes-container">
                         <div class="quick-view-notes-body" id="quick-view-notes-body">

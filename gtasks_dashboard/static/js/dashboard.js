@@ -2156,6 +2156,65 @@ function escapeHtml(text) {
         .replace(/'/g, '&#039;');
 }
 
+// Utility: syntax highlight JSON string
+function syntaxHighlightJson(jsonString) {
+    if (!jsonString) return '';
+    const escaped = jsonString
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    return escaped.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+        let cls = 'json-number';
+        if (/^"/.test(match)) {
+            if (/:$/.test(match.trim())) {
+                cls = 'json-key';
+            } else {
+                cls = 'json-string';
+            }
+        } else if (/true|false/.test(match)) {
+            cls = 'json-boolean';
+        } else if (/null/.test(match)) {
+            cls = 'json-null';
+        }
+        return `<span class="${cls}">${match}</span>`;
+    });
+}
+
+// Fullscreen toggle for Quick View reading mode
+export function toggleQuickViewFullscreen() {
+    const modalContent = document.querySelector('#quick-view-modal .quick-view-modal-content');
+    if (!modalContent) return;
+
+    const isFullscreen = modalContent.classList.toggle('is-fullscreen');
+
+    // Update modal header expand icon
+    const modalExpandIcon = document.getElementById('quick-view-modal-expand-icon');
+    if (modalExpandIcon) {
+        modalExpandIcon.className = isFullscreen ? 'fas fa-compress' : 'fas fa-expand';
+    }
+
+    // Update notes action expand button & text
+    const notesExpandIcon = document.getElementById('quick-view-notes-expand-icon');
+    const notesExpandText = document.getElementById('quick-view-notes-expand-text');
+    if (notesExpandIcon) {
+        notesExpandIcon.className = isFullscreen ? 'fas fa-compress' : 'fas fa-expand';
+    }
+    if (notesExpandText) {
+        notesExpandText.textContent = isFullscreen ? 'Exit Full Screen' : 'Full Screen';
+    }
+}
+
+// Font size controls for Quick View notes
+export function adjustQuickViewFontSize(delta) {
+    const container = document.querySelector('.quick-view-notes-container');
+    if (!container) return;
+    const currentSize = parseFloat(window.getComputedStyle(container).fontSize) || 14;
+    const newSize = Math.max(11, Math.min(24, currentSize + delta * 1.5));
+    container.style.fontSize = `${newSize}px`;
+    const pre = container.querySelector('pre');
+    if (pre) pre.style.fontSize = `${Math.max(10, newSize * 0.9)}px`;
+}
+
 // Quick View Functions
 export function openQuickView(taskId) {
     const tasks = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
@@ -2166,6 +2225,12 @@ export function openQuickView(taskId) {
     if (!task) return;
 
     window.quickViewingTaskId = taskId;
+
+    // Reset custom font size on open
+    const notesContainer = document.querySelector('.quick-view-notes-container');
+    if (notesContainer) {
+        notesContainer.style.fontSize = '';
+    }
 
     // Title
     const titleEl = document.getElementById('quick-view-title');
@@ -2236,9 +2301,12 @@ export function openQuickView(taskId) {
                 const prettyJson = JSON.stringify(parsed, null, 2);
                 window._currentQuickViewNotesText = prettyJson;
                 isJson = true;
-                notesBody.innerHTML = `<pre class="json-code-block"><code>${escapeHtml(prettyJson)}</code></pre>`;
+                const highlighted = syntaxHighlightJson(prettyJson);
+                notesBody.innerHTML = `<pre class="json-code-block"><code>${highlighted}</code></pre>`;
                 if (formatBadge) {
-                    formatBadge.innerHTML = '<i class="fas fa-code"></i> JSON Payload';
+                    const lines = prettyJson.split('\n').length;
+                    const sizeKb = (new Blob([prettyJson]).size / 1024).toFixed(1);
+                    formatBadge.innerHTML = `<i class="fas fa-code"></i> JSON Payload (${lines} lines, ${sizeKb} KB)`;
                     formatBadge.style.display = 'inline-flex';
                 }
             } catch (e) {
@@ -2247,13 +2315,17 @@ export function openQuickView(taskId) {
         }
 
         if (!isJson) {
-            if (formatBadge) formatBadge.style.display = 'none';
-
             if (!trimmed) {
+                if (formatBadge) formatBadge.style.display = 'none';
                 notesBody.innerHTML = '<div class="quick-view-empty-notes"><i class="fas fa-info-circle"></i> No notes or details provided for this task.</div>';
                 if (copyBtn) copyBtn.style.display = 'none';
             } else {
                 if (copyBtn) copyBtn.style.display = 'inline-flex';
+                const lines = trimmed.split('\n').length;
+                if (formatBadge) {
+                    formatBadge.innerHTML = `<i class="fas fa-file-alt"></i> Notes (${lines} line${lines === 1 ? '' : 's'})`;
+                    formatBadge.style.display = 'inline-flex';
+                }
                 if (typeof marked !== 'undefined') {
                     try {
                         notesBody.innerHTML = marked.parse(trimmed);
@@ -2313,7 +2385,24 @@ export function closeQuickView() {
     const modal = document.getElementById('quick-view-modal');
     if (modal) {
         modal.classList.remove('active');
+        const content = modal.querySelector('.quick-view-modal-content');
+        if (content) {
+            content.classList.remove('is-fullscreen');
+        }
     }
+    // Reset font size
+    const notesContainer = document.querySelector('.quick-view-notes-container');
+    if (notesContainer) {
+        notesContainer.style.fontSize = '';
+    }
+    // Reset icons and label
+    const modalExpandIcon = document.getElementById('quick-view-modal-expand-icon');
+    if (modalExpandIcon) modalExpandIcon.className = 'fas fa-expand';
+    const notesExpandIcon = document.getElementById('quick-view-notes-expand-icon');
+    if (notesExpandIcon) notesExpandIcon.className = 'fas fa-expand';
+    const notesExpandText = document.getElementById('quick-view-notes-expand-text');
+    if (notesExpandText) notesExpandText.textContent = 'Full Screen';
+
     window.quickViewingTaskId = null;
 }
 
@@ -2414,7 +2503,12 @@ if (typeof document !== 'undefined') {
         if (e.key === 'Escape') {
             const qvModal = document.getElementById('quick-view-modal');
             if (qvModal && qvModal.classList.contains('active')) {
-                closeQuickView();
+                const modalContent = qvModal.querySelector('.quick-view-modal-content');
+                if (modalContent && modalContent.classList.contains('is-fullscreen')) {
+                    toggleQuickViewFullscreen();
+                } else {
+                    closeQuickView();
+                }
             }
         }
     });
@@ -2438,6 +2532,8 @@ window.closeQuickView = closeQuickView;
 window.quickViewToggleComplete = quickViewToggleComplete;
 window.quickViewEditTask = quickViewEditTask;
 window.copyQuickViewNotes = copyQuickViewNotes;
+window.toggleQuickViewFullscreen = toggleQuickViewFullscreen;
+window.adjustQuickViewFontSize = adjustQuickViewFontSize;
 
 // Export for use in other modules
 export default {
@@ -2464,7 +2560,9 @@ export default {
     closeQuickView,
     quickViewToggleComplete,
     quickViewEditTask,
-    copyQuickViewNotes
+    copyQuickViewNotes,
+    toggleQuickViewFullscreen,
+    adjustQuickViewFontSize
 };
 
 // Initialize the dashboard when DOM is ready (or immediately if already parsed)
