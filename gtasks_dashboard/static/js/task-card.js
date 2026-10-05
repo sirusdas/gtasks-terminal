@@ -89,8 +89,44 @@ export function createTaskCard(task, options = {}) {
             ${task.account ? `<small style="color: #9ca3af; font-size: 0.75rem; margin-top: 0.25rem; display: block;">Account: ${task.account}</small>` : ''}
             ${task.list_title ? `<small style="color: #8b5cf6; font-size: 0.75rem; margin-top: 0.5rem; display: block;"><i class="fas fa-list"></i> List: ${task.list_title}</small>` : ''}
         `;
+    } else if (options.isCompact) {
+        // High-density compact view for mobile and compact mode
+        card.className = `task-card-compact ${isCompleted ? 'completed' : ''}`;
+        card.innerHTML = `
+            <div class="compact-left">
+                ${completeBtnHtml}
+            </div>
+            <div class="compact-body" onclick="window.toggleCompactDetails('${task.id}')">
+                <div class="compact-title-row">
+                    <span class="compact-title ${isCompleted ? 'line-through' : ''}">${task.title}</span>
+                    <span class="compact-priority-indicator ${priorityClass}" title="Priority: ${task.calculated_priority || task.priority}">${priorityIcon}</span>
+                </div>
+                <div class="compact-meta-row">
+                    ${task.due ? `<span class="compact-due ${dateStatus}"><i class="fas fa-calendar-alt"></i> ${task.due}</span>` : ''}
+                    ${task.list_title ? `<span class="compact-list"><i class="fas fa-list"></i> ${task.list_title}</span>` : ''}
+                    <span class="compact-status-badge ${statusClass}">${task.status}</span>
+                    ${task.notes || task.description ? `<span class="compact-has-notes" title="Has notes/description"><i class="fas fa-sticky-note"></i></span>` : ''}
+                    ${task.tags && task.tags.length ? `<span class="compact-tag-count"><i class="fas fa-tag"></i> ${task.tags.length}</span>` : ''}
+                </div>
+                <div class="compact-details" id="compact-details-${task.id}" style="display: none;">
+                    ${task.description ? `<p class="compact-desc">${task.description}</p>` : ''}
+                    ${tagsDisplay}
+                    ${notesSection}
+                    <div class="compact-expanded-footer">
+                        ${task.created_at ? `<span><i class="fas fa-clock"></i> Created: ${String(task.created_at).slice(0, 10)}</span>` : ''}
+                        ${task.account ? `<span><i class="fas fa-user"></i> ${task.account}</span>` : ''}
+                    </div>
+                </div>
+            </div>
+            <div class="compact-actions">
+                ${editBtnHtml}
+                <button class="compact-expand-btn" onclick="window.toggleCompactDetails('${task.id}'); event.stopPropagation();" title="Toggle details">
+                    <i class="fas fa-chevron-down" id="compact-chevron-${task.id}"></i>
+                </button>
+            </div>
+        `;
     } else {
-        // Main task card HTML
+        // Main task card HTML (Comfortable Card View)
         card.innerHTML = `
             <div class="task-card-actions">
                 ${completeBtnHtml}
@@ -172,3 +208,20 @@ export function renderTasksGrid(tasks, containerId, options = {}) {
     
     renderTasks(tasks, container, options);
 }
+
+// Global helper for toggling compact task details
+window.toggleCompactDetails = function(taskId) {
+    const details = document.getElementById(`compact-details-${taskId}`);
+    const chevron = document.getElementById(`compact-chevron-${taskId}`);
+    if (!details) return;
+    
+    const isHidden = details.style.display === 'none';
+    if (isHidden) {
+        details.style.display = 'block';
+        if (chevron) chevron.className = 'fas fa-chevron-up';
+    } else {
+        details.style.display = 'none';
+        if (chevron) chevron.className = 'fas fa-chevron-down';
+    }
+};
+

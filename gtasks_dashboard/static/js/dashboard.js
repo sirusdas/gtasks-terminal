@@ -155,9 +155,42 @@ export function showSection(section, updateUrl = true) {
  */
 export function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
     const mainContent = document.getElementById('main-content');
-    sidebar.classList.toggle('collapsed');
-    mainContent.classList.toggle('expanded');
+    
+    if (window.innerWidth <= 768) {
+        if (!sidebar) return;
+        const isOpen = sidebar.classList.contains('open');
+        if (isOpen) {
+            sidebar.classList.remove('open');
+            if (backdrop) backdrop.classList.remove('active');
+        } else {
+            sidebar.classList.add('open');
+            if (backdrop) backdrop.classList.add('active');
+        }
+    } else {
+        if (sidebar) sidebar.classList.toggle('collapsed');
+        if (mainContent) mainContent.classList.toggle('expanded');
+    }
+}
+
+/**
+ * Close sidebar (mobile)
+ */
+export function closeSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    if (sidebar) sidebar.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('active');
+}
+
+/**
+ * Close sidebar on mobile when navigating
+ */
+export function closeSidebarOnMobile() {
+    if (window.innerWidth <= 768) {
+        closeSidebar();
+    }
 }
 
 /**
@@ -879,6 +912,194 @@ export function updateTasksCountDisplay(filteredCount, totalCount) {
 /**
  * Filter tasks with advanced filters
  */
+// Task View Mode state (compact vs card)
+let currentTaskViewMode = localStorage.getItem('gtasks_task_view_mode') || (window.innerWidth <= 768 ? 'compact' : 'card');
+
+export function setTaskViewMode(mode) {
+    currentTaskViewMode = mode;
+    localStorage.setItem('gtasks_task_view_mode', mode);
+    
+    const compactBtn = document.getElementById('view-mode-compact');
+    const cardBtn = document.getElementById('view-mode-card');
+    if (compactBtn && cardBtn) {
+        compactBtn.classList.toggle('active', mode === 'compact');
+        cardBtn.classList.toggle('active', mode === 'card');
+    }
+    
+    const container = document.getElementById('tasks-grid');
+    if (container) {
+        container.classList.toggle('compact', mode === 'compact');
+    }
+    
+    filterTasks();
+}
+
+export function toggleFilterDrawer() {
+    const drawer = document.getElementById('task-filters-drawer');
+    const backdrop = document.getElementById('filter-drawer-backdrop');
+    if (!drawer) return;
+    
+    const isOpen = drawer.classList.contains('open');
+    if (isOpen) {
+        closeFilterDrawer();
+    } else {
+        openFilterDrawer();
+    }
+}
+
+export function openFilterDrawer() {
+    const drawer = document.getElementById('task-filters-drawer');
+    const backdrop = document.getElementById('filter-drawer-backdrop');
+    if (drawer) drawer.classList.add('open');
+    if (backdrop) backdrop.classList.add('active');
+    document.body.classList.add('drawer-open');
+}
+
+export function closeFilterDrawer() {
+    const drawer = document.getElementById('task-filters-drawer');
+    const backdrop = document.getElementById('filter-drawer-backdrop');
+    if (drawer) drawer.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('active');
+    document.body.classList.remove('drawer-open');
+}
+
+export function clearTaskSearch() {
+    const searchFilter = document.getElementById('task-search-filter');
+    if (searchFilter) {
+        searchFilter.value = '';
+        filterTasks();
+    }
+}
+
+export function removeFilterChip(filterType, value = null) {
+    if (filterType === 'search') {
+        const el = document.getElementById('task-search-filter');
+        if (el) el.value = '';
+    } else if (filterType === 'status') {
+        const el = document.getElementById('task-status-filter');
+        if (el) el.value = '';
+    } else if (filterType === 'priority') {
+        const el = document.getElementById('task-priority-filter');
+        if (el) el.value = '';
+    } else if (filterType === 'date') {
+        const s = document.getElementById('task-date-start');
+        const e = document.getElementById('task-date-end');
+        if (s) s.value = '';
+        if (e) e.value = '';
+    } else if (filterType === 'list') {
+        if (listMultiselect) {
+            if (value) listMultiselect.deselect(value);
+            else listMultiselect.clear();
+        }
+    } else if (filterType === 'tags') {
+        if (tagsMultiselect) {
+            if (value) tagsMultiselect.deselect(value);
+            else tagsMultiselect.clear();
+        }
+    }
+    filterTasks();
+}
+
+export function updateActiveFilterChips(filters) {
+    const chipsContainer = document.getElementById('active-filter-chips');
+    const badge = document.getElementById('filter-count-badge');
+    const toggleBtn = document.getElementById('filter-drawer-toggle-btn');
+    const clearSearchBtn = document.getElementById('clear-search-btn');
+    
+    if (clearSearchBtn) {
+        clearSearchBtn.style.display = filters.search ? 'inline-flex' : 'none';
+    }
+    
+    let activeCount = 0;
+    const chips = [];
+    
+    if (filters.search) {
+        activeCount++;
+        chips.push({
+            type: 'search',
+            label: `Search: "${filters.search}"`,
+            remove: "window.removeFilterChip('search')"
+        });
+    }
+    if (filters.status) {
+        activeCount++;
+        chips.push({
+            type: 'status',
+            label: `Status: ${filters.status}`,
+            remove: "window.removeFilterChip('status')"
+        });
+    }
+    if (filters.priority) {
+        activeCount++;
+        chips.push({
+            type: 'priority',
+            label: `Priority: ${filters.priority}`,
+            remove: "window.removeFilterChip('priority')"
+        });
+    }
+    if (filters.list && filters.list.length > 0) {
+        activeCount += filters.list.length;
+        filters.list.forEach(item => {
+            chips.push({
+                type: 'list',
+                label: `List: ${item}`,
+                remove: `window.removeFilterChip('list', '${item.replace(/'/g, "\\'")}')`
+            });
+        });
+    }
+    if (filters.tags && filters.tags.length > 0) {
+        activeCount += filters.tags.length;
+        filters.tags.forEach(item => {
+            chips.push({
+                type: 'tags',
+                label: `Tag: #${item}`,
+                remove: `window.removeFilterChip('tags', '${item.replace(/'/g, "\\'")}')`
+            });
+        });
+    }
+    if (filters.dateStart || filters.dateEnd) {
+        activeCount++;
+        const rangeStr = `${filters.dateStart || 'any'} to ${filters.dateEnd || 'any'}`;
+        chips.push({
+            type: 'date',
+            label: `Date: ${rangeStr}`,
+            remove: "window.removeFilterChip('date')"
+        });
+    }
+    
+    if (badge) {
+        if (activeCount > 0) {
+            badge.textContent = activeCount;
+            badge.style.display = 'inline-flex';
+            if (toggleBtn) toggleBtn.classList.add('has-filters');
+        } else {
+            badge.style.display = 'none';
+            if (toggleBtn) toggleBtn.classList.remove('has-filters');
+        }
+    }
+    
+    if (chipsContainer) {
+        if (chips.length > 0) {
+            chipsContainer.style.display = 'flex';
+            let html = chips.map(c => `
+                <span class="filter-chip">
+                    <span class="chip-text">${c.label}</span>
+                    <button type="button" class="chip-remove" onclick="${c.remove}" aria-label="Remove filter">&times;</button>
+                </span>
+            `).join('');
+            html += `
+                <button type="button" class="filter-clear-all-link" onclick="window.clearTasksFilters()">
+                    Clear All
+                </button>
+            `;
+            chipsContainer.innerHTML = html;
+        } else {
+            chipsContainer.style.display = 'none';
+            chipsContainer.innerHTML = '';
+        }
+    }
+}
+
 export function filterTasks() {
     // Get values from multiselect filters
     const listFilterEl = document.getElementById('task-list-filter');
@@ -931,6 +1152,12 @@ export function filterTasks() {
     
     container.innerHTML = '';
     
+    // Update container compact class
+    container.classList.toggle('compact', currentTaskViewMode === 'compact');
+    
+    // Update active filter chips and badges
+    updateActiveFilterChips(filters);
+    
     // Filter out deleted tasks if setting is enabled
     filteredTasks = filterOutDeletedTasks(filteredTasks);
     
@@ -943,12 +1170,12 @@ export function filterTasks() {
     updateTasksCountDisplay(filteredTasks.length, totalTasks);
     
     if (filteredTasks.length === 0) {
-        container.innerHTML = '<p style="text-align: center; color: #6b7280;">No tasks match your filters.</p>';
+        container.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 2rem;">No tasks match your filters.</p>';
         return;
     }
     
     filteredTasks.forEach(task => {
-        const card = createTaskCard(task);
+        const card = createTaskCard(task, { isCompact: currentTaskViewMode === 'compact' });
         container.appendChild(card);
     });
 }
@@ -1289,7 +1516,19 @@ export async function initDashboard() {
     // Setup keyboard shortcuts
     setupKeyboardShortcuts();
 
-    console.log('Dashboard initialized');
+    // Initialize task view mode buttons and grid class
+    const compactBtn = document.getElementById('view-mode-compact');
+    const cardBtn = document.getElementById('view-mode-card');
+    if (compactBtn && cardBtn) {
+        compactBtn.classList.toggle('active', currentTaskViewMode === 'compact');
+        cardBtn.classList.toggle('active', currentTaskViewMode === 'card');
+    }
+    const tasksGrid = document.getElementById('tasks-grid');
+    if (tasksGrid) {
+        tasksGrid.classList.toggle('compact', currentTaskViewMode === 'compact');
+    }
+
+    console.log('Dashboard initialized with task view mode:', currentTaskViewMode);
 }
 
 // ========== Chart Filters ==========
@@ -1862,6 +2101,18 @@ function switchNotesTab(tab) {
     }
 }
 
+// Expose functions globally for inline HTML onclick handlers
+window.toggleSidebar = toggleSidebar;
+window.closeSidebar = closeSidebar;
+window.closeSidebarOnMobile = closeSidebarOnMobile;
+window.toggleFilterDrawer = toggleFilterDrawer;
+window.openFilterDrawer = openFilterDrawer;
+window.closeFilterDrawer = closeFilterDrawer;
+window.setTaskViewMode = setTaskViewMode;
+window.clearTaskSearch = clearTaskSearch;
+window.removeFilterChip = removeFilterChip;
+window.clearTasksFilters = clearTasksFilters;
+
 // Export for use in other modules
 export default {
     initDashboard,
@@ -1869,6 +2120,14 @@ export default {
     updateStats,
     showSection,
     toggleSidebar,
+    closeSidebar,
+    closeSidebarOnMobile,
+    toggleFilterDrawer,
+    openFilterDrawer,
+    closeFilterDrawer,
+    setTaskViewMode,
+    clearTaskSearch,
+    removeFilterChip,
     toggleFullscreen,
     switchAccount,
     loadTasks,

@@ -23,6 +23,29 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
+    <!-- Mobile Top Navigation Bar -->
+    <header class="mobile-top-bar" id="mobile-top-bar">
+        <button class="mobile-menu-btn" id="mobile-sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle navigation">
+            <i class="fas fa-bars"></i>
+        </button>
+        <div class="mobile-brand">
+            <i class="fas fa-tasks"></i>
+            <span class="mobile-title">GTasks</span>
+        </div>
+        <div class="mobile-header-actions">
+            <div id="mobileDarkModeToggle" class="mobile-dark-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <i class="fas fa-sun sun-icon"></i>
+                <i class="fas fa-moon moon-icon"></i>
+            </div>
+            <button class="mobile-action-btn" onclick="openSettings()" title="Settings">
+                <i class="fas fa-cog"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Sidebar Backdrop Overlay -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
     <div class="dashboard-container">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -33,15 +56,15 @@
                 </button>
             </div>
             <nav class="sidebar-nav">
-                <a href="{{ base_path }}/dashboard" class="nav-item" id="nav-dashboard">
+                <a href="{{ base_path }}/dashboard" class="nav-item" id="nav-dashboard" onclick="closeSidebarOnMobile()">
                     <i class="fas fa-chart-line"></i>
                     <span>Dashboard</span>
                 </a>
-                <a href="{{ base_path }}/hierarchy" class="nav-item" id="nav-hierarchy">
+                <a href="{{ base_path }}/hierarchy" class="nav-item" id="nav-hierarchy" onclick="closeSidebarOnMobile()">
                     <i class="fas fa-project-diagram"></i>
                     <span>Hierarchy</span>
                 </a>
-                <a href="{{ base_path }}/tasks" class="nav-item" id="nav-tasks">
+                <a href="{{ base_path }}/tasks" class="nav-item" id="nav-tasks" onclick="closeSidebarOnMobile()">
                     <i class="fas fa-tasks"></i>
                     <span>Tasks</span>
                 </a>
@@ -328,77 +351,135 @@
                     </div>
                 </div>
 
-                <!-- Task Filters -->
-                <div class="task-filters-bar">
-                    <input type="text" id="task-search-filter" class="filter-input" placeholder="Search tasks..." oninput="filterTasks()">
-                    <select id="task-status-filter" class="filter-select" onchange="filterTasks()">
-                        <option value="">All Status</option>
-                        <option value="pending">Pending</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                    </select>
-                    <select id="task-priority-filter" class="filter-select" onchange="filterTasks()">
-                        <option value="">All Priorities</option>
-                        <option value="critical">Critical</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                    </select>
-                    <div class="filter-multiselect">
-                        <label class="filter-label">Filter by List</label>
-                        <div class="multiselect-container" id="task-list-filter-container">
-                            <!-- Multiselect will be initialized here -->
+                <!-- Tasks Toolbar: Search, Filter Hamburger Button, and View Mode Toggle -->
+                <div class="tasks-toolbar">
+                    <div class="task-search-wrapper">
+                        <i class="fas fa-search search-icon"></i>
+                        <input type="text" id="task-search-filter" class="filter-input search-input" placeholder="Search tasks by title, note, tag..." oninput="filterTasks()">
+                        <button class="clear-search-btn" id="clear-search-btn" onclick="clearTaskSearch()" style="display: none;" title="Clear search">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="tasks-toolbar-controls">
+                        <!-- Filters Hamburger Button -->
+                        <button class="filter-drawer-toggle-btn" id="filter-drawer-toggle-btn" onclick="toggleFilterDrawer()" title="Filter & Sort Tasks">
+                            <i class="fas fa-sliders-h"></i>
+                            <span>Filters</span>
+                            <span class="filter-count-badge" id="filter-count-badge" style="display: none;">0</span>
+                        </button>
+                        <!-- View Mode Toggle (Compact vs Cards) -->
+                        <div class="view-mode-toggle" id="task-view-mode-toggle" title="Switch view layout">
+                            <button class="view-btn active" id="view-mode-compact" onclick="setTaskViewMode('compact')" title="Compact List View">
+                                <i class="fas fa-bars"></i>
+                            </button>
+                            <button class="view-btn" id="view-mode-card" onclick="setTaskViewMode('card')" title="Card Grid View">
+                                <i class="fas fa-th-large"></i>
+                            </button>
                         </div>
                     </div>
-                    <div class="filter-multiselect">
-                        <label class="filter-label">Filter by Tags</label>
-                        <div class="multiselect-container" id="task-tags-filter-container">
-                            <!-- Multiselect will be initialized here -->
+                </div>
+
+                <!-- Active Filter Chips Strip -->
+                <div class="active-filter-chips" id="active-filter-chips" style="display: none;"></div>
+
+                <!-- Filter Drawer Backdrop (Mobile) -->
+                <div class="filter-drawer-backdrop" id="filter-drawer-backdrop" onclick="closeFilterDrawer()"></div>
+
+                <!-- Task Filters (Responsive: Drawer on mobile, Toolpanel on desktop) -->
+                <div class="task-filters-bar" id="task-filters-drawer">
+                    <div class="filter-drawer-header">
+                        <h3><i class="fas fa-filter mr-2"></i>Filter & Sort</h3>
+                        <div class="filter-drawer-header-actions">
+                            <button class="drawer-reset-btn" onclick="clearTasksFilters()">Reset</button>
+                            <button class="drawer-close-btn" onclick="closeFilterDrawer()" aria-label="Close filters">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="filter-drawer-content">
+                        <div class="filter-item">
+                            <label class="filter-label">Status</label>
+                            <select id="task-status-filter" class="filter-select" onchange="filterTasks()">
+                                <option value="">All Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <label class="filter-label">Priority</label>
+                            <select id="task-priority-filter" class="filter-select" onchange="filterTasks()">
+                                <option value="">All Priorities</option>
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+                        <div class="filter-multiselect">
+                            <label class="filter-label">Filter by List</label>
+                            <div class="multiselect-container" id="task-list-filter-container">
+                                <!-- Multiselect will be initialized here -->
+                            </div>
+                        </div>
+                        <div class="filter-multiselect">
+                            <label class="filter-label">Filter by Tags</label>
+                            <div class="multiselect-container" id="task-tags-filter-container">
+                                <!-- Multiselect will be initialized here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Date Filter Section -->
+                        <div class="filter-section date-filter-section">
+                            <div class="filter-row">
+                                <label class="filter-label">Date Field:</label>
+                                <select id="task-date-field" class="filter-select" onchange="filterTasks()">
+                                    <option value="due">Due Date</option>
+                                    <option value="created_at">Created Date</option>
+                                    <option value="modified_at">Modified Date</option>
+                                </select>
+                            </div>
+                            <div class="filter-row date-range-filter">
+                                <input type="date" id="task-date-start" class="filter-input" placeholder="From date..." onchange="filterTasks()">
+                                <span style="color: #6b7280; margin: 0 0.5rem;">to</span>
+                                <input type="date" id="task-date-end" class="filter-input" placeholder="To date..." onchange="filterTasks()">
+                            </div>
+                        </div>
+                        
+                        <!-- Sort Section -->
+                        <div class="filter-section sort-filter-section">
+                            <div class="filter-row">
+                                <label class="filter-label">Sort By:</label>
+                                <select id="task-sort-field" class="filter-select" onchange="filterTasks()">
+                                    <option value="due">Due Date</option>
+                                    <option value="created_at">Created Date</option>
+                                    <option value="modified_at">Modified Date</option>
+                                    <option value="priority">Priority</option>
+                                    <option value="title">Title</option>
+                                </select>
+                                <select id="task-sort-order" class="filter-select" onchange="filterTasks()">
+                                    <option value="desc" selected>Descending</option>
+                                    <option value="asc">Ascending</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     
-                    <!-- Date Filter Section -->
-                    <div class="filter-section date-filter-section">
-                        <div class="filter-row">
-                            <label>Date Field:</label>
-                            <select id="task-date-field" class="filter-select" onchange="filterTasks()">
-                                <option value="due">Due Date</option>
-                                <option value="created_at">Created Date</option>
-                                <option value="modified_at">Modified Date</option>
-                            </select>
-                        </div>
-                        <div class="filter-row date-range-filter">
-                            <input type="date" id="task-date-start" class="filter-input" placeholder="From date..." onchange="filterTasks()">
-                            <span style="color: #6b7280; margin: 0 0.5rem;">to</span>
-                            <input type="date" id="task-date-end" class="filter-input" placeholder="To date..." onchange="filterTasks()">
-                        </div>
-                    </div>
-                    
-                    <!-- Sort Section -->
-                    <div class="filter-section sort-filter-section">
-                        <div class="filter-row">
-                            <label>Sort By:</label>
-                            <select id="task-sort-field" class="filter-select" onchange="filterTasks()">
-                                <option value="due">Due Date</option>
-                                <option value="created_at">Created Date</option>
-                                <option value="modified_at">Modified Date</option>
-                                <option value="priority">Priority</option>
-                                <option value="title">Title</option>
-                            </select>
-                            <select id="task-sort-order" class="filter-select" onchange="filterTasks()">
-                                <option value="desc" selected>Descending</option>
-                                <option value="asc">Ascending</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <!-- Clear Button -->
-                    <div class="filter-section clear-filter-section">
+                    <div class="filter-drawer-footer">
                         <button id="task-clear-filters" class="btn btn-secondary" onclick="clearTasksFilters()">
-                            <i class="fas fa-times"></i> Clear All Filters
+                            <i class="fas fa-undo"></i> Reset All
+                        </button>
+                        <button class="btn btn-primary" onclick="closeFilterDrawer()">
+                            <i class="fas fa-check"></i> Done
                         </button>
                     </div>
                 </div>
+
+                <!-- Mobile Floating Action Button (New Task) -->
+                <button class="mobile-fab" onclick="openAddModal()" title="Add New Task" aria-label="Add Task">
+                    <i class="fas fa-plus"></i>
+                </button>
 
                 <!-- Tasks Grid -->
                 <div class="tasks-count-display" id="tasks-count-display">

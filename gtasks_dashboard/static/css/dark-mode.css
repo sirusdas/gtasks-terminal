@@ -340,3 +340,53 @@
 .dark-mode .notes-preview-box pre {
     background: #0f172a;
 }
+
+/* Mobile & Compact View Dark Mode */
+.dark-mode .mobile-top-bar {
+    background-color: var(--bg-secondary);
+    border-bottom-color: var(--border-color);
+}
+
+.dark-mode .task-card-compact {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+.dark-mode .task-card-compact.completed {
+    background: rgba(16, 185, 129, 0.12);
+    border-left-color: #10b981;
+}
+
+.dark-mode .filter-chip {
+    background: #1e293b;
+    color: #93c5fd;
+    border-color: #3b82f6;
+}
+
+.dark-mode .filter-chip:hover {
+    background: #1e3a5f;
+}
+
+.dark-mode .compact-due {
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+.dark-mode .compact-due.overdue {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border-color: #ef4444;
+}
+
+.dark-mode .compact-due.today {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fcd34d;
+    border-color: #f59e0b;
+}
+
+.dark-mode .compact-expand-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
