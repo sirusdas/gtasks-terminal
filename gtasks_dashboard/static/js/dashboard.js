@@ -1933,7 +1933,15 @@ function openAddModal() {
 }
 
 function closeAddModal() {
-    document.getElementById('add-task-modal').classList.remove('active');
+    const modal = document.getElementById('add-task-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        modal.classList.remove('is-fullscreen');
+        const modalContent = modal.querySelector('.modal-content');
+        if (modalContent) modalContent.classList.remove('is-fullscreen');
+        if (typeof updateFullscreenIcons === 'function') updateFullscreenIcons(modal, false);
+    }
+    document.body.classList.remove('modal-fullscreen-active');
 }
 
 function onAddAccountChange(accountId) {
@@ -2035,7 +2043,10 @@ async function saveNewTask() {
 
 function openEditModal(taskId) {
     const tasks = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
-    const task = tasks.find(t => t.id === taskId);
+    let task = tasks.find(t => t.id === taskId);
+    if (!task && window._allLoadedTasks) {
+        task = window._allLoadedTasks.find(t => t.id === taskId);
+    }
     if (!task) return;
 
     window.editingTaskId = taskId;
@@ -2066,11 +2077,22 @@ function openEditModal(taskId) {
     // Reset to edit tab
     switchNotesTab('edit');
 
-    document.getElementById('edit-task-modal').classList.add('active');
+    const modal = document.getElementById('edit-task-modal');
+    if (modal) {
+        modal.classList.add('active');
+    }
 }
 
 function closeEditModal() {
-    document.getElementById('edit-task-modal').classList.remove('active');
+    const modal = document.getElementById('edit-task-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        modal.classList.remove('is-fullscreen');
+        const modalContent = modal.querySelector('.modal-content');
+        if (modalContent) modalContent.classList.remove('is-fullscreen');
+        if (typeof updateFullscreenIcons === 'function') updateFullscreenIcons(modal, false);
+    }
+    document.body.classList.remove('modal-fullscreen-active');
     window.editingTaskId = null;
 }
 
@@ -2180,28 +2202,105 @@ function syntaxHighlightJson(jsonString) {
     });
 }
 
-// Fullscreen toggle for Quick View reading mode
-export function toggleQuickViewFullscreen() {
-    const modalContent = document.querySelector('#quick-view-modal .quick-view-modal-content');
-    if (!modalContent) return;
+// Fullscreen helper to sync all expand/compress icons, labels, and aria attributes
+export function updateFullscreenIcons(modal, isFullscreen) {
+    if (!modal) return;
+    const expandIcons = modal.querySelectorAll('.fa-expand, .fa-compress');
+    expandIcons.forEach(icon => {
+        if (isFullscreen) {
+            icon.classList.remove('fa-expand');
+            icon.classList.add('fa-compress');
+        } else {
+            icon.classList.remove('fa-compress');
+            icon.classList.add('fa-expand');
+        }
+    });
+
+    const expandTexts = modal.querySelectorAll('.fullscreen-btn-text');
+    expandTexts.forEach(txt => {
+        txt.textContent = isFullscreen ? 'Exit Full Screen' : 'Full Screen';
+    });
+
+    const expandBtns = modal.querySelectorAll('.btn-fullscreen-toggle, .modal-expand-btn');
+    expandBtns.forEach(btn => {
+        btn.setAttribute('title', isFullscreen ? 'Exit full screen' : 'Toggle full screen');
+        btn.setAttribute('aria-label', isFullscreen ? 'Exit full screen' : 'Toggle full screen');
+    });
+}
+
+// Universal modal fullscreen toggle (Quick View, Edit Task, Add Task)
+export function toggleModalFullscreen(modalId) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return false;
+    const modalContent = modal.querySelector('.modal-content');
+    if (!modalContent) return false;
 
     const isFullscreen = modalContent.classList.toggle('is-fullscreen');
-
-    // Update modal header expand icon
-    const modalExpandIcon = document.getElementById('quick-view-modal-expand-icon');
-    if (modalExpandIcon) {
-        modalExpandIcon.className = isFullscreen ? 'fas fa-compress' : 'fas fa-expand';
+    if (isFullscreen) {
+        modal.classList.add('is-fullscreen');
+        document.body.classList.add('modal-fullscreen-active');
+    } else {
+        modal.classList.remove('is-fullscreen');
+        document.body.classList.remove('modal-fullscreen-active');
     }
 
-    // Update notes action expand button & text
-    const notesExpandIcon = document.getElementById('quick-view-notes-expand-icon');
-    const notesExpandText = document.getElementById('quick-view-notes-expand-text');
-    if (notesExpandIcon) {
-        notesExpandIcon.className = isFullscreen ? 'fas fa-compress' : 'fas fa-expand';
+    updateFullscreenIcons(modal, isFullscreen);
+    return isFullscreen;
+}
+
+// Quick View Fullscreen
+export function toggleQuickViewFullscreen() {
+    return toggleModalFullscreen('quick-view-modal');
+}
+
+// Edit Modal Fullscreen
+export function toggleEditModalFullscreen() {
+    return toggleModalFullscreen('edit-task-modal');
+}
+
+// Add Modal Fullscreen
+export function toggleAddModalFullscreen() {
+    return toggleModalFullscreen('add-task-modal');
+}
+
+// Format JSON in notes textarea
+export function formatJsonInTextarea(textareaId) {
+    const textarea = document.getElementById(textareaId);
+    if (!textarea) return;
+    const rawVal = textarea.value.trim();
+    if (!rawVal) {
+        showNotification('No notes content to format', 'info');
+        return;
     }
-    if (notesExpandText) {
-        notesExpandText.textContent = isFullscreen ? 'Exit Full Screen' : 'Full Screen';
+
+    try {
+        const parsed = JSON.parse(rawVal);
+        textarea.value = JSON.stringify(parsed, null, 2);
+        showNotification('JSON formatted successfully! ✨', 'success');
+        return;
+    } catch (e) {
+        const match = rawVal.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+        if (match) {
+            try {
+                const parsed = JSON.parse(match[0]);
+                const formatted = JSON.stringify(parsed, null, 2);
+                textarea.value = rawVal.replace(match[0], formatted);
+                showNotification('Embedded JSON formatted! ✨', 'success');
+                return;
+            } catch (err) {
+                // Not valid JSON
+            }
+        }
+        showNotification('Notes content is not valid JSON', 'warning');
     }
+}
+
+export function formatEditTaskJson() {
+    formatJsonInTextarea('edit-task-notes');
+}
+
+export function formatAddTaskJson() {
+    formatJsonInTextarea('add-task-notes');
 }
 
 // Font size controls for Quick View notes
@@ -2385,23 +2484,19 @@ export function closeQuickView() {
     const modal = document.getElementById('quick-view-modal');
     if (modal) {
         modal.classList.remove('active');
-        const content = modal.querySelector('.quick-view-modal-content');
+        modal.classList.remove('is-fullscreen');
+        const content = modal.querySelector('.modal-content');
         if (content) {
             content.classList.remove('is-fullscreen');
         }
+        updateFullscreenIcons(modal, false);
     }
+    document.body.classList.remove('modal-fullscreen-active');
     // Reset font size
     const notesContainer = document.querySelector('.quick-view-notes-container');
     if (notesContainer) {
         notesContainer.style.fontSize = '';
     }
-    // Reset icons and label
-    const modalExpandIcon = document.getElementById('quick-view-modal-expand-icon');
-    if (modalExpandIcon) modalExpandIcon.className = 'fas fa-expand';
-    const notesExpandIcon = document.getElementById('quick-view-notes-expand-icon');
-    if (notesExpandIcon) notesExpandIcon.className = 'fas fa-expand';
-    const notesExpandText = document.getElementById('quick-view-notes-expand-text');
-    if (notesExpandText) notesExpandText.textContent = 'Full Screen';
 
     window.quickViewingTaskId = null;
 }
@@ -2490,12 +2585,20 @@ export async function copyQuickViewNotes() {
     }
 }
 
-// Attach backdrop and escape key listeners for quick-view modal
+// Attach backdrop and escape key listeners for all modals
 if (typeof document !== 'undefined') {
     document.addEventListener('click', (e) => {
-        const modal = document.getElementById('quick-view-modal');
-        if (modal && e.target === modal) {
+        const qvModal = document.getElementById('quick-view-modal');
+        if (qvModal && e.target === qvModal) {
             closeQuickView();
+        }
+        const editModal = document.getElementById('edit-task-modal');
+        if (editModal && e.target === editModal && !editModal.classList.contains('is-fullscreen')) {
+            closeEditModal();
+        }
+        const addModal = document.getElementById('add-task-modal');
+        if (addModal && e.target === addModal && !addModal.classList.contains('is-fullscreen')) {
+            closeAddModal();
         }
     });
 
@@ -2503,12 +2606,32 @@ if (typeof document !== 'undefined') {
         if (e.key === 'Escape') {
             const qvModal = document.getElementById('quick-view-modal');
             if (qvModal && qvModal.classList.contains('active')) {
-                const modalContent = qvModal.querySelector('.quick-view-modal-content');
-                if (modalContent && modalContent.classList.contains('is-fullscreen')) {
+                if (qvModal.classList.contains('is-fullscreen') || (qvModal.querySelector('.modal-content') && qvModal.querySelector('.modal-content').classList.contains('is-fullscreen'))) {
                     toggleQuickViewFullscreen();
                 } else {
                     closeQuickView();
                 }
+                return;
+            }
+
+            const editModal = document.getElementById('edit-task-modal');
+            if (editModal && editModal.classList.contains('active')) {
+                if (editModal.classList.contains('is-fullscreen') || (editModal.querySelector('.modal-content') && editModal.querySelector('.modal-content').classList.contains('is-fullscreen'))) {
+                    toggleEditModalFullscreen();
+                } else {
+                    closeEditModal();
+                }
+                return;
+            }
+
+            const addModal = document.getElementById('add-task-modal');
+            if (addModal && addModal.classList.contains('active')) {
+                if (addModal.classList.contains('is-fullscreen') || (addModal.querySelector('.modal-content') && addModal.querySelector('.modal-content').classList.contains('is-fullscreen'))) {
+                    toggleAddModalFullscreen();
+                } else {
+                    closeAddModal();
+                }
+                return;
             }
         }
     });
@@ -2526,7 +2649,7 @@ window.clearTaskSearch = clearTaskSearch;
 window.removeFilterChip = removeFilterChip;
 window.clearTasksFilters = clearTasksFilters;
 
-// Quick View Window Exports
+// Modal & Fullscreen Exports
 window.openQuickView = openQuickView;
 window.closeQuickView = closeQuickView;
 window.quickViewToggleComplete = quickViewToggleComplete;
@@ -2534,6 +2657,24 @@ window.quickViewEditTask = quickViewEditTask;
 window.copyQuickViewNotes = copyQuickViewNotes;
 window.toggleQuickViewFullscreen = toggleQuickViewFullscreen;
 window.adjustQuickViewFontSize = adjustQuickViewFontSize;
+
+window.openEditModal = openEditModal;
+window.closeEditModal = closeEditModal;
+window.saveTaskEdit = saveTaskEdit;
+window.switchNotesTab = switchNotesTab;
+window.toggleEditModalFullscreen = toggleEditModalFullscreen;
+window.formatEditTaskJson = formatEditTaskJson;
+
+window.openAddModal = openAddModal;
+window.closeAddModal = closeAddModal;
+window.saveNewTask = saveNewTask;
+window.onAddAccountChange = onAddAccountChange;
+window.switchAddNotesTab = switchAddNotesTab;
+window.toggleAddModalFullscreen = toggleAddModalFullscreen;
+window.formatAddTaskJson = formatAddTaskJson;
+
+window.updateFullscreenIcons = updateFullscreenIcons;
+window.toggleModalFullscreen = toggleModalFullscreen;
 
 // Export for use in other modules
 export default {
@@ -2562,7 +2703,18 @@ export default {
     quickViewEditTask,
     copyQuickViewNotes,
     toggleQuickViewFullscreen,
-    adjustQuickViewFontSize
+    adjustQuickViewFontSize,
+    openEditModal,
+    closeEditModal,
+    saveTaskEdit,
+    toggleEditModalFullscreen,
+    formatEditTaskJson,
+    openAddModal,
+    closeAddModal,
+    saveNewTask,
+    toggleAddModalFullscreen,
+    formatAddTaskJson,
+    toggleModalFullscreen
 };
 
 // Initialize the dashboard when DOM is ready (or immediately if already parsed)

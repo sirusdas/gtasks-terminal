@@ -205,6 +205,11 @@
 }
 
 /* Edit Task Modal */
+.edit-modal-content {
+    max-width: 720px;
+    width: 92%;
+}
+
 .edit-modal-body {
     display: flex;
     flex-direction: column;
@@ -234,10 +239,25 @@
     flex: 1;
 }
 
+.edit-notes-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.edit-notes-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
 .edit-notes-tabs {
     display: flex;
     gap: 4px;
-    margin-bottom: 6px;
 }
 
 .edit-notes-tab {
@@ -501,6 +521,7 @@
     font-weight: 600;
     text-transform: none;
     letter-spacing: normal;
+}
 .quick-view-notes-actions {
     display: flex;
     align-items: center;
@@ -857,25 +878,45 @@
     color: var(--text-primary);
 }
 
-/* Full Screen Reading Mode */
-.quick-view-modal-content.is-fullscreen {
+/* Full Screen Modal Modes (Viewing & Editing) */
+body.modal-fullscreen-active {
+    overflow: hidden !important;
+}
+
+.modal-overlay.is-fullscreen {
+    align-items: stretch !important;
+    justify-content: stretch !important;
+    padding: 0 !important;
+    background-color: var(--bg-secondary) !important;
+    z-index: 2000 !important;
+}
+
+.modal-overlay.is-fullscreen .modal-content,
+.modal-content.is-fullscreen {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
     width: 100vw !important;
     max-width: 100vw !important;
     height: 100vh !important;
+    height: 100dvh !important;
     max-height: 100vh !important;
+    max-height: 100dvh !important;
     border-radius: 0 !important;
     margin: 0 !important;
-    top: 0 !important;
-    left: 0 !important;
-    position: fixed !important;
-    z-index: 1001;
-    display: flex;
-    flex-direction: column;
-    padding: 16px 24px;
+    padding: 16px 20px !important;
+    z-index: 2001 !important;
+    display: flex !important;
+    flex-direction: column !important;
     animation: none !important;
     box-shadow: none !important;
+    overflow: hidden !important;
 }
 
+/* Quick View in Fullscreen */
+.modal-overlay.is-fullscreen .quick-view-modal-body,
 .quick-view-modal-content.is-fullscreen .quick-view-modal-body {
     flex: 1;
     display: flex;
@@ -884,6 +925,7 @@
     overflow-y: hidden;
 }
 
+.modal-overlay.is-fullscreen #quick-view-notes-section,
 .quick-view-modal-content.is-fullscreen #quick-view-notes-section {
     flex: 1;
     display: flex;
@@ -893,6 +935,7 @@
     margin-bottom: 4px;
 }
 
+.modal-overlay.is-fullscreen .quick-view-notes-container,
 .quick-view-modal-content.is-fullscreen .quick-view-notes-container {
     flex: 1;
     max-height: none !important;
@@ -901,13 +944,53 @@
     overflow-y: auto;
 }
 
+.modal-overlay.is-fullscreen .quick-view-meta-grid,
 .quick-view-modal-content.is-fullscreen .quick-view-meta-grid {
     grid-template-columns: repeat(4, 1fr);
     gap: 8px;
     margin-bottom: 8px;
 }
 
-/* Mobile Responsive Modals (Bottom Sheet) */
+/* Edit & Add Task Modal in Fullscreen */
+.modal-overlay.is-fullscreen .edit-modal-body,
+.edit-modal-content.is-fullscreen .edit-modal-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    gap: 12px;
+}
+
+.modal-overlay.is-fullscreen .edit-notes-group,
+.edit-modal-content.is-fullscreen .edit-notes-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin-bottom: 0;
+}
+
+.modal-overlay.is-fullscreen #edit-task-notes,
+.edit-modal-content.is-fullscreen #edit-task-notes,
+.modal-overlay.is-fullscreen #edit-notes-preview,
+.edit-modal-content.is-fullscreen #edit-notes-preview,
+.modal-overlay.is-fullscreen #add-task-notes,
+.edit-modal-content.is-fullscreen #add-task-notes,
+.modal-overlay.is-fullscreen #add-notes-preview,
+.edit-modal-content.is-fullscreen #add-notes-preview {
+    flex: 1;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    resize: none !important;
+    overflow-y: auto !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+/* Mobile Responsive Modals (Bottom Sheet & Fullscreen) */
 @media (max-width: 768px) {
     .modal-overlay {
         align-items: flex-end;
@@ -924,13 +1007,26 @@
         animation: slideUpModal 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .quick-view-modal-content.is-fullscreen {
-        padding: 12px 14px;
-        border-radius: 0 !important;
-        max-height: 100vh !important;
+    /* Mobile Fullscreen Overrides */
+    .modal-overlay.is-fullscreen {
+        align-items: stretch !important;
+        padding: 0 !important;
+    }
+
+    .modal-overlay.is-fullscreen .modal-content,
+    .modal-content.is-fullscreen {
+        width: 100vw !important;
+        max-width: 100vw !important;
         height: 100vh !important;
+        height: 100dvh !important;
+        max-height: 100vh !important;
+        max-height: 100dvh !important;
+        border-radius: 0 !important;
+        padding: 12px 14px !important;
+        animation: none !important;
     }
     
+    .modal-overlay.is-fullscreen .quick-view-meta-grid,
     .quick-view-modal-content.is-fullscreen .quick-view-meta-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 6px;

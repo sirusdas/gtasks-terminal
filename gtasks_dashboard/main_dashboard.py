@@ -29,6 +29,18 @@ app = Flask(__name__,
     static_folder='static'
 )
 
+# Disable static file caching so mobile browsers always receive latest assets
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+
+@app.after_request
+def add_no_cache_headers(response):
+    """Ensure static files and templates are not served from stale cache"""
+    if request.path.startswith('/static/') or request.path.endswith('.js') or request.path.endswith('.css'):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
+
 # Import BASE_PATH from routes
 from routes.dashboard import BASE_PATH
 

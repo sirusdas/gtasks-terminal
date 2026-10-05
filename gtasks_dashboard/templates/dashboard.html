@@ -13,13 +13,13 @@
     <title>GTasks Dashboard - Hierarchical Visualization</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css?v=10">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css?v=10">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css?v=10">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=10">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=10">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=10">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=10">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css?v=20">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css?v=20">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css?v=20">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=20">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=20">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=20">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=20">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -566,10 +566,15 @@
 
     <!-- Edit Task Modal -->
     <div class="modal-overlay" id="edit-task-modal">
-        <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-content edit-modal-content">
             <div class="modal-header">
                 <h2><i class="fas fa-edit"></i> Edit Task</h2>
-                <button class="modal-close" onclick="closeEditModal()">&times;</button>
+                <div class="quick-view-header-controls">
+                    <button type="button" class="modal-expand-btn btn-fullscreen-toggle" id="edit-modal-expand-btn" onclick="toggleEditModalFullscreen()" title="Toggle full screen" aria-label="Toggle full screen">
+                        <i class="fas fa-expand" id="edit-modal-expand-icon"></i>
+                    </button>
+                    <button type="button" class="modal-close" onclick="closeEditModal()" aria-label="Close modal">&times;</button>
+                </div>
             </div>
             <div class="edit-modal-body">
                 <div class="edit-form-group">
@@ -601,11 +606,21 @@
                         </select>
                     </div>
                 </div>
-                <div class="edit-form-group">
-                    <label>Notes <span class="markdown-hint">— Markdown supported</span></label>
-                    <div class="edit-notes-tabs">
-                        <button class="edit-notes-tab active" data-tab="edit" onclick="switchNotesTab('edit')">Edit</button>
-                        <button class="edit-notes-tab" data-tab="preview" onclick="switchNotesTab('preview')">Preview</button>
+                <div class="edit-form-group edit-notes-group">
+                    <div class="edit-notes-header">
+                        <label>Notes <span class="markdown-hint">— Markdown & JSON supported</span></label>
+                        <div class="edit-notes-toolbar">
+                            <button type="button" class="btn-notes-action" id="format-json-btn" onclick="formatEditTaskJson()" title="Format/Beautify JSON in notes">
+                                <i class="fas fa-code"></i> Format JSON
+                            </button>
+                            <button type="button" class="btn-notes-action btn-fullscreen-toggle" id="edit-notes-expand-btn" onclick="toggleEditModalFullscreen()" title="Toggle full screen editor">
+                                <i class="fas fa-expand" id="edit-notes-expand-icon"></i> <span id="edit-notes-expand-text" class="fullscreen-btn-text">Full Screen</span>
+                            </button>
+                            <div class="edit-notes-tabs">
+                                <button type="button" class="edit-notes-tab active" data-tab="edit" onclick="switchNotesTab('edit')">Edit</button>
+                                <button type="button" class="edit-notes-tab" data-tab="preview" onclick="switchNotesTab('preview')">Preview</button>
+                            </div>
+                        </div>
                     </div>
                     <textarea id="edit-task-notes" class="filter-input" rows="8" placeholder="Notes (Markdown supported: **bold**, *italic*, # heading, - list, `code`)"></textarea>
                     <div id="edit-notes-preview" class="notes-preview-box" style="display:none;"></div>
@@ -620,10 +635,15 @@
 
     <!-- Add Task Modal -->
     <div class="modal-overlay" id="add-task-modal">
-        <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-content edit-modal-content">
             <div class="modal-header">
                 <h2><i class="fas fa-plus-circle"></i> Add New Task</h2>
-                <button class="modal-close" onclick="closeAddModal()">&times;</button>
+                <div class="quick-view-header-controls">
+                    <button type="button" class="modal-expand-btn btn-fullscreen-toggle" id="add-modal-expand-btn" onclick="toggleAddModalFullscreen()" title="Toggle full screen" aria-label="Toggle full screen">
+                        <i class="fas fa-expand" id="add-modal-expand-icon"></i>
+                    </button>
+                    <button type="button" class="modal-close" onclick="closeAddModal()" aria-label="Close modal">&times;</button>
+                </div>
             </div>
             <div class="edit-modal-body">
                 <div class="edit-form-group">
@@ -667,11 +687,21 @@
                         <input type="date" id="add-task-due" class="filter-input">
                     </div>
                 </div>
-                <div class="edit-form-group">
-                    <label>Notes <span class="markdown-hint">— Markdown supported</span></label>
-                    <div class="edit-notes-tabs">
-                        <button class="edit-notes-tab active" id="add-notes-tab-edit" onclick="switchAddNotesTab('edit')">Edit</button>
-                        <button class="edit-notes-tab" id="add-notes-tab-preview" onclick="switchAddNotesTab('preview')">Preview</button>
+                <div class="edit-form-group edit-notes-group">
+                    <div class="edit-notes-header">
+                        <label>Notes <span class="markdown-hint">— Markdown & JSON supported</span></label>
+                        <div class="edit-notes-toolbar">
+                            <button type="button" class="btn-notes-action" onclick="formatAddTaskJson()" title="Format/Beautify JSON in notes">
+                                <i class="fas fa-code"></i> Format JSON
+                            </button>
+                            <button type="button" class="btn-notes-action btn-fullscreen-toggle" onclick="toggleAddModalFullscreen()" title="Toggle full screen editor">
+                                <i class="fas fa-expand"></i> <span class="fullscreen-btn-text">Full Screen</span>
+                            </button>
+                            <div class="edit-notes-tabs">
+                                <button type="button" class="edit-notes-tab active" id="add-notes-tab-edit" onclick="switchAddNotesTab('edit')">Edit</button>
+                                <button type="button" class="edit-notes-tab" id="add-notes-tab-preview" onclick="switchAddNotesTab('preview')">Preview</button>
+                            </div>
+                        </div>
                     </div>
                     <textarea id="add-task-notes" class="filter-input" rows="6" placeholder="Notes (Markdown supported: **bold**, *italic*, # heading, - list, `code`)"></textarea>
                     <div id="add-notes-preview" class="notes-preview-box" style="display:none;"></div>
@@ -784,7 +814,7 @@
         <p>Loading...</p>
     </div>
 
-    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=10"></script>
-    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=10"></script>
+    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=20"></script>
+    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=20"></script>
 </body>
 </html>
