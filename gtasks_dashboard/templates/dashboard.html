@@ -13,13 +13,13 @@
     <title>GTasks Dashboard - Hierarchical Visualization</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css?v=20">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css?v=20">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css?v=20">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=20">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=20">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=20">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=20">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css?v=25">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css?v=25">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css?v=25">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=25">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=25">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=25">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=25">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -403,14 +403,11 @@
                     </div>
 
                     <div class="filter-drawer-content">
-                        <div class="filter-item">
+                        <div class="filter-multiselect">
                             <label class="filter-label">Status</label>
-                            <select id="task-status-filter" class="filter-select" onchange="filterTasks()">
-                                <option value="">All Status</option>
-                                <option value="pending">Pending</option>
-                                <option value="in_progress">In Progress</option>
-                                <option value="completed">Completed</option>
-                            </select>
+                            <div class="multiselect-container" id="task-status-filter-container">
+                                <!-- Status multiselect initialized dynamically -->
+                            </div>
                         </div>
                         <div class="filter-item">
                             <label class="filter-label">Priority</label>
@@ -440,9 +437,9 @@
                             <div class="filter-row">
                                 <label class="filter-label">Date Field:</label>
                                 <select id="task-date-field" class="filter-select" onchange="filterTasks()">
-                                    <option value="due">Due Date</option>
+                                    <option value="modified_at" selected>Modified Date (or Created)</option>
                                     <option value="created_at">Created Date</option>
-                                    <option value="modified_at">Modified Date</option>
+                                    <option value="due">Due Date</option>
                                 </select>
                             </div>
                             <div class="filter-row date-range-filter">
@@ -457,9 +454,9 @@
                             <div class="filter-row">
                                 <label class="filter-label">Sort By:</label>
                                 <select id="task-sort-field" class="filter-select" onchange="filterTasks()">
-                                    <option value="due">Due Date</option>
+                                    <option value="modified_at" selected>Modified Date</option>
                                     <option value="created_at">Created Date</option>
-                                    <option value="modified_at">Modified Date</option>
+                                    <option value="due">Due Date</option>
                                     <option value="priority">Priority</option>
                                     <option value="title">Title</option>
                                 </select>
@@ -814,7 +811,7 @@
         <p>Loading...</p>
     </div>
 
-    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=20"></script>
-    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=20"></script>
+    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=25"></script>
+    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=25"></script>
 </body>
 </html>

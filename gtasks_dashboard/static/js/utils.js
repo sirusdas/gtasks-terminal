@@ -28,10 +28,12 @@ export function debounce(func, wait) {
  */
 export function parseDateInput(dateString) {
     if (!dateString) return null;
+    if (dateString instanceof Date) return isNaN(dateString.getTime()) ? null : dateString;
     
-    // Try to parse DD/MM/YYYY format (common in India)
-    if (dateString.includes('/')) {
-        const parts = dateString.split('/');
+    const str = String(dateString).trim();
+    // Try to parse DD/MM/YYYY format
+    if (str.includes('/') && !str.includes('T')) {
+        const parts = str.split('/');
         if (parts.length === 3) {
             const day = parseInt(parts[0], 10);
             const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
@@ -40,20 +42,59 @@ export function parseDateInput(dateString) {
         }
     }
     
-    // Try to parse YYYY-MM-DD format (ISO format from date input)
-    if (dateString.includes('-')) {
-        const parts = dateString.split('-');
-        if (parts.length === 3) {
-            const year = parseInt(parts[0], 10);
-            const month = parseInt(parts[1], 10) - 1;
-            const day = parseInt(parts[2], 10);
-            return new Date(year, month, day, 0, 0, 0, 0);
-        }
+    // Exact YYYY-MM-DD format (from input type="date")
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        const parts = str.split('-');
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        return new Date(year, month, day, 0, 0, 0, 0);
     }
     
-    // Fallback to standard Date parsing
-    const date = new Date(dateString);
-    return isNaN(date.getTime()) ? null : date;
+    // Fallback to standard Date parsing (handles ISO-8601 timestamps)
+    const date = new Date(str);
+    if (!isNaN(date.getTime())) return date;
+    
+    const dateIso = new Date(str.replace(' ', 'T'));
+    return isNaN(dateIso.getTime()) ? null : dateIso;
+}
+
+/**
+ * Get date value for a task based on selected dateField.
+ * Default behavior: Modified date first, if not found then created date.
+ * @param {Object} task - Task object
+ * @param {string} dateField - Date field ('modified_at', 'created_at', 'due')
+ * @returns {string|null} - Date string
+ */
+export function getTaskDate(task, dateField = 'modified_at') {
+    if (!task) return null;
+    if (dateField === 'due') {
+        return task.due || null;
+    }
+    if (dateField === 'created_at') {
+        return task.created_at || task.created || task.modified_at || task.updated_at || null;
+    }
+    // 'modified_at' or default: modified date first, if not found then created date
+    return task.modified_at || task.updated_at || task.updated || task.created_at || task.created || null;
+}
+
+/**
+ * Get default date range formatted as YYYY-MM-DD for the past N days up to today.
+ * @param {number} days - Number of days in the past (default: 31)
+ * @returns {{start: string, end: string}} - Start and end dates
+ */
+export function getDefaultDateRange(days = 31) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - days);
+    
+    const pad = (n) => String(n).padStart(2, '0');
+    const formatDateStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    
+    return {
+        start: formatDateStr(start),
+        end: formatDateStr(end)
+    };
 }
 
 /**
@@ -249,9 +290,11 @@ export function sortTasksByField(tasks, sortField, sortOrder = 'asc') {
             }
                 
             case 'modified_at': {
-                const aModified = a.modified_at ? new Date(a.modified_at).getTime() : -Infinity;
-                const bModified = b.modified_at ? new Date(b.modified_at).getTime() : -Infinity;
-                comparison = aModified - bModified;
+                const aVal = getTaskDate(a, 'modified_at');
+                const bVal = getTaskDate(b, 'modified_at');
+                const aTime = aVal ? (parseDateInput(aVal)?.getTime() || -Infinity) : -Infinity;
+                const bTime = bVal ? (parseDateInput(bVal)?.getTime() || -Infinity) : -Infinity;
+                comparison = aTime - bTime;
                 break;
             }
                 
@@ -285,9 +328,29 @@ export function sortTasksByField(tasks, sortField, sortOrder = 'asc') {
 export function filterTasksByCriteria(tasks, filters) {
     let filteredTasks = [...tasks];
     
-    // Apply status filter
+    // Apply status filter (supports single string or array of statuses, case-insensitive, normalized)
     if (filters.status) {
-        filteredTasks = filteredTasks.filter(task => task.status === filters.status);
+        let statuses = [];
+        if (Array.isArray(filters.status)) {
+            statuses = filters.status;
+        } else if (typeof filters.status === 'string') {
+            try {
+                const parsed = JSON.parse(filters.status);
+                if (Array.isArray(parsed)) statuses = parsed;
+                else if (parsed) statuses = [String(parsed)];
+            } catch (e) {
+                if (filters.status.trim()) statuses = [filters.status.trim()];
+            }
+        }
+        
+        if (statuses.length > 0) {
+            const normalizedStatuses = statuses.map(s => String(s).toLowerCase().replace(/[\s\-_]/g, ''));
+            filteredTasks = filteredTasks.filter(task => {
+                if (!task.status) return false;
+                const taskStatusNorm = String(task.status).toLowerCase().replace(/[\s\-_]/g, '');
+                return normalizedStatuses.includes(taskStatusNorm);
+            });
+        }
     }
     
     // Apply priority filter
@@ -340,25 +403,11 @@ export function filterTasksByCriteria(tasks, filters) {
         console.log('[Utils] Tasks after tags filter:', filteredTasks.length);
     }
     
-    // Apply date filter
-    if (filters.dateField && (filters.dateStart || filters.dateEnd)) {
+    // Apply date filter (Modified date first if not found then created date)
+    if (filters.dateStart || filters.dateEnd) {
+        const dateField = filters.dateField || 'modified_at';
         filteredTasks = filteredTasks.filter(task => {
-            let taskDate;
-            
-            switch (filters.dateField) {
-                case 'due':
-                    taskDate = task.due;
-                    break;
-                case 'created_at':
-                    taskDate = task.created_at;
-                    break;
-                case 'modified_at':
-                    taskDate = task.modified_at;
-                    break;
-                default:
-                    taskDate = task.due;
-            }
-            
+            const taskDate = getTaskDate(task, dateField);
             if (!taskDate) return false;
             
             const taskDateObj = parseDateInput(taskDate);

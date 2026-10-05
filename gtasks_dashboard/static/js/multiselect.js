@@ -3,6 +3,8 @@
  * Reusable multiselect with search and suggest functionality
  */
 
+import { parseDateInput, getTaskDate } from './utils.js';
+
 // Create multiselect element
 export function createMultiselect(config) {
     const {
@@ -65,6 +67,21 @@ export function createMultiselect(config) {
     let currentOptions = [...options];
     let selectedValues = [...initialValues];
 
+    // Helper: get display label for a selected value
+    function getOptionLabel(val) {
+        const found = currentOptions.find(opt => {
+            if (typeof opt === 'object') {
+                const optVal = opt.value !== undefined ? opt.value : opt.label;
+                return String(optVal) === String(val) || String(opt.label) === String(val);
+            }
+            return String(opt) === String(val);
+        });
+        if (found && typeof found === 'object') {
+            return found.label;
+        }
+        return val;
+    }
+
     // Update display
     function updateDisplay() {
         selectionArea.innerHTML = '';
@@ -73,8 +90,9 @@ export function createMultiselect(config) {
         selectedValues.forEach(value => {
             const tag = document.createElement('span');
             tag.className = 'multiselect-tag';
+            const displayLabel = getOptionLabel(value);
             tag.innerHTML = `
-                ${value}
+                ${displayLabel}
                 <button type="button" class="multiselect-remove" data-value="${value}">&times;</button>
             `;
             selectionArea.appendChild(tag);
@@ -104,7 +122,7 @@ export function createMultiselect(config) {
 
     // Remove value
     function removeValue(value) {
-        selectedValues = selectedValues.filter(v => v !== value);
+        selectedValues = selectedValues.filter(v => String(v) !== String(value));
         updateDisplay();
         onChange(selectedValues);
     }
@@ -120,7 +138,8 @@ export function createMultiselect(config) {
 
         const filtered = currentOptions.filter(opt => {
             const optLabel = typeof opt === 'object' ? opt.label : opt;
-            return optLabel.toLowerCase().includes(term) && !selectedValues.includes(optLabel);
+            const optVal = typeof opt === 'object' && opt.value !== undefined ? opt.value : optLabel;
+            return optLabel.toLowerCase().includes(term) && !selectedValues.includes(optVal);
         });
 
         if (filtered.length === 0) {
@@ -128,9 +147,10 @@ export function createMultiselect(config) {
         } else {
             dropdown.innerHTML = filtered.map(opt => {
                 const label = typeof opt === 'object' ? opt.label : opt;
-                const count = typeof opt === 'object' && showCounts ? opt.count : null;
+                const val = typeof opt === 'object' && opt.value !== undefined ? opt.value : label;
+                const count = typeof opt === 'object' && showCounts && opt.count !== undefined ? opt.count : null;
                 const countHtml = showCounts && count !== null ? `<span class="multiselect-count">${count}</span>` : '';
-                return `<div class="multiselect-option" data-value="${label}">${label}${countHtml}</div>`;
+                return `<div class="multiselect-option" data-value="${val}">${label}${countHtml}</div>`;
             }).join('');
             
             // Add click listeners to options
@@ -219,6 +239,9 @@ export function createMultiselect(config) {
         selectedValues = [...values];
         updateDisplay();
     };
+
+    container.deselect = (value) => removeValue(value);
+    container.removeValue = (value) => removeValue(value);
 
     container.clear = () => {
         selectedValues = [];
@@ -439,26 +462,29 @@ export function getFilteredTasksBySearchAndDate(tasks, searchText, dateField, da
         });
     }
     
-    // Filter by date range
+    // Filter by date range (Modified date first if not found then created date)
     if (dateStart || dateEnd) {
+        const field = dateField || 'modified_at';
         filteredTasks = filteredTasks.filter(task => {
-            const dateValue = task[dateField];
-            if (!dateValue) return false; // Skip tasks without the specified date field
+            const dateValue = getTaskDate(task, field);
+            if (!dateValue) return false;
             
-            const taskDate = new Date(dateValue);
+            const taskDate = parseDateInput(dateValue);
+            if (!taskDate) return false;
             
             // Check start date
             if (dateStart) {
-                const startDate = new Date(dateStart);
-                if (taskDate < startDate) return false;
+                const startDate = parseDateInput(dateStart);
+                if (startDate && taskDate < startDate) return false;
             }
             
             // Check end date
             if (dateEnd) {
-                const endDate = new Date(dateEnd);
-                // Set end date to end of day for inclusive comparison
-                endDate.setHours(23, 59, 59, 999);
-                if (taskDate > endDate) return false;
+                const endDate = parseDateInput(dateEnd);
+                if (endDate) {
+                    endDate.setHours(23, 59, 59, 999);
+                    if (taskDate > endDate) return false;
+                }
             }
             
             return true;
@@ -466,6 +492,36 @@ export function getFilteredTasksBySearchAndDate(tasks, searchText, dateField, da
     }
     
     return filteredTasks;
+}
+
+/**
+ * Get all unique statuses with counts from tasks
+ * @param {Array} tasks - Array of task objects
+ * @returns {Array} - Array of status objects with label, value, and count
+ */
+export function getStatusWithCounts(tasks) {
+    if (!tasks || !Array.isArray(tasks)) return [];
+    
+    let pending = 0;
+    let inProgress = 0;
+    let completed = 0;
+    
+    tasks.forEach(task => {
+        const s = String(task.status || '').toLowerCase().replace(/[\s\-_]/g, '');
+        if (s === 'completed') {
+            completed++;
+        } else if (s === 'inprogress') {
+            inProgress++;
+        } else {
+            pending++;
+        }
+    });
+    
+    return [
+        { label: 'Pending', value: 'pending', count: pending },
+        { label: 'In Progress', value: 'in_progress', count: inProgress },
+        { label: 'Completed', value: 'completed', count: completed }
+    ];
 }
 
 /**
@@ -553,6 +609,7 @@ if (typeof module !== 'undefined' && module.exports) {
         getUniqueTags,
         getListsWithCounts,
         getTagsWithCounts,
+        getStatusWithCounts,
         getFilteredTagsByLists,
         getFilteredListsByTags,
         getFilteredTasksBySearchAndDate,

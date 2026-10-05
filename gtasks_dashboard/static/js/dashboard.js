@@ -16,10 +16,12 @@ import {
     getPriorityIcon,
     getStatusClass,
     getAllTags,
-    isValidTag
+    isValidTag,
+    getTaskDate,
+    getDefaultDateRange
 } from './utils.js';
 import { createTaskCard, renderTasksGrid } from './task-card.js';
-import { createMultiselect, getUniqueLists, getUniqueTags, getListsWithCounts, getTagsWithCounts, getFilteredTagsByLists, getFilteredListsByTags, getFilteredTasksBySearchAndDate, getFilteredListsByTagsAndCriteria, getFilteredTagsByListsAndCriteria } from './multiselect.js';
+import { createMultiselect, getUniqueLists, getUniqueTags, getListsWithCounts, getTagsWithCounts, getStatusWithCounts, getFilteredTagsByLists, getFilteredListsByTags, getFilteredTasksBySearchAndDate, getFilteredListsByTagsAndCriteria, getFilteredTagsByListsAndCriteria } from './multiselect.js';
 import { 
     renderHierarchy,
     initHierarchy,
@@ -672,22 +674,55 @@ export function switchAccountForTasks(accountId) {
 /**
  * Load tasks
  */
+/**
+ * Get default filter configuration
+ * Default: past 31 days (modified date first, then created date), status: pending & in_progress, sorted by modified date desc
+ */
+export function getDefaultFilterState() {
+    const defaultDates = getDefaultDateRange(31);
+    return {
+        search: '',
+        status: ['pending', 'in_progress'],
+        priority: '',
+        list: [],
+        tags: [],
+        dateField: 'modified_at',
+        dateStart: defaultDates.start,
+        dateEnd: defaultDates.end,
+        sortField: 'modified_at',
+        sortOrder: 'desc'
+    };
+}
+
 export function saveFilterState() {
     try {
         const listValues = listMultiselect ? listMultiselect.getSelectedValues() : [];
         const tagValues = tagsMultiselect ? tagsMultiselect.getSelectedValues() : [];
+        let statusValues = statusMultiselect ? statusMultiselect.getSelectedValues() : [];
+        if (!statusMultiselect) {
+            const el = document.getElementById('task-status-filter');
+            if (el && el.value) {
+                try {
+                    const parsed = JSON.parse(el.value);
+                    statusValues = Array.isArray(parsed) ? parsed : [el.value];
+                } catch(e) {
+                    statusValues = [el.value];
+                }
+            }
+        }
         const state = {
             search: document.getElementById('task-search-filter')?.value || '',
-            status: document.getElementById('task-status-filter')?.value || '',
+            status: statusValues,
             priority: document.getElementById('task-priority-filter')?.value || '',
             list: listValues,
             tags: tagValues,
-            dateField: document.getElementById('task-date-field')?.value || 'due',
+            dateField: document.getElementById('task-date-field')?.value || 'modified_at',
             dateStart: document.getElementById('task-date-start')?.value || '',
             dateEnd: document.getElementById('task-date-end')?.value || '',
-            sortField: document.getElementById('task-sort-field')?.value || 'due',
-            sortOrder: document.getElementById('task-sort-order')?.value || 'asc'
+            sortField: document.getElementById('task-sort-field')?.value || 'modified_at',
+            sortOrder: document.getElementById('task-sort-order')?.value || 'desc'
         };
+        localStorage.setItem('gtasks_filter_state', JSON.stringify(state));
         sessionStorage.setItem('gtasks_filter_state', JSON.stringify(state));
     } catch (e) {
         console.error('[Dashboard] Error saving filter state:', e);
@@ -696,7 +731,7 @@ export function saveFilterState() {
 
 export function loadFilterState() {
     try {
-        const saved = sessionStorage.getItem('gtasks_filter_state');
+        const saved = localStorage.getItem('gtasks_filter_state') || sessionStorage.getItem('gtasks_filter_state');
         return saved ? JSON.parse(saved) : null;
     } catch (e) {
         console.error('[Dashboard] Error loading filter state:', e);
@@ -732,6 +767,7 @@ export function loadTasks() {
  */
 let listMultiselect = null;
 let tagsMultiselect = null;
+let statusMultiselect = null;
 let allTasks = []; // Store all tasks for filtering
 let filterEventListenersAttached = false;
 
@@ -741,49 +777,77 @@ export function initMultiselectFilters(tasks) {
     // Capture current selections if multiselects exist
     const currentListValues = listMultiselect ? listMultiselect.getSelectedValues() : null;
     const currentTagValues = tagsMultiselect ? tagsMultiselect.getSelectedValues() : null;
+    const currentStatusValues = statusMultiselect ? statusMultiselect.getSelectedValues() : null;
     
-    // Load persisted state if available
-    const savedState = loadFilterState() || {};
+    // Load persisted state if available, or fall back to defaults
+    const loadedState = loadFilterState();
+    const defaults = getDefaultFilterState();
+    const isFirstTime = (loadedState === null);
+    const savedState = isFirstTime ? defaults : loadedState;
 
     const initialListValues = (currentListValues && currentListValues.length > 0) ? currentListValues : (savedState.list || []);
     const initialTagValues = (currentTagValues && currentTagValues.length > 0) ? currentTagValues : (savedState.tags || []);
+    let initialStatusValues = (currentStatusValues && currentStatusValues.length > 0) ? currentStatusValues : (savedState.status !== undefined ? savedState.status : defaults.status);
+    if (typeof initialStatusValues === 'string') {
+        try { initialStatusValues = JSON.parse(initialStatusValues); } catch(e) { initialStatusValues = initialStatusValues ? [initialStatusValues] : defaults.status; }
+    }
+    if (!Array.isArray(initialStatusValues)) {
+        initialStatusValues = defaults.status;
+    }
 
     // Restore single filter controls from savedState if available
     if (savedState.search !== undefined) {
         const el = document.getElementById('task-search-filter');
-        if (el && !el.value && savedState.search) el.value = savedState.search;
-    }
-    if (savedState.status !== undefined) {
-        const el = document.getElementById('task-status-filter');
-        if (el && !el.value && savedState.status) el.value = savedState.status;
+        if (el) el.value = savedState.search;
     }
     if (savedState.priority !== undefined) {
         const el = document.getElementById('task-priority-filter');
-        if (el && !el.value && savedState.priority) el.value = savedState.priority;
+        if (el) el.value = savedState.priority;
     }
-    if (savedState.dateField) {
+    if (savedState.dateField !== undefined) {
         const el = document.getElementById('task-date-field');
-        if (el && !el.value) el.value = savedState.dateField;
+        if (el) el.value = savedState.dateField;
     }
-    if (savedState.dateStart) {
+    if (savedState.dateStart !== undefined) {
         const el = document.getElementById('task-date-start');
-        if (el && !el.value) el.value = savedState.dateStart;
+        if (el) el.value = savedState.dateStart;
     }
-    if (savedState.dateEnd) {
+    if (savedState.dateEnd !== undefined) {
         const el = document.getElementById('task-date-end');
-        if (el && !el.value) el.value = savedState.dateEnd;
+        if (el) el.value = savedState.dateEnd;
     }
-    if (savedState.sortField) {
+    if (savedState.sortField !== undefined) {
         const el = document.getElementById('task-sort-field');
-        if (el && !el.value) el.value = savedState.sortField;
+        if (el) el.value = savedState.sortField;
     }
-    if (savedState.sortOrder) {
+    if (savedState.sortOrder !== undefined) {
         const el = document.getElementById('task-sort-order');
-        if (el && !el.value) el.value = savedState.sortOrder;
+        if (el) el.value = savedState.sortOrder;
     }
 
     const listsWithCounts = getListsWithCounts(tasks);
     const tagsWithCounts = getTagsWithCounts(tasks);
+    const statusesWithCounts = getStatusWithCounts(tasks);
+
+    // Initialize Status filter
+    const statusContainer = document.getElementById('task-status-filter-container');
+    if (statusContainer) {
+        statusContainer.innerHTML = '';
+        statusMultiselect = createMultiselect({
+            id: 'task-status-filter',
+            placeholder: 'Filter by Status...',
+            options: statusesWithCounts,
+            initialValues: initialStatusValues,
+            onChange: (values) => {
+                saveFilterState();
+                updateFilteredMultiselect();
+                filterTasks();
+            },
+            searchMinChars: 0,
+            showCounts: true
+        });
+        statusContainer.appendChild(statusMultiselect);
+    }
     
     // Initialize List filter
     const listContainer = document.getElementById('task-list-filter-container');
@@ -824,6 +888,11 @@ export function initMultiselectFilters(tasks) {
         });
         tagsContainer.appendChild(tagsMultiselect);
     }
+
+    // Save initial defaults if first time visit
+    if (isFirstTime) {
+        saveFilterState();
+    }
     
     if (!filterEventListenersAttached) {
         setupFilterEventListeners();
@@ -832,17 +901,12 @@ export function initMultiselectFilters(tasks) {
 }
 
 /**
- * Setup event listeners for search, date, status, priority, and sort filters
+ * Setup event listeners for search, date, priority, and sort filters
  */
 function setupFilterEventListeners() {
     const triggerFilterUpdate = () => {
         saveFilterState();
-        updateFilteredMultiselect(
-            document.getElementById('task-search-filter')?.value || '',
-            document.getElementById('task-date-start')?.value || '',
-            document.getElementById('task-date-end')?.value || '',
-            document.getElementById('task-date-field')?.value || 'due'
-        );
+        updateFilteredMultiselect();
         filterTasks();
     };
 
@@ -851,7 +915,7 @@ function setupFilterEventListeners() {
         searchFilter.addEventListener('input', debounce(triggerFilterUpdate, 300));
     }
     
-    ['task-date-field', 'task-date-start', 'task-date-end', 'task-status-filter', 'task-priority-filter', 'task-sort-field', 'task-sort-order'].forEach(id => {
+    ['task-date-field', 'task-date-start', 'task-date-end', 'task-priority-filter', 'task-sort-field', 'task-sort-order'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener('change', triggerFilterUpdate);
@@ -868,33 +932,27 @@ function setupFilterEventListeners() {
  * @param {string} dateEnd - End date from task-date-end
  * @param {string} dateField - Date field from task-date-field
  */
-export function updateFilteredMultiselect(searchText = '', dateStart = '', dateEnd = '', dateField = 'due') {
+export function updateFilteredMultiselect(searchText, dateStart, dateEnd, dateField) {
+    const sText = searchText !== undefined ? searchText : (document.getElementById('task-search-filter')?.value || '');
+    const dStart = dateStart !== undefined ? dateStart : (document.getElementById('task-date-start')?.value || '');
+    const dEnd = dateEnd !== undefined ? dateEnd : (document.getElementById('task-date-end')?.value || '');
+    const dField = dateField !== undefined ? dateField : (document.getElementById('task-date-field')?.value || 'modified_at');
+
     // Get current selections from both multiselects
     const selectedLists = listMultiselect ? listMultiselect.getSelectedValues() : [];
     const selectedTags = tagsMultiselect ? tagsMultiselect.getSelectedValues() : [];
     
-    console.log('[Dashboard] updateFilteredMultiselect - Selected lists:', selectedLists);
-    console.log('[Dashboard] updateFilteredMultiselect - Selected tags:', selectedTags);
-    console.log('[Dashboard] updateFilteredMultiselect - Search text:', searchText);
-    console.log('[Dashboard] updateFilteredMultiselect - Date range:', dateStart, 'to', dateEnd);
-    console.log('[Dashboard] updateFilteredMultiselect - Date field:', dateField);
-    
     // Get filtered options based on selections and search/date criteria
-    const filteredTags = getFilteredTagsByListsAndCriteria(allTasks, selectedLists, searchText, dateField, dateStart, dateEnd);
-    const filteredLists = getFilteredListsByTagsAndCriteria(allTasks, selectedTags, searchText, dateField, dateStart, dateEnd);
-    
-    console.log('[Dashboard] updateFilteredMultiselect - Filtered tags:', filteredTags);
-    console.log('[Dashboard] updateFilteredMultiselect - Filtered lists:', filteredLists);
+    const filteredTags = getFilteredTagsByListsAndCriteria(allTasks, selectedLists, sText, dField, dStart, dEnd);
+    const filteredLists = getFilteredListsByTagsAndCriteria(allTasks, selectedTags, sText, dField, dStart, dEnd);
     
     // Update multiselect options
     if (tagsMultiselect) {
         tagsMultiselect.setOptions(filteredTags);
-        console.log('[Dashboard] Updated tags multiselect with', filteredTags.length, 'options');
     }
     
     if (listMultiselect) {
         listMultiselect.setOptions(filteredLists);
-        console.log('[Dashboard] Updated list multiselect with', filteredLists.length, 'options');
     }
 }
 
@@ -1006,8 +1064,13 @@ export function removeFilterChip(filterType, value = null) {
         const el = document.getElementById('task-search-filter');
         if (el) el.value = '';
     } else if (filterType === 'status') {
-        const el = document.getElementById('task-status-filter');
-        if (el) el.value = '';
+        if (statusMultiselect) {
+            if (value) statusMultiselect.deselect(value);
+            else statusMultiselect.clear();
+        } else {
+            const el = document.getElementById('task-status-filter');
+            if (el) el.value = '';
+        }
     } else if (filterType === 'priority') {
         const el = document.getElementById('task-priority-filter');
         if (el) el.value = '';
@@ -1027,6 +1090,8 @@ export function removeFilterChip(filterType, value = null) {
             else tagsMultiselect.clear();
         }
     }
+    saveFilterState();
+    updateFilteredMultiselect();
     filterTasks();
 }
 
@@ -1051,7 +1116,18 @@ export function updateActiveFilterChips(filters) {
             remove: "window.removeFilterChip('search')"
         });
     }
-    if (filters.status) {
+    if (Array.isArray(filters.status) && filters.status.length > 0) {
+        activeCount += filters.status.length;
+        const labelMap = { pending: 'Pending', in_progress: 'In Progress', inprogress: 'In Progress', completed: 'Completed' };
+        filters.status.forEach(st => {
+            const displayStatus = labelMap[String(st).toLowerCase()] || st;
+            chips.push({
+                type: 'status',
+                label: `Status: ${displayStatus}`,
+                remove: `window.removeFilterChip('status', '${st}')`
+            });
+        });
+    } else if (typeof filters.status === 'string' && filters.status) {
         activeCount++;
         chips.push({
             type: 'status',
@@ -1133,7 +1209,7 @@ export function updateActiveFilterChips(filters) {
             `).join('');
             html += `
                 <button type="button" class="filter-clear-all-link" onclick="window.clearTasksFilters()">
-                    Clear All
+                    Reset All
                 </button>
             `;
             chipsContainer.innerHTML = html;
@@ -1146,48 +1222,54 @@ export function updateActiveFilterChips(filters) {
 
 export function filterTasks() {
     // Get values from multiselect filters
-    const listFilterEl = document.getElementById('task-list-filter');
-    const tagsFilterEl = document.getElementById('task-tags-filter');
-    
     let listValues = [];
     let tagValues = [];
+    let statusValues = [];
     
-    if (listFilterEl) {
-        console.log('[Dashboard] List filter element value:', listFilterEl.value);
-        try {
-            listValues = listFilterEl.value ? JSON.parse(listFilterEl.value) : [];
-            console.log('[Dashboard] Parsed list values:', listValues);
-        } catch (e) {
-            console.error('[Dashboard] Error parsing list filter:', e);
-            listValues = [];
+    if (listMultiselect) {
+        listValues = listMultiselect.getSelectedValues();
+    } else {
+        const listFilterEl = document.getElementById('task-list-filter');
+        if (listFilterEl && listFilterEl.value) {
+            try { listValues = JSON.parse(listFilterEl.value); } catch (e) { listValues = []; }
         }
     }
     
-    if (tagsFilterEl) {
-        console.log('[Dashboard] Tags filter element value:', tagsFilterEl.value);
-        try {
-            tagValues = tagsFilterEl.value ? JSON.parse(tagsFilterEl.value) : [];
-            console.log('[Dashboard] Parsed tag values:', tagValues);
-        } catch (e) {
-            console.error('[Dashboard] Error parsing tags filter:', e);
-            tagValues = [];
+    if (tagsMultiselect) {
+        tagValues = tagsMultiselect.getSelectedValues();
+    } else {
+        const tagsFilterEl = document.getElementById('task-tags-filter');
+        if (tagsFilterEl && tagsFilterEl.value) {
+            try { tagValues = JSON.parse(tagsFilterEl.value); } catch (e) { tagValues = []; }
+        }
+    }
+
+    if (statusMultiselect) {
+        statusValues = statusMultiselect.getSelectedValues();
+    } else {
+        const statusFilterEl = document.getElementById('task-status-filter');
+        if (statusFilterEl && statusFilterEl.value) {
+            try {
+                const parsed = JSON.parse(statusFilterEl.value);
+                statusValues = Array.isArray(parsed) ? parsed : [statusFilterEl.value];
+            } catch (e) {
+                statusValues = statusFilterEl.value ? [statusFilterEl.value] : [];
+            }
         }
     }
     
     const filters = {
         search: document.getElementById('task-search-filter')?.value.toLowerCase() || '',
-        status: document.getElementById('task-status-filter')?.value || '',
+        status: statusValues,
         priority: document.getElementById('task-priority-filter')?.value || '',
         list: listValues,
         tags: tagValues,
-        dateField: document.getElementById('task-date-field')?.value || 'due',
+        dateField: document.getElementById('task-date-field')?.value || 'modified_at',
         dateStart: document.getElementById('task-date-start')?.value || '',
         dateEnd: document.getElementById('task-date-end')?.value || '',
-        sortField: document.getElementById('task-sort-field')?.value || 'due',
-        sortOrder: document.getElementById('task-sort-order')?.value || 'asc'
+        sortField: document.getElementById('task-sort-field')?.value || 'modified_at',
+        sortOrder: document.getElementById('task-sort-order')?.value || 'desc'
     };
-    
-    console.log('[Dashboard] Applying filters:', filters);
     
     let filteredTasks = dashboardData.tasks || [];
     const totalTasks = filteredTasks.length;
@@ -1208,8 +1290,6 @@ export function filterTasks() {
     // Apply filters
     filteredTasks = filterTasksByCriteria(filteredTasks, filters);
     
-    console.log('[Dashboard] Filtered tasks count:', filteredTasks.length);
-    
     // Update task count display
     updateTasksCountDisplay(filteredTasks.length, totalTasks);
     
@@ -1225,23 +1305,28 @@ export function filterTasks() {
 }
 
 /**
- * Clear all task filters
+ * Clear all task filters and restore defaults
  */
 export function clearTasksFilters() {
-    sessionStorage.removeItem('gtasks_filter_state');
+    const defaults = getDefaultFilterState();
+    
     // Reset search filter
     const searchFilter = document.getElementById('task-search-filter');
-    if (searchFilter) searchFilter.value = '';
+    if (searchFilter) searchFilter.value = defaults.search;
     
-    // Reset status filter
-    const statusFilter = document.getElementById('task-status-filter');
-    if (statusFilter) statusFilter.value = '';
+    // Reset status multiselect
+    if (statusMultiselect) {
+        statusMultiselect.setSelectedValues(defaults.status);
+    } else {
+        const statusFilter = document.getElementById('task-status-filter');
+        if (statusFilter) statusFilter.value = '';
+    }
     
     // Reset priority filter
     const priorityFilter = document.getElementById('task-priority-filter');
-    if (priorityFilter) priorityFilter.value = '';
+    if (priorityFilter) priorityFilter.value = defaults.priority;
     
-    // Reset list filter (was project filter)
+    // Reset list filter
     if (listMultiselect) {
         listMultiselect.clear();
     }
@@ -1253,26 +1338,30 @@ export function clearTasksFilters() {
     
     // Reset date field filter
     const dateFieldFilter = document.getElementById('task-date-field');
-    if (dateFieldFilter) dateFieldFilter.value = 'due';
+    if (dateFieldFilter) dateFieldFilter.value = defaults.dateField;
     
-    // Reset date range filters
+    // Reset date range filters to default past 31 days
     const dateStartFilter = document.getElementById('task-date-start');
-    if (dateStartFilter) dateStartFilter.value = '';
+    if (dateStartFilter) dateStartFilter.value = defaults.dateStart;
     
     const dateEndFilter = document.getElementById('task-date-end');
-    if (dateEndFilter) dateEndFilter.value = '';
+    if (dateEndFilter) dateEndFilter.value = defaults.dateEnd;
     
     // Reset sort field
     const sortFieldFilter = document.getElementById('task-sort-field');
-    if (sortFieldFilter) sortFieldFilter.value = 'due';
+    if (sortFieldFilter) sortFieldFilter.value = defaults.sortField;
     
     // Reset sort order
     const sortOrderFilter = document.getElementById('task-sort-order');
-    if (sortOrderFilter) sortOrderFilter.value = 'desc';
+    if (sortOrderFilter) sortOrderFilter.value = defaults.sortOrder;
+    
+    // Save to storage
+    saveFilterState();
     
     // Restore all options to multiselects and re-apply filters
     const allLists = getListsWithCounts(allTasks);
     const allTags = getTagsWithCounts(allTasks);
+    const allStatuses = getStatusWithCounts(allTasks);
     
     if (listMultiselect) {
         listMultiselect.setOptions(allLists);
@@ -1281,9 +1370,18 @@ export function clearTasksFilters() {
     if (tagsMultiselect) {
         tagsMultiselect.setOptions(allTags);
     }
+
+    if (statusMultiselect) {
+        statusMultiselect.setOptions(allStatuses);
+    }
     
-    // Update filtered multiselects with no search/date criteria to restore bidirectional filtering
-    updateFilteredMultiselect('', '', '', 'due');
+    // Update filtered multiselects
+    updateFilteredMultiselect(
+        defaults.search,
+        defaults.dateStart,
+        defaults.dateEnd,
+        defaults.dateField
+    );
     
     // Re-apply filters
     filterTasks();
