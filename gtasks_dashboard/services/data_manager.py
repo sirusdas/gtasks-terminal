@@ -21,7 +21,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 from collections import defaultdict
 
@@ -180,15 +180,16 @@ class DataManager:
                 cursor = conn.cursor()
                 cursor.execute('PRAGMA journal_mode=WAL;')
                 
-                # Check if list_title column exists
+                # Check available columns
                 cursor.execute("PRAGMA table_info(tasks)")
                 columns = [col[1] for col in cursor.fetchall()]
                 
                 # Build query based on available columns
                 select_columns = ['id', 'title', 'description', 'due', 'priority', 'status', 'tags', 'notes', 
                                 'created_at', 'modified_at', 'dependencies']
-                if 'list_title' in columns:
-                    select_columns.append('list_title')
+                for opt_col in ['list_title', 'tasklist_id', 'is_recurring', 'recurrence_rule', 'recurring_task_id']:
+                    if opt_col in columns:
+                        select_columns.append(opt_col)
                 
                 query = f"SELECT {', '.join(select_columns)} FROM tasks"
                 cursor.execute(query)
@@ -196,7 +197,7 @@ class DataManager:
                 conn.close()
                 
                 if rows:
-                    return self._process_task_rows(rows, account_id)
+                    return self._process_task_rows(rows, account_id, select_columns)
             except Exception as e:
                 print(f"⚠️  Error loading tasks for {account_id}: {e}")
         
@@ -229,74 +230,187 @@ class DataManager:
                 print(f"⚠️  Error loading list_mapping for {account_id}: {e}")
         
         return task_to_list_mapping
-    
-    def _process_task_rows(self, rows: List[tuple], account_id: str) -> List[Task]:
+
+    def _detect_task_recurrence(self, task_data: Dict[str, Any], occurrences: List[Dict[str, Any]]) -> Tuple[bool, Optional[str]]:
+        """Detect if a task is recurring and classify its frequency.
+        Returns (is_recurring, recurrence_type) where recurrence_type is
+        'daily' | 'weekly' | 'monthly' | 'yearly' | 'other' | None
+        """
+        title = (task_data.get('title') or '').strip()
+        notes = (task_data.get('notes') or '').lower()
+        rrule = (task_data.get('recurrence_rule') or '').upper()
+        is_rec_db = bool(task_data.get('is_recurring'))
+
+        # 1. Direct DB RRULE
+        if rrule:
+            if 'DAILY' in rrule:
+                return True, 'daily'
+            if 'WEEKLY' in rrule:
+                return True, 'weekly'
+            if 'MONTHLY' in rrule:
+                return True, 'monthly'
+            if 'YEARLY' in rrule:
+                return True, 'yearly'
+            return True, 'other'
+
+        # 2. Keywords in title or notes
+        tl = title.lower()
+        if re.search(r'\b(daily|every\s*day)\b', tl) or re.search(r'\b(daily|every\s*day)\b', notes):
+            return True, 'daily'
+        if re.search(r'\b(weekly|every\s*week)\b', tl) or re.search(r'\b(weekly|every\s*week)\b', notes):
+            return True, 'weekly'
+        if re.search(r'\b(monthly|every\s*month|monthly\s*activity)\b', tl) or re.search(r'\b(monthly|every\s*month)\b', notes):
+            return True, 'monthly'
+        if re.search(r'\b(yearly|annual|annually|every\s*year)\b', tl) or re.search(r'\b(yearly|annual|annually)\b', notes):
+            return True, 'yearly'
+
+        # 3. Day of week prefixes (e.g. M-, T-, W-, Th-, Fr-, Sa-, Su-)
+        if re.match(r'^(?:M|T|W|Th|Fr|Sa|Su)-\s*', title):
+            return True, 'weekly'
+
+        # 4. Multi-occurrence due date interval analysis
+        if occurrences and len(occurrences) >= 2:
+            dues = []
+            for o in occurrences:
+                d_str = o.get('due')
+                if d_str:
+                    for fmt in ('%Y-%m-%d', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S'):
+                        try:
+                            dues.append(datetime.strptime(str(d_str)[:10], '%Y-%m-%d'))
+                            break
+                        except (ValueError, TypeError):
+                            pass
+            dues = sorted(set(dues))
+            if len(dues) >= 2:
+                # Check same day of month across occurrences (monthly)
+                if len(set(d.day for d in dues)) == 1:
+                    if len(set(d.month for d in dues)) == 1 and len(dues) >= 2:
+                        return True, 'yearly'
+                    return True, 'monthly'
+                # Check same day of week (weekly)
+                if len(set(d.weekday() for d in dues)) == 1:
+                    return True, 'weekly'
+
+                diffs = [(dues[i+1] - dues[i]).days for i in range(len(dues)-1)]
+                avg_diff = sum(diffs) / len(diffs)
+                min_diff = min(diffs)
+                if min_diff >= 1:
+                    if avg_diff <= 2:
+                        return True, 'daily'
+                    elif 5 <= avg_diff <= 10 or min_diff % 7 == 0:
+                        return True, 'weekly'
+                    elif 25 <= avg_diff <= 35:
+                        return True, 'monthly'
+                    elif 340 <= avg_diff <= 390:
+                        return True, 'yearly'
+                    else:
+                        return True, 'other'
+
+        # If marked recurring in DB without rule or pattern
+        if is_rec_db:
+            return True, 'other'
+
+        return False, None
+
+    def _process_task_rows(self, rows: List[tuple], account_id: str, select_columns: Optional[List[str]] = None) -> List[Task]:
         """Process database rows into Task objects"""
         tasks = []
-        
-        # Get column info to determine which columns are present
-        if self.gtasks_path:
-            db_path = self.gtasks_path / account_id / 'tasks.db'
-            if not db_path.exists():
-                db_path = self.gtasks_path / 'tasks.db'
-            if db_path.exists():
-                try:
-                    conn = sqlite3.connect(str(db_path), timeout=30.0)
-                    cursor = conn.cursor()
-                    cursor.execute('PRAGMA journal_mode=WAL;')
-                    cursor.execute("PRAGMA table_info(tasks)")
-                    columns = [col[1] for col in cursor.fetchall()]
-                    conn.close()
-                except:
-                    columns = ['id', 'title', 'description', 'due', 'priority', 'status', 'tags', 'notes', 
+        if not rows:
+            return tasks
+
+        if not select_columns:
+            select_columns = ['id', 'title', 'description', 'due', 'priority', 'status', 'tags', 'notes', 
                               'created_at', 'modified_at', 'dependencies']
-            else:
-                columns = ['id', 'title', 'description', 'due', 'priority', 'status', 'tags', 'notes', 
-                          'created_at', 'modified_at', 'dependencies']
-        else:
-            columns = ['id', 'title', 'description', 'due', 'priority', 'status', 'tags', 'notes', 
-                      'created_at', 'modified_at', 'dependencies']
         
-        # Load list mapping for populating list_title
+        col_idx = {name: i for i, name in enumerate(select_columns)}
         list_mapping = self._load_list_mapping(account_id)
         
+        # Pre-parse rows into dicts to group occurrences by title
+        parsed_task_dicts = []
+        occurrences_by_title = defaultdict(list)
+        
         for row in rows:
-            task_data = {
-                'id': row[0],
-                'title': row[1],
-                'description': row[2] or '',
-                'due': row[3],
-                'priority': row[4] or 'medium',
-                'status': row[5] or 'pending',
-                'tags': [t for t in (json.loads(row[6]) if row[6] else []) if self._is_valid_tag(t)],
-                'notes': row[7] or '',
+            t_id = row[col_idx['id']] if 'id' in col_idx and len(row) > col_idx['id'] else ''
+            t_title = row[col_idx['title']] if 'title' in col_idx and len(row) > col_idx['title'] else ''
+            t_desc = row[col_idx['description']] if 'description' in col_idx and len(row) > col_idx['description'] else ''
+            t_due = row[col_idx['due']] if 'due' in col_idx and len(row) > col_idx['due'] else None
+            t_prio = row[col_idx['priority']] if 'priority' in col_idx and len(row) > col_idx['priority'] else 'medium'
+            t_status = row[col_idx['status']] if 'status' in col_idx and len(row) > col_idx['status'] else 'pending'
+            raw_tags = row[col_idx['tags']] if 'tags' in col_idx and len(row) > col_idx['tags'] else None
+            t_notes = row[col_idx['notes']] if 'notes' in col_idx and len(row) > col_idx['notes'] else ''
+            t_created = row[col_idx['created_at']] if 'created_at' in col_idx and len(row) > col_idx['created_at'] else None
+            t_mod = row[col_idx['modified_at']] if 'modified_at' in col_idx and len(row) > col_idx['modified_at'] else None
+            raw_deps = row[col_idx['dependencies']] if 'dependencies' in col_idx and len(row) > col_idx['dependencies'] else None
+            t_list_title = row[col_idx['list_title']] if 'list_title' in col_idx and len(row) > col_idx['list_title'] else ''
+            t_tasklist_id = row[col_idx['tasklist_id']] if 'tasklist_id' in col_idx and len(row) > col_idx['tasklist_id'] else None
+            t_is_rec = bool(row[col_idx['is_recurring']]) if 'is_recurring' in col_idx and len(row) > col_idx['is_recurring'] and row[col_idx['is_recurring']] else False
+            t_rrule = row[col_idx['recurrence_rule']] if 'recurrence_rule' in col_idx and len(row) > col_idx['recurrence_rule'] else None
+            t_rec_id = row[col_idx['recurring_task_id']] if 'recurring_task_id' in col_idx and len(row) > col_idx['recurring_task_id'] else None
+
+            # Parse tags JSON safely
+            tags_list = []
+            if raw_tags:
+                try:
+                    loaded = json.loads(raw_tags)
+                    if isinstance(loaded, list):
+                        tags_list = [t for t in loaded if self._is_valid_tag(t)]
+                except Exception:
+                    pass
+
+            deps_list = []
+            if raw_deps:
+                try:
+                    loaded_deps = json.loads(raw_deps)
+                    if isinstance(loaded_deps, list):
+                        deps_list = loaded_deps
+                except Exception:
+                    pass
+
+            task_dict = {
+                'id': t_id,
+                'title': t_title or '',
+                'description': t_desc or '',
+                'due': t_due,
+                'priority': t_prio or 'medium',
+                'status': t_status or 'pending',
+                'tags': tags_list,
+                'notes': t_notes or '',
                 'account': account_id,
-                'list_title': row[columns.index('list_title')] if 'list_title' in columns and len(row) > columns.index('list_title') else '',
-                'created_at': row[8],
-                'modified_at': row[9],
-                'dependencies': json.loads(row[10]) if len(row) > 10 and row[10] else []
+                'list_title': t_list_title or '',
+                'tasklist_id': t_tasklist_id,
+                'created_at': t_created,
+                'modified_at': t_mod,
+                'dependencies': deps_list,
+                'is_recurring': t_is_rec,
+                'recurrence_rule': t_rrule,
+                'recurring_task_id': t_rec_id,
             }
-            
-            # If list_title is empty, try to get from list_mapping
+            parsed_task_dicts.append(task_dict)
+            title_norm = (task_dict['title'] or '').strip()
+            if title_norm:
+                occurrences_by_title[title_norm].append(task_dict)
+
+        for task_data in parsed_task_dicts:
             if not task_data['list_title'] and task_data['id'] in list_mapping:
                 task_data['list_title'] = list_mapping[task_data['id']]
-            
-            # Default list_title if still empty
             if not task_data['list_title']:
                 task_data['list_title'] = 'Tasks'
-            
-            # Extract hybrid tags without duplicating description and notes
+
             notes_content = task_data['notes'] if task_data['notes'] else task_data['description']
             extra_content = task_data['description'] if task_data['description'] and task_data['description'] != task_data['notes'] else ''
             task_data['hybrid_tags'] = self._extract_tags(
                 f"{task_data['title']} {notes_content} {extra_content}".strip()
             )
-            
-            # Calculate priority from asterisks
             task_data['calculated_priority'] = self._calculate_priority(task_data['title'])
-            
+
+            # Detect recurrence
+            title_norm = (task_data['title'] or '').strip()
+            is_rec, rec_type = self._detect_task_recurrence(task_data, occurrences_by_title.get(title_norm, []))
+            task_data['is_recurring'] = is_rec
+            task_data['recurrence_type'] = rec_type
+
             tasks.append(Task.from_dict(task_data))
-        
+
         return tasks
     
     def _get_demo_tasks(self, account_id: str = 'demo') -> List[Task]:

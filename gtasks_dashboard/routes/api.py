@@ -47,7 +47,7 @@ def _sync_task_to_google_background(task_id: str, account_id: str):
             google_client = GoogleTasksClient(account_name=account_id)
             
             # Connect to Google Tasks (non-blocking, uses cached credentials)
-            if not google_client.connect():
+            if not google_client.connect(interactive=False):
                 print(f'[Background Sync] Failed to connect to Google Tasks - credentials may need refresh')
                 return
             
@@ -287,7 +287,7 @@ def api_data():
                 sys.path.insert(0, str(gtasks_cli_path))
             from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
             google_client = GoogleTasksClient(account_name=current_account_id)
-            if google_client.connect():
+            if google_client.connect(interactive=False):
                 google_lists = google_client.list_tasklists()
                 for gl in google_lists:
                     all_google_lists.append({'id': gl['id'], 'title': gl['title']})
@@ -616,7 +616,7 @@ def api_create_task():
         from gtasks_cli.models.task import Task as CLITask, TaskStatus, Priority as CLIPriority
 
         google_client = GoogleTasksClient(account_name=account_id)
-        if google_client.connect():
+        if google_client.connect(interactive=False):
             all_lists = google_client.list_tasklists()
             target_list_id = '@default'
             for tl in all_lists:
@@ -768,7 +768,7 @@ def update_task(task_id):
 
         from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
         google_client = GoogleTasksClient(account_name=target_account)
-        if google_client.connect():
+        if google_client.connect(interactive=False):
             all_lists = google_client.list_tasklists()
             new_list_id = '@default'
             for tl in all_lists:

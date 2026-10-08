@@ -685,6 +685,8 @@ export function getDefaultFilterState() {
         status: ['pending', 'in_progress'],
         priority: '',
         list: [],
+        hideLists: [],
+        hideRecurring: [],
         tags: [],
         dateField: 'modified_at',
         dateStart: defaultDates.start,
@@ -697,6 +699,8 @@ export function getDefaultFilterState() {
 export function saveFilterState() {
     try {
         const listValues = listMultiselect ? listMultiselect.getSelectedValues() : [];
+        const hideListValues = hideListsMultiselect ? hideListsMultiselect.getSelectedValues() : [];
+        const hideRecurringValues = hideRecurringMultiselect ? hideRecurringMultiselect.getSelectedValues() : [];
         const tagValues = tagsMultiselect ? tagsMultiselect.getSelectedValues() : [];
         let statusValues = statusMultiselect ? statusMultiselect.getSelectedValues() : [];
         if (!statusMultiselect) {
@@ -715,6 +719,8 @@ export function saveFilterState() {
             status: statusValues,
             priority: document.getElementById('task-priority-filter')?.value || '',
             list: listValues,
+            hideLists: hideListValues,
+            hideRecurring: hideRecurringValues,
             tags: tagValues,
             dateField: document.getElementById('task-date-field')?.value || 'modified_at',
             dateStart: document.getElementById('task-date-start')?.value || '',
@@ -763,9 +769,34 @@ export function loadTasks() {
 }
 
 /**
+ * Calculate recurring task counts per frequency type
+ */
+export function getRecurringWithCounts(tasks) {
+    if (!tasks || !Array.isArray(tasks)) return [];
+    const allRec = tasks.filter(t => t.is_recurring);
+    const dailyCount = tasks.filter(t => t.is_recurring && (t.recurrence_type || '').toLowerCase() === 'daily').length;
+    const weeklyCount = tasks.filter(t => t.is_recurring && (t.recurrence_type || '').toLowerCase() === 'weekly').length;
+    const monthlyCount = tasks.filter(t => t.is_recurring && (t.recurrence_type || '').toLowerCase() === 'monthly').length;
+    const yearlyCount = tasks.filter(t => t.is_recurring && (t.recurrence_type || '').toLowerCase() === 'yearly').length;
+    const otherCount = tasks.filter(t => t.is_recurring && (t.recurrence_type || '').toLowerCase() === 'other').length;
+
+    const options = [
+        { value: 'all', label: 'All Recurring', count: allRec.length },
+        { value: 'daily', label: 'Daily', count: dailyCount },
+        { value: 'weekly', label: 'Weekly', count: weeklyCount },
+        { value: 'monthly', label: 'Monthly', count: monthlyCount },
+        { value: 'yearly', label: 'Yearly', count: yearlyCount },
+        { value: 'other', label: 'Other Repeating', count: otherCount }
+    ];
+    return options.filter(opt => opt.count > 0 || opt.value === 'all');
+}
+
+/**
  * Initialize multiselect filters
  */
 let listMultiselect = null;
+let hideListsMultiselect = null;
+let hideRecurringMultiselect = null;
 let tagsMultiselect = null;
 let statusMultiselect = null;
 let allTasks = []; // Store all tasks for filtering
@@ -776,6 +807,8 @@ export function initMultiselectFilters(tasks) {
     
     // Capture current selections if multiselects exist
     const currentListValues = listMultiselect ? listMultiselect.getSelectedValues() : null;
+    const currentHideListValues = hideListsMultiselect ? hideListsMultiselect.getSelectedValues() : null;
+    const currentHideRecurringValues = hideRecurringMultiselect ? hideRecurringMultiselect.getSelectedValues() : null;
     const currentTagValues = tagsMultiselect ? tagsMultiselect.getSelectedValues() : null;
     const currentStatusValues = statusMultiselect ? statusMultiselect.getSelectedValues() : null;
     
@@ -786,6 +819,8 @@ export function initMultiselectFilters(tasks) {
     const savedState = isFirstTime ? defaults : loadedState;
 
     const initialListValues = (currentListValues && currentListValues.length > 0) ? currentListValues : (savedState.list || []);
+    const initialHideListValues = (currentHideListValues && currentHideListValues.length > 0) ? currentHideListValues : (savedState.hideLists || []);
+    const initialHideRecurringValues = (currentHideRecurringValues && currentHideRecurringValues.length > 0) ? currentHideRecurringValues : (savedState.hideRecurring || []);
     const initialTagValues = (currentTagValues && currentTagValues.length > 0) ? currentTagValues : (savedState.tags || []);
     let initialStatusValues = (currentStatusValues && currentStatusValues.length > 0) ? currentStatusValues : (savedState.status !== undefined ? savedState.status : defaults.status);
     if (typeof initialStatusValues === 'string') {
@@ -826,6 +861,7 @@ export function initMultiselectFilters(tasks) {
     }
 
     const listsWithCounts = getListsWithCounts(tasks);
+    const recurringWithCounts = getRecurringWithCounts(tasks);
     const tagsWithCounts = getTagsWithCounts(tasks);
     const statusesWithCounts = getStatusWithCounts(tasks);
 
@@ -867,6 +903,46 @@ export function initMultiselectFilters(tasks) {
             showCounts: true
         });
         listContainer.appendChild(listMultiselect);
+    }
+
+    // Initialize Hide Lists filter
+    const hideListContainer = document.getElementById('task-hide-lists-filter-container');
+    if (hideListContainer) {
+        hideListContainer.innerHTML = '';
+        hideListsMultiselect = createMultiselect({
+            id: 'task-hide-lists-filter',
+            placeholder: 'Select lists to hide...',
+            options: listsWithCounts,
+            initialValues: initialHideListValues,
+            onChange: (values) => {
+                saveFilterState();
+                updateFilteredMultiselect();
+                filterTasks();
+            },
+            searchMinChars: 0,
+            showCounts: true
+        });
+        hideListContainer.appendChild(hideListsMultiselect);
+    }
+
+    // Initialize Hide Recurring filter
+    const hideRecurringContainer = document.getElementById('task-hide-recurring-filter-container');
+    if (hideRecurringContainer) {
+        hideRecurringContainer.innerHTML = '';
+        hideRecurringMultiselect = createMultiselect({
+            id: 'task-hide-recurring-filter',
+            placeholder: 'Select recurring to hide...',
+            options: recurringWithCounts,
+            initialValues: initialHideRecurringValues,
+            onChange: (values) => {
+                saveFilterState();
+                updateFilteredMultiselect();
+                filterTasks();
+            },
+            searchMinChars: 0,
+            showCounts: true
+        });
+        hideRecurringContainer.appendChild(hideRecurringMultiselect);
     }
     
     // Initialize Tags filter
@@ -953,6 +1029,14 @@ export function updateFilteredMultiselect(searchText, dateStart, dateEnd, dateFi
     
     if (listMultiselect) {
         listMultiselect.setOptions(filteredLists);
+    }
+
+    if (hideListsMultiselect) {
+        hideListsMultiselect.setOptions(getListsWithCounts(allTasks));
+    }
+
+    if (hideRecurringMultiselect) {
+        hideRecurringMultiselect.setOptions(getRecurringWithCounts(allTasks));
     }
 }
 
@@ -1084,6 +1168,16 @@ export function removeFilterChip(filterType, value = null) {
             if (value) listMultiselect.deselect(value);
             else listMultiselect.clear();
         }
+    } else if (filterType === 'hideList' || filterType === 'hideLists') {
+        if (hideListsMultiselect) {
+            if (value) hideListsMultiselect.deselect(value);
+            else hideListsMultiselect.clear();
+        }
+    } else if (filterType === 'hideRecurring') {
+        if (hideRecurringMultiselect) {
+            if (value) hideRecurringMultiselect.deselect(value);
+            else hideRecurringMultiselect.clear();
+        }
     } else if (filterType === 'tags') {
         if (tagsMultiselect) {
             if (value) tagsMultiselect.deselect(value);
@@ -1150,6 +1244,35 @@ export function updateActiveFilterChips(filters) {
                 type: 'list',
                 label: `List: ${item}`,
                 remove: `window.removeFilterChip('list', '${item.replace(/'/g, "\\'")}')`
+            });
+        });
+    }
+    if (filters.hideLists && filters.hideLists.length > 0) {
+        activeCount += filters.hideLists.length;
+        filters.hideLists.forEach(item => {
+            chips.push({
+                type: 'hideList',
+                label: `Hidden: ${item}`,
+                remove: `window.removeFilterChip('hideList', '${item.replace(/'/g, "\\'")}')`
+            });
+        });
+    }
+    if (filters.hideRecurring && filters.hideRecurring.length > 0) {
+        activeCount += filters.hideRecurring.length;
+        const recLabelMap = {
+            all: 'All Recurring',
+            daily: 'Daily',
+            weekly: 'Weekly',
+            monthly: 'Monthly',
+            yearly: 'Yearly',
+            other: 'Other Repeating'
+        };
+        filters.hideRecurring.forEach(item => {
+            const displayLabel = recLabelMap[String(item).toLowerCase()] || item;
+            chips.push({
+                type: 'hideRecurring',
+                label: `Hide: ${displayLabel}`,
+                remove: `window.removeFilterChip('hideRecurring', '${item.replace(/'/g, "\\'")}')`
             });
         });
     }
@@ -1234,6 +1357,26 @@ export function filterTasks() {
             try { listValues = JSON.parse(listFilterEl.value); } catch (e) { listValues = []; }
         }
     }
+
+    let hideListValues = [];
+    if (hideListsMultiselect) {
+        hideListValues = hideListsMultiselect.getSelectedValues();
+    } else {
+        const hideListFilterEl = document.getElementById('task-hide-lists-filter');
+        if (hideListFilterEl && hideListFilterEl.value) {
+            try { hideListValues = JSON.parse(hideListFilterEl.value); } catch (e) { hideListValues = []; }
+        }
+    }
+
+    let hideRecurringValues = [];
+    if (hideRecurringMultiselect) {
+        hideRecurringValues = hideRecurringMultiselect.getSelectedValues();
+    } else {
+        const hideRecFilterEl = document.getElementById('task-hide-recurring-filter');
+        if (hideRecFilterEl && hideRecFilterEl.value) {
+            try { hideRecurringValues = JSON.parse(hideRecFilterEl.value); } catch (e) { hideRecurringValues = []; }
+        }
+    }
     
     if (tagsMultiselect) {
         tagValues = tagsMultiselect.getSelectedValues();
@@ -1263,6 +1406,8 @@ export function filterTasks() {
         status: statusValues,
         priority: document.getElementById('task-priority-filter')?.value || '',
         list: listValues,
+        hideLists: hideListValues,
+        hideRecurring: hideRecurringValues,
         tags: tagValues,
         dateField: document.getElementById('task-date-field')?.value || 'modified_at',
         dateStart: document.getElementById('task-date-start')?.value || '',
@@ -1329,6 +1474,16 @@ export function clearTasksFilters() {
     // Reset list filter
     if (listMultiselect) {
         listMultiselect.clear();
+    }
+
+    // Reset hide lists filter
+    if (hideListsMultiselect) {
+        hideListsMultiselect.clear();
+    }
+
+    // Reset hide recurring filter
+    if (hideRecurringMultiselect) {
+        hideRecurringMultiselect.clear();
     }
     
     // Reset tags filter
@@ -2443,10 +2598,16 @@ export function openQuickView(taskId) {
         const statusClass = getStatusClass(task.status);
         const dateStatus = getDateStatus(task.due);
         const dateBadge = getDateStatusBadge(dateStatus);
+        const recurringBadgeHtml = task.is_recurring ? `
+            <span class="task-badge badge-recurring badge-recurring-${task.recurrence_type || 'other'}" title="Recurring: ${task.recurrence_type || 'Repeating'}">
+                <i class="fas fa-redo-alt"></i> ${(task.recurrence_type || 'recurring').toUpperCase()}
+            </span>
+        ` : '';
 
         badgesEl.innerHTML = `
             <span class="task-priority-badge ${priorityClass}">${priorityIcon} ${task.calculated_priority || task.priority || 'medium'}</span>
             <span class="task-status-badge ${statusClass}">${task.status || 'pending'}</span>
+            ${recurringBadgeHtml}
             ${dateBadge}
         `;
     }

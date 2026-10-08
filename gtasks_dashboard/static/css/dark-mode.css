@@ -390,3 +390,78 @@
     color: var(--text-primary);
 }
 
+.dark-mode .badge-recurring {
+    background: rgba(109, 40, 217, 0.25);
+    color: #c4b5fd;
+    border-color: rgba(139, 92, 246, 0.4);
+}
+
+.dark-mode .badge-recurring-daily {
+    background: rgba(55, 48, 163, 0.3);
+    color: #a5b4fc;
+    border-color: rgba(99, 102, 241, 0.4);
+}
+
+.dark-mode .badge-recurring-weekly {
+    background: rgba(109, 40, 217, 0.25);
+    color: #c4b5fd;
+    border-color: rgba(139, 92, 246, 0.4);
+}
+
+.dark-mode .badge-recurring-monthly {
+    background: rgba(134, 25, 143, 0.3);
+    color: #f0abfc;
+    border-color: rgba(192, 38, 211, 0.4);
+}
+
+.dark-mode .badge-recurring-yearly {
+    background: rgba(157, 23, 77, 0.3);
+    color: #f472b6;
+    border-color: rgba(219, 39, 119, 0.4);
+}
+
+.dark-mode .badge-recurring-other {
+    background: rgba(126, 34, 206, 0.25);
+    color: #d8b4fe;
+    border-color: rgba(168, 85, 247, 0.4);
+}
+
+.dark-mode .compact-recurring {
+    background: rgba(109, 40, 217, 0.25);
+    color: #c4b5fd;
+}
+
+.dark-mode .filter-section,
+.dark-mode .date-filter-section,
+.dark-mode .sort-filter-section {
+    background: var(--bg-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.dark-mode .filter-row .filter-select,
+.dark-mode .filter-item select.filter-select,
+.dark-mode .date-range-filter input[type="date"] {
+    background: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.dark-mode .drawer-reset-btn {
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+    color: #60a5fa;
+}
+
+.dark-mode .drawer-reset-btn:hover {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: #60a5fa;
+}
+
+.dark-mode .drawer-close-btn {
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+
+

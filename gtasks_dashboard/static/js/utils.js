@@ -385,6 +385,34 @@ export function filterTasksByCriteria(tasks, filters) {
         });
         console.log('[Utils] Tasks after list filter:', filteredTasks.length);
     }
+
+    // Apply hide lists filter (exclude tasks from selected lists)
+    if (filters.hideLists && filters.hideLists.length > 0) {
+        console.log('[Utils] Applying hide lists filter:', filters.hideLists);
+        filteredTasks = filteredTasks.filter(task => {
+            const taskList = (task.list_title || '').toLowerCase();
+            const shouldHide = filters.hideLists.some(hideList =>
+                taskList === hideList.toLowerCase() || taskList.includes(hideList.toLowerCase())
+            );
+            return !shouldHide;
+        });
+        console.log('[Utils] Tasks after hide lists filter:', filteredTasks.length);
+    }
+
+    // Apply hide recurring filter (exclude recurring tasks or specific recurrence types)
+    if (filters.hideRecurring && filters.hideRecurring.length > 0) {
+        console.log('[Utils] Applying hide recurring filter:', filters.hideRecurring);
+        const hideAll = filters.hideRecurring.some(r => String(r).toLowerCase() === 'all');
+        const hideTypes = new Set(filters.hideRecurring.map(r => String(r).toLowerCase()));
+        
+        filteredTasks = filteredTasks.filter(task => {
+            if (!task.is_recurring) return true;
+            if (hideAll) return false;
+            const taskType = (task.recurrence_type || 'other').toLowerCase();
+            return !hideTypes.has(taskType);
+        });
+        console.log('[Utils] Tasks after hide recurring filter:', filteredTasks.length);
+    }
     
     // Apply tags filter (now array-based from multiselect)
     // FIX: Changed to exact match instead of partial match

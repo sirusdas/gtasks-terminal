@@ -72,15 +72,18 @@ class GoogleTasksClient:
         self._default_tasklist_id = None
         logger.debug(f"GoogleTasksClient initialized with credentials: {credentials_file}, token: {token_file}")
     
-    def connect(self) -> bool:
+    def connect(self, interactive: bool = True) -> bool:
         """
         Connect to the Google Tasks API.
         
+        Args:
+            interactive: If False, avoid starting interactive authentication flow
+            
         Returns:
             bool: True if connection was successful, False otherwise
         """
         try:
-            self.service = self.auth_manager.get_service()
+            self.service = self.auth_manager.get_service(interactive=interactive)
             
             if not self.service:
                 logger.error("Failed to get Google Tasks API service")

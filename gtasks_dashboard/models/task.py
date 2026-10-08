@@ -94,6 +94,10 @@ class Task:
     dependencies: List[str] = field(default_factory=list)
     is_deleted: bool = False
     tasklist_id: Optional[str] = None
+    is_recurring: bool = False
+    recurrence_rule: Optional[str] = None
+    recurrence_type: Optional[str] = None
+    recurring_task_id: Optional[str] = None
     
     @property
     def has_dependencies(self) -> bool:
@@ -133,7 +137,12 @@ class Task:
             calculated_priority=data.get('calculated_priority'),
             project=data.get('project'),
             dependencies=data.get('dependencies', []),
-            is_deleted=data.get('is_deleted', False)
+            is_deleted=data.get('is_deleted', False),
+            tasklist_id=data.get('tasklist_id'),
+            is_recurring=bool(data.get('is_recurring', False)),
+            recurrence_rule=data.get('recurrence_rule'),
+            recurrence_type=data.get('recurrence_type'),
+            recurring_task_id=data.get('recurring_task_id')
         )
     
     def to_dict(self) -> Dict[str, Any]:
@@ -163,7 +172,12 @@ class Task:
             'project': self.project,
             'dependencies': self.dependencies,
             'has_dependencies': self.has_dependencies,
-            'is_deleted': self.is_deleted
+            'is_deleted': self.is_deleted,
+            'tasklist_id': self.tasklist_id,
+            'is_recurring': self.is_recurring,
+            'recurrence_rule': self.recurrence_rule,
+            'recurrence_type': self.recurrence_type,
+            'recurring_task_id': self.recurring_task_id
         }
 
 

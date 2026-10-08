@@ -421,47 +421,50 @@ body {
 
 /* ========== Enhanced Filter Sections ========== */
 .filter-section {
-    margin: 0.5rem 0;
-    padding: 0.75rem;
+    margin: 0;
+    padding: 0.65rem 0.75rem;
     background: var(--bg-primary);
     border-radius: 8px;
     border: 1px solid var(--border-color);
+    box-sizing: border-box;
+    width: 100%;
 }
 
-.date-filter-section {
-    background: #f0f9ff;
-    border-color: #bae6fd;
-}
-
+.date-filter-section,
 .sort-filter-section {
-    background: #f0fdf4;
-    border-color: #bbf7d0;
+    background: var(--bg-primary);
+    border-color: var(--border-color);
 }
 
 .clear-filter-section {
-    background: #fef2f2;
-    border-color: #fecaca;
+    background: var(--bg-primary);
+    border-color: var(--border-color);
 }
 
 .filter-row {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    margin: 0.5rem 0;
-    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .filter-row label {
     font-weight: 600;
-    color: var(--text-primary);
-    font-size: 0.875rem;
-    min-width: 80px;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    min-width: 65px;
+    margin: 0;
 }
 
 .filter-row .filter-select,
 .filter-row .filter-input {
     flex: 1;
-    min-width: 150px;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .clear-filter-section .btn {
@@ -747,6 +750,57 @@ body {
 .task-status-badge.completed {
     background: #d1fae5;
     color: #065f46;
+}
+
+/* Recurrence Badges */
+.badge-recurring {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    background: #ede9fe;
+    color: #6d28d9;
+    border: 1px solid #ddd6fe;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.badge-recurring i {
+    font-size: 0.65rem;
+}
+
+.badge-recurring-daily {
+    background: #e0e7ff;
+    color: #3730a3;
+    border-color: #c7d2fe;
+}
+
+.badge-recurring-weekly {
+    background: #ede9fe;
+    color: #6d28d9;
+    border-color: #ddd6fe;
+}
+
+.badge-recurring-monthly {
+    background: #fae8ff;
+    color: #86198f;
+    border-color: #f5d0fe;
+}
+
+.badge-recurring-yearly {
+    background: #fce7f3;
+    color: #9d174d;
+    border-color: #fbcfe8;
+}
+
+.badge-recurring-other {
+    background: #f3e8ff;
+    color: #7e22ce;
+    border-color: #e9d5ff;
 }
 
 .task-card-title {
@@ -1078,16 +1132,19 @@ body {
     text-decoration: underline;
 }
 
-/* ========== Task Filters Bar (Responsive Drawer) ========== */
+/* ========== Task Filters Bar (Responsive Drawer & Desktop Grid) ========== */
 .task-filters-bar {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
+    flex-direction: column;
     background: var(--bg-secondary);
-    padding: 1rem;
-    border-radius: 12px;
-    box-shadow: var(--shadow-sm);
-    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05);
+    padding: 1.15rem 1.25rem;
+    margin-bottom: 1.25rem;
+    width: 100%;
+    box-sizing: border-box;
+    transition: all 0.25s ease;
 }
 
 .filter-drawer-header {
@@ -1101,7 +1158,7 @@ body {
 }
 
 .filter-drawer-header h3 {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     font-weight: 700;
     margin: 0;
     color: var(--text-primary);
@@ -1117,13 +1174,20 @@ body {
 }
 
 .drawer-reset-btn {
-    background: none;
-    border: none;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
     color: var(--primary-color);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 600;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.drawer-reset-btn:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: var(--primary-color);
 }
 
 .drawer-close-btn {
@@ -1135,33 +1199,68 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-primary);
+    color: var(--text-secondary);
     cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.drawer-close-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-secondary);
 }
 
 .filter-drawer-footer {
     display: none;
 }
 
+/* Desktop Grid for Filters */
 .filter-drawer-content {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
     width: 100%;
+    box-sizing: border-box;
+    align-items: start;
+}
+
+@media (max-width: 1200px) and (min-width: 769px) {
+    .filter-drawer-content {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 .filter-item {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.35rem;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.filter-item select.filter-select {
+    width: 100%;
+    height: 38px;
+    padding: 0 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    box-sizing: border-box;
 }
 
 .filter-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.025em;
+    letter-spacing: 0.03em;
+    padding-left: 2px;
 }
 
 /* ========== Compact Task Card Styles ========== */
@@ -1169,6 +1268,29 @@ body {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+}
+
+/* Multi-column layout for compact mode on desktop */
+@media (min-width: 850px) {
+    .tasks-grid.compact {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.65rem;
+    }
+}
+
+@media (min-width: 1400px) {
+    .tasks-grid.compact {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.75rem;
+    }
+}
+
+@media (min-width: 1920px) {
+    .tasks-grid.compact {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.75rem;
+    }
 }
 
 .task-card-compact {
@@ -1310,6 +1432,24 @@ body {
     font-size: 0.7rem;
     font-weight: 600;
     text-transform: capitalize;
+}
+
+.compact-recurring {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    background: #ede9fe;
+    color: #6d28d9;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: capitalize;
+    white-space: nowrap;
+}
+
+.compact-recurring i {
+    font-size: 0.65rem;
 }
 
 .compact-has-notes,
@@ -1844,16 +1984,32 @@ body {
     }
     
     .filter-drawer-content {
-        padding: 1.25rem;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-        flex: 1 1 auto;
-        min-height: 0;
-        max-height: calc(85vh - 140px);
-        overflow-x: hidden;
+        padding: 1rem 1.25rem !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch !important;
+        display: flex !important;
+        flex-direction: column !important;
+        grid-template-columns: none !important;
+        gap: 0.85rem !important;
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        max-height: calc(85vh - 130px) !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    
+    .filter-drawer-content::-webkit-scrollbar {
+        width: 5px;
+    }
+    
+    .filter-drawer-content::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .filter-drawer-content::-webkit-scrollbar-thumb {
+        background: var(--border-color);
+        border-radius: 4px;
     }
     
     .filter-drawer-footer {
@@ -1873,17 +2029,88 @@ body {
         padding: 0.65rem 1rem;
     }
     
-    .date-range-filter {
-        width: 100%;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        flex-wrap: wrap;
+    .filter-drawer-content .filter-multiselect,
+    .filter-drawer-content .filter-item,
+    .filter-drawer-content .filter-section {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    .filter-drawer-content .multiselect-container,
+    .filter-drawer-content .multiselect-selection,
+    .filter-drawer-content .multiselect-input-wrapper,
+    .filter-drawer-content .multiselect-search {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
     }
     
-    .date-range-filter input {
-        flex: 1 1 40%;
-        min-width: 100px;
+    .filter-drawer-content .filter-row {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.4rem;
+    }
+
+    .filter-drawer-content .filter-row label {
+        width: 100%;
+        min-width: unset;
+        margin-bottom: 0.2rem;
+    }
+
+    .filter-drawer-content .filter-row .filter-select,
+    .filter-drawer-content .filter-row .filter-input {
+        width: 100% !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    .filter-drawer-content .sort-filter-section .filter-row {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.5rem !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    .filter-drawer-content .sort-filter-section label {
+        grid-column: 1 / -1;
+    }
+
+    .filter-drawer-content .date-range-filter {
+        display: grid !important;
+        grid-template-columns: 1fr auto 1fr !important;
+        align-items: center !important;
+        gap: 0.35rem !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    
+    .filter-drawer-content .date-range-filter input[type="date"] {
+        width: 100% !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
+        padding: 0.45rem 0.5rem !important;
+        font-size: 0.8rem !important;
+    }
+
+    /* Keep single-column task lists on mobile */
+    .tasks-grid {
+        grid-template-columns: 1fr !important;
+        gap: 0.75rem !important;
+    }
+    
+    .tasks-grid.compact {
+        display: flex !important;
+        flex-direction: column !important;
+        grid-template-columns: none !important;
+        gap: 0.45rem !important;
     }
     
     /* Mobile FAB */

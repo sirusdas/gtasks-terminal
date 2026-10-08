@@ -78,6 +78,19 @@ export function createTaskCard(task, options = {}) {
             <i class="fas fa-edit"></i>
         </div>
     `;
+
+    // Recurrence badges
+    const recurringBadge = task.is_recurring ? `
+        <span class="task-badge badge-recurring badge-recurring-${task.recurrence_type || 'other'}" title="Recurring: ${task.recurrence_type || 'Repeating'}">
+            <i class="fas fa-redo-alt"></i> ${(task.recurrence_type || 'recurring').toUpperCase()}
+        </span>
+    ` : '';
+
+    const compactRecurringBadge = task.is_recurring ? `
+        <span class="compact-recurring" title="Recurring: ${task.recurrence_type || 'Repeating'}">
+            <i class="fas fa-redo-alt"></i> ${task.recurrence_type || 'recurring'}
+        </span>
+    ` : '';
     
     if (options.isNodeTask) {
         // Node task card HTML
@@ -86,6 +99,7 @@ export function createTaskCard(task, options = {}) {
                 ${completeBtnHtml}
                 <span class="priority-icon">🔸</span>
                 <div class="node-task-title" onclick="openQuickView('${task.id}')" style="cursor: pointer;" title="Quick view">${task.title}</div>
+                ${recurringBadge}
                 ${quickViewBtnHtml}
                 ${dateStatusBadge}
             </div>
@@ -116,6 +130,7 @@ export function createTaskCard(task, options = {}) {
                     <span class="compact-priority-indicator ${priorityClass}" title="Priority: ${task.calculated_priority || task.priority}">${priorityIcon}</span>
                 </div>
                 <div class="compact-meta-row">
+                    ${compactRecurringBadge}
                     ${task.due ? `<span class="compact-due ${dateStatus}"><i class="fas fa-calendar-alt"></i> ${task.due}</span>` : ''}
                     ${task.list_title ? `<span class="compact-list"><i class="fas fa-list"></i> ${task.list_title}</span>` : ''}
                     <span class="compact-status-badge ${statusClass}">${task.status}</span>
@@ -151,6 +166,7 @@ export function createTaskCard(task, options = {}) {
             <div class="task-card-header">
                 <span class="task-priority-badge ${priorityClass}">${priorityIcon} ${task.calculated_priority || task.priority}</span>
                 <span class="task-status-badge ${statusClass}">${task.status}</span>
+                ${recurringBadge}
                 ${dateStatusBadge}
             </div>
             <h4 class="task-card-title" onclick="openQuickView('${task.id}')" style="cursor: pointer;" title="Quick view details">${task.title}</h4>

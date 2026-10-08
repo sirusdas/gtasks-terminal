@@ -1,6 +1,6 @@
 import os
 import pickle
-import json
+from typing import Optional
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -90,15 +90,16 @@ class GoogleAuthManager:
             
         return os.path.join(config_dir, "token.pickle")
         
-    def authenticate(self, force_refresh: bool = False) -> Credentials:
+    def authenticate(self, force_refresh: bool = False, interactive: bool = True) -> Optional[Credentials]:
         """
         Authenticate with Google Tasks API.
         
         Args:
             force_refresh: If True, force a new authentication flow
+            interactive: If False, do not prompt or start local server if credentials are missing/invalid
             
         Returns:
-            Credentials: Authenticated Google credentials
+            Credentials: Authenticated Google credentials or None
             
         Raises:
             FileNotFoundError: If credentials.json is not found
@@ -126,6 +127,9 @@ class GoogleAuthManager:
                     creds = None
             
             if not creds:
+                if not interactive:
+                    logger.warning("No valid credentials found and interactive login is disabled")
+                    return None
                 if not os.path.exists(self.credentials_file):
                     error_msg = f"Credentials file not found: {self.credentials_file}\n"
                     error_msg += "Please download your OAuth 2.0 Client ID JSON file from Google Cloud Console "
@@ -183,15 +187,18 @@ class GoogleAuthManager:
         logger.info("No stored credentials found")
         return True
 
-    def get_service(self):
+    def get_service(self, interactive: bool = True):
         """
         Get the Google Tasks API service object.
         
+        Args:
+            interactive: If False, avoid starting interactive authentication flow
+            
         Returns:
             googleapiclient.discovery.Resource: The Google Tasks API service
         """
         if not self.credentials:
-            if not self.authenticate():
+            if not self.authenticate(interactive=interactive):
                 return None
         
         try:

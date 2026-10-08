@@ -13,13 +13,13 @@
     <title>GTasks Dashboard - Hierarchical Visualization</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css?v=25">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css?v=25">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css?v=25">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=25">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=25">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=25">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=25">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css?v=28">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css?v=28">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css?v=28">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=28">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=28">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=28">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=28">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -426,6 +426,18 @@
                             </div>
                         </div>
                         <div class="filter-multiselect">
+                            <label class="filter-label"><i class="fas fa-eye-slash mr-1"></i>Hide Lists</label>
+                            <div class="multiselect-container" id="task-hide-lists-filter-container">
+                                <!-- Multiselect will be initialized here -->
+                            </div>
+                        </div>
+                        <div class="filter-multiselect">
+                            <label class="filter-label"><i class="fas fa-redo-alt mr-1"></i>Hide Recurring</label>
+                            <div class="multiselect-container" id="task-hide-recurring-filter-container">
+                                <!-- Multiselect will be initialized here -->
+                            </div>
+                        </div>
+                        <div class="filter-multiselect">
                             <label class="filter-label">Filter by Tags</label>
                             <div class="multiselect-container" id="task-tags-filter-container">
                                 <!-- Multiselect will be initialized here -->
@@ -811,7 +823,7 @@
         <p>Loading...</p>
     </div>
 
-    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=25"></script>
-    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=25"></script>
+    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=28"></script>
+    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=28"></script>
 </body>
 </html>
