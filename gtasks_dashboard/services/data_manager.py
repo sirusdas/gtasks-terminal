@@ -191,7 +191,7 @@ class DataManager:
                     if opt_col in columns:
                         select_columns.append(opt_col)
                 
-                query = f"SELECT {', '.join(select_columns)} FROM tasks"
+                query = f"SELECT {', '.join(select_columns)} FROM tasks ORDER BY COALESCE(modified_at, created_at, '') DESC"
                 cursor.execute(query)
                 rows = cursor.fetchall()
                 conn.close()

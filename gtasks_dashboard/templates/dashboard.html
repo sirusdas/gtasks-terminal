@@ -13,13 +13,13 @@
     <title>GTasks Dashboard - Hierarchical Visualization</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css?v=28">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css?v=28">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css?v=28">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=28">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=28">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=28">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=28">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css?v=32">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css?v=32">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css?v=32">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=32">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=32">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=32">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=32">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -61,18 +61,66 @@
                 </button>
             </div>
             <nav class="sidebar-nav">
-                <a href="{{ base_path }}/dashboard" class="nav-item {% if not default_view or default_view == 'dashboard' %}active{% endif %}" id="nav-dashboard" onclick="closeSidebarOnMobile()">
+                <a href="{{ base_path }}/dashboard" class="nav-item {% if not default_view or default_view == 'dashboard' %}active{% endif %}" id="nav-dashboard" onclick="showSection('dashboard'); closeSidebarOnMobile(); return false;">
                     <i class="fas fa-chart-line"></i>
                     <span>Dashboard</span>
                 </a>
-                <a href="{{ base_path }}/hierarchy" class="nav-item {% if default_view == 'hierarchy' %}active{% endif %}" id="nav-hierarchy" onclick="closeSidebarOnMobile()">
+                <a href="{{ base_path }}/hierarchy" class="nav-item {% if default_view == 'hierarchy' %}active{% endif %}" id="nav-hierarchy" onclick="showSection('hierarchy'); closeSidebarOnMobile(); return false;">
                     <i class="fas fa-project-diagram"></i>
                     <span>Hierarchy</span>
                 </a>
-                <a href="{{ base_path }}/tasks" class="nav-item {% if default_view == 'tasks' %}active{% endif %}" id="nav-tasks" onclick="closeSidebarOnMobile()">
-                    <i class="fas fa-tasks"></i>
-                    <span>Tasks</span>
-                </a>
+                <!-- Tasks Nav Item with Nested Lists & Tags -->
+                <div class="sidebar-tasks-group" id="sidebar-tasks-group">
+                    <a href="{{ base_path }}/tasks" class="nav-item {% if default_view == 'tasks' %}active{% endif %}" id="nav-tasks" onclick="showSection('tasks'); toggleSidebarTasksGroup(event); return false;">
+                        <i class="fas fa-tasks"></i>
+                        <span>Tasks</span>
+                        <i class="fas fa-chevron-down submenu-chevron" id="tasks-group-chevron"></i>
+                    </a>
+                    
+                    <div class="sidebar-tasks-submenu" id="sidebar-tasks-submenu">
+                        <!-- Quick Search for Lists & Tags -->
+                        <div class="sidebar-search-wrapper">
+                            <i class="fas fa-search sidebar-search-icon"></i>
+                            <input type="text" id="sidebar-quick-search" class="sidebar-search-input" placeholder="Filter lists & tags..." oninput="filterSidebarListItems(this.value)">
+                            <button class="sidebar-search-clear" id="sidebar-quick-search-clear" onclick="clearSidebarQuickSearch()" style="display: none;" title="Clear">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+
+                        <!-- All Tasks -->
+                        <div class="sidebar-subitem active" id="sidebar-item-all-tasks" onclick="selectSidebarFilter('all')">
+                            <div class="sidebar-subitem-main">
+                                <i class="fas fa-inbox subitem-icon"></i>
+                                <span class="subitem-title">All Tasks</span>
+                            </div>
+                            <span class="subitem-badge" id="sidebar-all-tasks-count">-</span>
+                        </div>
+
+                        <!-- Lists Collapsible Section -->
+                        <div class="sidebar-section-header" onclick="toggleSidebarSection('lists')">
+                            <div class="sidebar-section-title">
+                                <i class="fas fa-folder"></i>
+                                <span>Lists</span>
+                            </div>
+                            <i class="fas fa-chevron-down section-chevron" id="sidebar-lists-chevron"></i>
+                        </div>
+                        <div class="sidebar-subitems-container" id="sidebar-lists-container">
+                            <div class="sidebar-empty-hint">Loading lists...</div>
+                        </div>
+
+                        <!-- Tags Collapsible Section -->
+                        <div class="sidebar-section-header" onclick="toggleSidebarSection('tags')">
+                            <div class="sidebar-section-title">
+                                <i class="fas fa-tags"></i>
+                                <span>Tags</span>
+                            </div>
+                            <i class="fas fa-chevron-down section-chevron" id="sidebar-tags-chevron"></i>
+                        </div>
+                        <div class="sidebar-subitems-container" id="sidebar-tags-container">
+                            <div class="sidebar-empty-hint">Loading tags...</div>
+                        </div>
+                    </div>
+                </div>
             </nav>
         </aside>
 
@@ -315,9 +363,9 @@
                                 <div class="filter-row">
                                     <label>Sort By:</label>
                                     <select id="node-task-sort-field" class="filter-select">
+                                        <option value="modified_at" selected>Modified Date</option>
                                         <option value="due">Due Date</option>
                                         <option value="created_at">Created Date</option>
-                                        <option value="modified_at">Modified Date</option>
                                         <option value="priority">Priority</option>
                                         <option value="title">Title</option>
                                     </select>
@@ -823,7 +871,7 @@
         <p>Loading...</p>
     </div>
 
-    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=28"></script>
-    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=28"></script>
+    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=32"></script>
+    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=32"></script>
 </body>
 </html>

@@ -851,14 +851,11 @@ export function initMultiselectFilters(tasks) {
         const el = document.getElementById('task-date-end');
         if (el) el.value = savedState.dateEnd;
     }
-    if (savedState.sortField !== undefined) {
-        const el = document.getElementById('task-sort-field');
-        if (el) el.value = savedState.sortField;
-    }
-    if (savedState.sortOrder !== undefined) {
-        const el = document.getElementById('task-sort-order');
-        if (el) el.value = savedState.sortOrder;
-    }
+    const sortFieldEl = document.getElementById('task-sort-field');
+    if (sortFieldEl) sortFieldEl.value = savedState.sortField || 'modified_at';
+
+    const sortOrderEl = document.getElementById('task-sort-order');
+    if (sortOrderEl) sortOrderEl.value = savedState.sortOrder || 'desc';
 
     const listsWithCounts = getListsWithCounts(tasks);
     const recurringWithCounts = getRecurringWithCounts(tasks);
@@ -974,6 +971,9 @@ export function initMultiselectFilters(tasks) {
         setupFilterEventListeners();
         filterEventListenersAttached = true;
     }
+
+    // Populate sidebar nested lists & tags
+    populateSidebarTasksSubmenu(tasks);
 }
 
 /**
@@ -1037,6 +1037,304 @@ export function updateFilteredMultiselect(searchText, dateStart, dateEnd, dateFi
 
     if (hideRecurringMultiselect) {
         hideRecurringMultiselect.setOptions(getRecurringWithCounts(allTasks));
+    }
+}
+
+/* ========== Sidebar Tasks Navigation & Auto-Filtering ========== */
+
+/**
+ * Escape string for safe insertion into inline JS function calls
+ * @param {string} str
+ */
+function escapeJsString(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"');
+}
+
+/**
+ * Populate the sidebar nested lists and tags under /tasks with counts
+ * @param {Array} tasks - Array of task objects
+ */
+export function populateSidebarTasksSubmenu(tasks) {
+    if (!tasks || !Array.isArray(tasks)) return;
+
+    const listsContainer = document.getElementById('sidebar-lists-container');
+    const tagsContainer = document.getElementById('sidebar-tags-container');
+    const allCountBadge = document.getElementById('sidebar-all-tasks-count');
+
+    // Total tasks count (pending or total)
+    if (allCountBadge) {
+        const pendingCount = tasks.filter(t => t.status === 'pending' && !t.is_deleted).length;
+        allCountBadge.textContent = pendingCount || tasks.length;
+    }
+
+    // Get unique lists and tags with counts
+    const listsWithCounts = getListsWithCounts(tasks);
+    const tagsWithCounts = getTagsWithCounts(tasks);
+
+    // Populate lists container
+    if (listsContainer) {
+        if (listsWithCounts.length === 0) {
+            listsContainer.innerHTML = '<div class="sidebar-empty-hint">No lists</div>';
+        } else {
+            listsContainer.innerHTML = listsWithCounts.map(item => `
+                <div class="sidebar-subitem" data-type="list" data-value="${escapeHtml(item.label)}" onclick="selectSidebarFilter('list', '${escapeJsString(item.label)}')">
+                    <div class="sidebar-subitem-main">
+                        <i class="fas fa-list-ul subitem-icon"></i>
+                        <span class="subitem-title" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>
+                    </div>
+                    <span class="subitem-badge">${item.count}</span>
+                </div>
+            `).join('');
+        }
+    }
+
+    // Populate tags container
+    if (tagsContainer) {
+        if (tagsWithCounts.length === 0) {
+            tagsContainer.innerHTML = '<div class="sidebar-empty-hint">No tags</div>';
+        } else {
+            tagsContainer.innerHTML = tagsWithCounts.map(item => `
+                <div class="sidebar-subitem" data-type="tag" data-value="${escapeHtml(item.label)}" onclick="selectSidebarFilter('tag', '${escapeJsString(item.label)}')">
+                    <div class="sidebar-subitem-main">
+                        <span class="subitem-tag-hash">#</span>
+                        <span class="subitem-title" title="#${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>
+                    </div>
+                    <span class="subitem-badge">${item.count}</span>
+                </div>
+            `).join('');
+        }
+    }
+
+    // Reapply quick search filter if already typed
+    const searchInput = document.getElementById('sidebar-quick-search');
+    if (searchInput && searchInput.value) {
+        filterSidebarListItems(searchInput.value);
+    }
+}
+
+/**
+ * Handle clicking a list, tag, or 'all' from the sidebar.
+ * Automatically navigates to /tasks and applies the filter.
+ * @param {string} type - 'all' | 'list' | 'tag'
+ * @param {string|null} value - list name or tag name
+ */
+export function selectSidebarFilter(type, value = null) {
+    // 1. Ensure we are in Tasks section
+    showSection('tasks', true);
+
+    // 2. Set filter selection
+    if (type === 'all') {
+        if (listMultiselect) listMultiselect.clear();
+        if (tagsMultiselect) tagsMultiselect.clear();
+    } else if (type === 'list') {
+        if (listMultiselect) {
+            listMultiselect.setSelectedValues([value]);
+        }
+        if (tagsMultiselect) {
+            tagsMultiselect.clear();
+        }
+    } else if (type === 'tag') {
+        if (tagsMultiselect) {
+            tagsMultiselect.setSelectedValues([value]);
+        }
+        if (listMultiselect) {
+            listMultiselect.clear();
+        }
+    }
+
+    // 3. Save state & trigger filter update
+    saveFilterState();
+    filterTasks();
+
+    // 4. Update sidebar active item highlighting
+    updateSidebarActiveItem(type, value);
+
+    // 5. On mobile, close sidebar drawer
+    if (window.innerWidth <= 768) {
+        closeSidebarOnMobile();
+    }
+}
+
+/**
+ * Update the visual active state of items in the sidebar
+ * @param {string} type - 'all' | 'list' | 'tag'
+ * @param {string|null} value
+ */
+export function updateSidebarActiveItem(type, value = null) {
+    document.querySelectorAll('#sidebar-tasks-submenu .sidebar-subitem').forEach(el => el.classList.remove('active'));
+
+    if (type === 'all') {
+        const allEl = document.getElementById('sidebar-item-all-tasks');
+        if (allEl) allEl.classList.add('active');
+    } else if (type === 'list' && value) {
+        const escaped = value.replace(/["\\]/g, '\\$&');
+        const el = document.querySelector(`#sidebar-tasks-submenu .sidebar-subitem[data-type="list"][data-value="${escaped}"]`);
+        if (el) el.classList.add('active');
+    } else if (type === 'tag' && value) {
+        const escaped = value.replace(/["\\]/g, '\\$&');
+        const el = document.querySelector(`#sidebar-tasks-submenu .sidebar-subitem[data-type="tag"][data-value="${escaped}"]`);
+        if (el) el.classList.add('active');
+    }
+}
+
+/**
+ * Sync the sidebar active item highlight based on active filters
+ * @param {Object} filters
+ */
+export function syncSidebarActiveFilter(filters) {
+    if (!filters) return;
+    const lists = filters.list || [];
+    const tags = filters.tags || [];
+
+    if (lists.length === 0 && tags.length === 0) {
+        updateSidebarActiveItem('all');
+    } else if (lists.length === 1 && tags.length === 0) {
+        updateSidebarActiveItem('list', lists[0]);
+    } else if (tags.length === 1 && lists.length === 0) {
+        updateSidebarActiveItem('tag', tags[0]);
+    } else {
+        document.querySelectorAll('#sidebar-tasks-submenu .sidebar-subitem').forEach(el => el.classList.remove('active'));
+    }
+}
+
+/**
+ * Filter sidebar lists and tags in real-time by search query
+ * @param {string} query
+ */
+export function filterSidebarListItems(query) {
+    const q = (query || '').trim().toLowerCase();
+    const clearBtn = document.getElementById('sidebar-quick-search-clear');
+    if (clearBtn) {
+        clearBtn.style.display = q ? 'inline-flex' : 'none';
+    }
+
+    const subitems = document.querySelectorAll('#sidebar-tasks-submenu .sidebar-subitem[data-value]');
+    let visibleLists = 0;
+    let visibleTags = 0;
+
+    subitems.forEach(item => {
+        const val = (item.getAttribute('data-value') || '').toLowerCase();
+        const matches = !q || val.includes(q);
+        item.style.display = matches ? 'flex' : 'none';
+        if (matches) {
+            if (item.getAttribute('data-type') === 'list') visibleLists++;
+            if (item.getAttribute('data-type') === 'tag') visibleTags++;
+        }
+    });
+
+    const listsContainer = document.getElementById('sidebar-lists-container');
+    const tagsContainer = document.getElementById('sidebar-tags-container');
+
+    // Remove old no-match hints
+    listsContainer?.querySelectorAll('.sidebar-no-match').forEach(e => e.remove());
+    tagsContainer?.querySelectorAll('.sidebar-no-match').forEach(e => e.remove());
+
+    if (q && visibleLists === 0 && listsContainer) {
+        listsContainer.insertAdjacentHTML('beforeend', '<div class="sidebar-empty-hint sidebar-no-match">No matching lists</div>');
+    }
+    if (q && visibleTags === 0 && tagsContainer) {
+        tagsContainer.insertAdjacentHTML('beforeend', '<div class="sidebar-empty-hint sidebar-no-match">No matching tags</div>');
+    }
+}
+
+/**
+ * Clear the sidebar quick search input
+ */
+export function clearSidebarQuickSearch() {
+    const input = document.getElementById('sidebar-quick-search');
+    if (input) {
+        input.value = '';
+        filterSidebarListItems('');
+        input.focus();
+    }
+}
+
+/**
+ * Toggle collapse/expand of a specific section (lists or tags) in the sidebar
+ * When expanding, collapses the other section so the selected one has full vertical length,
+ * and scrolls the sidebar so #sidebar-tasks-group sticks to the top.
+ * @param {string} section - 'lists' | 'tags'
+ */
+export function toggleSidebarSection(section) {
+    const container = document.getElementById(`sidebar-${section}-container`);
+    const chevron = document.getElementById(`sidebar-${section}-chevron`);
+    if (!container) return;
+
+    const isCollapsed = container.classList.contains('collapsed');
+
+    if (isCollapsed) {
+        // Expand this section
+        container.classList.remove('collapsed');
+        if (chevron) {
+            chevron.style.transform = 'rotate(0deg)';
+        }
+
+        // Accordion behavior: collapse other section so current section gets maximum vertical height
+        const otherSection = section === 'lists' ? 'tags' : 'lists';
+        const otherContainer = document.getElementById(`sidebar-${otherSection}-container`);
+        const otherChevron = document.getElementById(`sidebar-${otherSection}-chevron`);
+        if (otherContainer) {
+            otherContainer.classList.add('collapsed');
+        }
+        if (otherChevron) {
+            otherChevron.style.transform = 'rotate(-90deg)';
+        }
+
+        // Scroll sidebar so #sidebar-tasks-group sticks to top
+        const sidebar = document.getElementById('sidebar');
+        const tasksGroup = document.getElementById('sidebar-tasks-group');
+        if (sidebar && tasksGroup) {
+            sidebar.scrollTo({
+                top: tasksGroup.offsetTop,
+                behavior: 'smooth'
+            });
+        }
+    } else {
+        // Collapse this section
+        container.classList.add('collapsed');
+        if (chevron) {
+            chevron.style.transform = 'rotate(-90deg)';
+        }
+    }
+}
+
+/**
+ * Toggle collapse/expand of the entire tasks submenu in the sidebar
+ * @param {Event} e
+ */
+export function toggleSidebarTasksGroup(e) {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && sidebar.classList.contains('collapsed')) {
+        toggleSidebar();
+        return;
+    }
+
+    const isChevron = e && e.target && (e.target.id === 'tasks-group-chevron' || e.target.classList.contains('submenu-chevron'));
+    if (isChevron) {
+        if (e.stopPropagation) e.stopPropagation();
+        if (e.preventDefault) e.preventDefault();
+        const submenu = document.getElementById('sidebar-tasks-submenu');
+        const chevron = document.getElementById('tasks-group-chevron');
+        if (submenu) {
+            const isCollapsed = submenu.classList.toggle('collapsed');
+            if (chevron) {
+                chevron.style.transform = isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+            }
+        }
+        return;
+    }
+
+    const submenu = document.getElementById('sidebar-tasks-submenu');
+    const chevron = document.getElementById('tasks-group-chevron');
+    if (submenu && submenu.classList.contains('collapsed')) {
+        submenu.classList.remove('collapsed');
+        if (chevron) {
+            chevron.style.transform = 'rotate(0deg)';
+        }
     }
 }
 
@@ -1428,6 +1726,9 @@ export function filterTasks() {
     
     // Update active filter chips and badges
     updateActiveFilterChips(filters);
+    
+    // Synchronize sidebar active list/tag highlight
+    syncSidebarActiveFilter(filters);
     
     // Filter out deleted tasks if setting is enabled
     filteredTasks = filterOutDeletedTasks(filteredTasks);
@@ -1923,7 +2224,7 @@ export function clearNodeFilters() {
     
     // Reset sort field
     const sortFieldFilter = document.getElementById('node-task-sort-field');
-    if (sortFieldFilter) sortFieldFilter.value = 'due';
+    if (sortFieldFilter) sortFieldFilter.value = 'modified_at';
     
     // Reset sort order
     const sortOrderFilter = document.getElementById('node-task-sort-order');
@@ -2148,6 +2449,14 @@ window.setupRefreshDropdown = setupRefreshDropdown;
 window.getListsWithCounts = getListsWithCounts;
 window.getTagsWithCounts = getTagsWithCounts;
 window.updateFilteredMultiselect = updateFilteredMultiselect;
+window.populateSidebarTasksSubmenu = populateSidebarTasksSubmenu;
+window.selectSidebarFilter = selectSidebarFilter;
+window.updateSidebarActiveItem = updateSidebarActiveItem;
+window.syncSidebarActiveFilter = syncSidebarActiveFilter;
+window.filterSidebarListItems = filterSidebarListItems;
+window.clearSidebarQuickSearch = clearSidebarQuickSearch;
+window.toggleSidebarSection = toggleSidebarSection;
+window.toggleSidebarTasksGroup = toggleSidebarTasksGroup;
 
 // Edit & Add Modal Functions
 window.openEditModal = openEditModal;
@@ -2971,9 +3280,16 @@ export default {
     openAddModal,
     closeAddModal,
     saveNewTask,
-    toggleAddModalFullscreen,
     formatAddTaskJson,
-    toggleModalFullscreen
+    toggleModalFullscreen,
+    populateSidebarTasksSubmenu,
+    selectSidebarFilter,
+    updateSidebarActiveItem,
+    syncSidebarActiveFilter,
+    filterSidebarListItems,
+    clearSidebarQuickSearch,
+    toggleSidebarSection,
+    toggleSidebarTasksGroup
 };
 
 // Initialize the dashboard when DOM is ready (or immediately if already parsed)

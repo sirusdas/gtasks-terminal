@@ -5,7 +5,18 @@
 
 import { parseDateInput, getTaskDate } from './utils.js';
 
-// Create multiselect element
+// Helper to escape HTML strings safely
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+// Create multiselect element with maximum-view full-screen modal overlay
 export function createMultiselect(config) {
     const {
         id,
@@ -14,10 +25,52 @@ export function createMultiselect(config) {
         initialValues = [],
         onChange = () => {},
         searchMinChars = 0,
-        showCounts = false
+        showCounts = false,
+        title = ''
     } = config;
 
-    // Container
+    // Filter metadata mapping for rich headers, icons, and subtitles
+    const filterMeta = {
+        'task-status-filter': {
+            title: 'Filter by Status',
+            subtitle: 'Select statuses to include in tasks view',
+            icon: 'fas fa-info-circle',
+            type: 'status'
+        },
+        'task-list-filter': {
+            title: 'Filter by List',
+            subtitle: 'Select one or more lists to view tasks from',
+            icon: 'fas fa-folder',
+            type: 'list'
+        },
+        'task-hide-lists-filter': {
+            title: 'Hide Lists',
+            subtitle: 'Select lists to exclude from tasks view',
+            icon: 'fas fa-eye-slash',
+            type: 'list'
+        },
+        'task-hide-recurring-filter': {
+            title: 'Hide Recurring Tasks',
+            subtitle: 'Select recurring patterns to exclude from tasks view',
+            icon: 'fas fa-redo-alt',
+            type: 'recurring'
+        },
+        'task-tags-filter': {
+            title: 'Filter by Tags',
+            subtitle: 'Select tags to include in tasks view',
+            icon: 'fas fa-tags',
+            type: 'tag'
+        }
+    };
+
+    const meta = filterMeta[id] || {
+        title: title || placeholder.replace('Filter by ', 'Select ').replace('...', ''),
+        subtitle: 'Select options to filter tasks',
+        icon: 'fas fa-filter',
+        type: 'general'
+    };
+
+    // Container in the filter form/drawer
     const container = document.createElement('div');
     container.className = 'multiselect-container';
     container.id = `${id}-container`;
@@ -29,43 +82,41 @@ export function createMultiselect(config) {
     hiddenInput.name = id;
     container.appendChild(hiddenInput);
 
-    // Selection display area (selected tags)
+    // Selection display area (selected tag chips)
     const selectionArea = document.createElement('div');
     selectionArea.className = 'multiselect-selection';
+    selectionArea.title = 'Click a tag × to remove, or click below to browse in full screen';
     container.appendChild(selectionArea);
 
-    // Input wrapper
+    // Input wrapper (trigger for full screen modal)
     const inputWrapper = document.createElement('div');
     inputWrapper.className = 'multiselect-input-wrapper';
+    inputWrapper.title = 'Click to open maximum view filter';
 
-    // Search input
-    const searchInput = document.createElement('input');
-    searchInput.type = 'text';
-    searchInput.className = 'multiselect-search';
-    searchInput.placeholder = placeholder;
-    searchInput.id = `${id}-search`;
-    inputWrapper.appendChild(searchInput);
+    // Trigger input (acts as clickable browse field)
+    const triggerInput = document.createElement('input');
+    triggerInput.type = 'text';
+    triggerInput.className = 'multiselect-search';
+    triggerInput.placeholder = placeholder;
+    triggerInput.id = `${id}-search`;
+    triggerInput.readOnly = true;
+    inputWrapper.appendChild(triggerInput);
 
-    // Dropdown toggle button
+    // Toggle button icon
     const toggleBtn = document.createElement('button');
     toggleBtn.type = 'button';
     toggleBtn.className = 'multiselect-toggle';
-    toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i>';
+    toggleBtn.setAttribute('aria-label', `Browse ${meta.title}`);
+    toggleBtn.innerHTML = '<i class="fas fa-th-large"></i>';
     inputWrapper.appendChild(toggleBtn);
 
     container.appendChild(inputWrapper);
-
-    // Suggestions dropdown
-    const dropdown = document.createElement('div');
-    dropdown.className = 'multiselect-dropdown';
-    dropdown.id = `${id}-dropdown`;
-    dropdown.style.display = 'none';
-    container.appendChild(dropdown);
 
     // State
     let isOpen = false;
     let currentOptions = [...options];
     let selectedValues = [...initialValues];
+    let pendingSelections = new Set(selectedValues.map(String));
 
     // Helper: get display label for a selected value
     function getOptionLabel(val) {
@@ -82,161 +133,348 @@ export function createMultiselect(config) {
         return val;
     }
 
-    // Update display
+    // Update display in the form/drawer
     function updateDisplay() {
         selectionArea.innerHTML = '';
         hiddenInput.value = JSON.stringify(selectedValues);
 
-        selectedValues.forEach(value => {
-            const tag = document.createElement('span');
-            tag.className = 'multiselect-tag';
-            const displayLabel = getOptionLabel(value);
-            tag.innerHTML = `
-                ${displayLabel}
-                <button type="button" class="multiselect-remove" data-value="${value}">&times;</button>
-            `;
-            selectionArea.appendChild(tag);
-        });
-    }
-
-    // Event delegation for remove buttons (fixed to work dynamically)
-    selectionArea.addEventListener('click', (e) => {
-        if (e.target.classList.contains('multiselect-remove')) {
-            e.stopPropagation();
-            const value = e.target.dataset.value;
-            console.log('[Multiselect] Removing tag:', value);
-            removeValue(value);
-        }
-    });
-
-    // Add value
-    function addValue(value) {
-        if (!selectedValues.includes(value)) {
-            selectedValues.push(value);
-            updateDisplay();
-            onChange(selectedValues);
-        }
-        searchInput.value = '';
-        filterOptions('');
-    }
-
-    // Remove value
-    function removeValue(value) {
-        selectedValues = selectedValues.filter(v => String(v) !== String(value));
-        updateDisplay();
-        onChange(selectedValues);
-    }
-
-    // Filter options based on search
-    function filterOptions(searchTerm) {
-        const term = searchTerm.toLowerCase().trim();
-        
-        if (term.length < searchMinChars) {
-            dropdown.innerHTML = '<div class="multiselect-empty">Type to search...</div>';
-            return;
-        }
-
-        const filtered = currentOptions.filter(opt => {
-            const optLabel = typeof opt === 'object' ? opt.label : opt;
-            const optVal = typeof opt === 'object' && opt.value !== undefined ? opt.value : optLabel;
-            return optLabel.toLowerCase().includes(term) && !selectedValues.includes(optVal);
-        });
-
-        if (filtered.length === 0) {
-            dropdown.innerHTML = '<div class="multiselect-empty">No results found</div>';
+        if (selectedValues.length === 0) {
+            selectionArea.style.display = 'none';
+            triggerInput.placeholder = placeholder;
         } else {
-            dropdown.innerHTML = filtered.map(opt => {
-                const label = typeof opt === 'object' ? opt.label : opt;
-                const val = typeof opt === 'object' && opt.value !== undefined ? opt.value : label;
-                const count = typeof opt === 'object' && showCounts && opt.count !== undefined ? opt.count : null;
-                const countHtml = showCounts && count !== null ? `<span class="multiselect-count">${count}</span>` : '';
-                return `<div class="multiselect-option" data-value="${val}">${label}${countHtml}</div>`;
-            }).join('');
-            
-            // Add click listeners to options
-            dropdown.querySelectorAll('.multiselect-option').forEach(opt => {
-                opt.addEventListener('click', () => {
-                    addValue(opt.dataset.value);
-                });
+            selectionArea.style.display = 'flex';
+            triggerInput.placeholder = `${selectedValues.length} selected — click to edit`;
+
+            selectedValues.forEach(value => {
+                const tag = document.createElement('span');
+                tag.className = 'multiselect-tag';
+                const displayLabel = getOptionLabel(value);
+                const prefix = meta.type === 'tag' ? '#' : '';
+                tag.innerHTML = `
+                    <span class="multiselect-tag-label">${prefix}${escapeHtml(displayLabel)}</span>
+                    <button type="button" class="multiselect-remove" data-value="${escapeHtml(String(value))}" title="Remove">&times;</button>
+                `;
+                selectionArea.appendChild(tag);
             });
         }
     }
 
-    // Toggle dropdown
-    function toggleDropdown() {
-        isOpen = !isOpen;
-        dropdown.style.display = isOpen ? 'block' : 'none';
-        toggleBtn.innerHTML = isOpen 
-            ? '<i class="fas fa-chevron-up"></i>' 
-            : '<i class="fas fa-chevron-down"></i>';
-        
-        if (isOpen && searchInput.value.length >= searchMinChars) {
-            filterOptions(searchInput.value);
-            searchInput.focus();
+    // Event delegation for tag remove buttons in the chips area
+    selectionArea.addEventListener('click', (e) => {
+        const removeBtn = e.target.closest('.multiselect-remove');
+        if (removeBtn) {
+            e.stopPropagation();
+            const value = removeBtn.dataset.value;
+            removeValue(value);
+        } else {
+            // Clicking empty area of selectionArea opens the modal
+            openModal();
+        }
+    });
+
+    // Remove value helper
+    function removeValue(value) {
+        selectedValues = selectedValues.filter(v => String(v) !== String(value));
+        pendingSelections = new Set(selectedValues.map(String));
+        updateDisplay();
+        onChange(selectedValues);
+    }
+
+    // ==========================================
+    // Full-Screen Maximum View Modal Overlay
+    // ==========================================
+    const oldOverlay = document.getElementById(`${id}-modal-overlay`);
+    if (oldOverlay) {
+        oldOverlay.remove();
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'multiselect-fullscreen-overlay';
+    overlay.id = `${id}-modal-overlay`;
+
+    overlay.innerHTML = `
+        <div class="multiselect-modal-backdrop"></div>
+        <div class="multiselect-modal-card" role="dialog" aria-modal="true" aria-labelledby="${id}-modal-title">
+            <div class="multiselect-modal-header">
+                <div class="multiselect-modal-title-group">
+                    <h3 class="multiselect-modal-title" id="${id}-modal-title">
+                        <i class="${meta.icon}"></i>
+                        <span>${escapeHtml(meta.title)}</span>
+                    </h3>
+                    <div class="multiselect-modal-subtitle">${escapeHtml(meta.subtitle)}</div>
+                </div>
+                <div class="multiselect-modal-header-actions">
+                    <button type="button" class="multiselect-modal-btn-action multiselect-btn-select-all" title="Select all visible items">
+                        <i class="fas fa-check-double"></i> Select All
+                    </button>
+                    <button type="button" class="multiselect-modal-btn-action multiselect-btn-clear-all" title="Clear all selections">
+                        <i class="fas fa-undo"></i> Clear All
+                    </button>
+                    <button type="button" class="multiselect-modal-close-icon" aria-label="Close modal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="multiselect-modal-search-wrapper">
+                <div class="multiselect-modal-search-inner">
+                    <i class="fas fa-search multiselect-modal-search-ico"></i>
+                    <input type="text" class="multiselect-modal-search-field" placeholder="Search ${escapeHtml(meta.title.toLowerCase())}...">
+                    <button type="button" class="multiselect-modal-search-clear" style="display: none;" title="Clear search">
+                        <i class="fas fa-times-circle"></i>
+                    </button>
+                </div>
+                <div class="multiselect-modal-counts">
+                    <span class="multiselect-modal-count-pill" id="${id}-modal-selected-pill">0 selected</span>
+                    <span class="multiselect-modal-total-pill" id="${id}-modal-total-pill">0 options</span>
+                </div>
+            </div>
+
+            <div class="multiselect-modal-body">
+                <div class="multiselect-modal-grid" id="${id}-modal-grid"></div>
+                <div class="multiselect-modal-empty" id="${id}-modal-empty" style="display: none;">
+                    <i class="fas fa-search-minus"></i>
+                    <p>No matching options found</p>
+                </div>
+            </div>
+
+            <div class="multiselect-modal-footer">
+                <div class="multiselect-modal-footer-left">
+                    <span class="multiselect-selection-summary" id="${id}-modal-summary">No options selected</span>
+                </div>
+                <div class="multiselect-modal-footer-right">
+                    <button type="button" class="multiselect-modal-btn-cancel">Cancel</button>
+                    <button type="button" class="multiselect-modal-btn-apply">
+                        <i class="fas fa-check"></i> Done
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const modalBackdrop = overlay.querySelector('.multiselect-modal-backdrop');
+    const modalCloseIcon = overlay.querySelector('.multiselect-modal-close-icon');
+    const modalSearchInput = overlay.querySelector('.multiselect-modal-search-field');
+    const modalSearchClear = overlay.querySelector('.multiselect-modal-search-clear');
+    const modalGrid = overlay.querySelector('.multiselect-modal-grid');
+    const modalEmpty = overlay.querySelector('.multiselect-modal-empty');
+    const modalSelectedPill = overlay.querySelector(`#${id}-modal-selected-pill`);
+    const modalTotalPill = overlay.querySelector(`#${id}-modal-total-pill`);
+    const modalSummary = overlay.querySelector(`#${id}-modal-summary`);
+    const btnSelectAll = overlay.querySelector('.multiselect-btn-select-all');
+    const btnClearAll = overlay.querySelector('.multiselect-btn-clear-all');
+    const btnCancel = overlay.querySelector('.multiselect-modal-btn-cancel');
+    const btnApply = overlay.querySelector('.multiselect-modal-btn-apply');
+
+    // Update counts & summary indicators in modal
+    function updateModalStats(visibleCount, totalCount) {
+        const selCount = pendingSelections.size;
+        modalSelectedPill.textContent = `${selCount} selected`;
+        modalTotalPill.textContent = `${visibleCount} of ${totalCount} options`;
+
+        if (selCount === 0) {
+            modalSummary.textContent = 'Showing all (none filtered)';
+        } else {
+            modalSummary.textContent = `${selCount} option${selCount > 1 ? 's' : ''} selected`;
         }
     }
 
-    // Close dropdown
-    function closeDropdown() {
-        isOpen = false;
-        dropdown.style.display = 'none';
-        toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i>';
-    }
+    // Render option cards in multi-column grid
+    function renderCards(searchTerm = '') {
+        const term = searchTerm.toLowerCase().trim();
+        modalGrid.innerHTML = '';
 
-    // Event listeners
-    toggleBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleDropdown();
-    });
+        const filtered = currentOptions.filter(opt => {
+            const optLabel = typeof opt === 'object' ? opt.label : String(opt);
+            return !term || optLabel.toLowerCase().includes(term);
+        });
 
-    searchInput.addEventListener('input', (e) => {
-        filterOptions(e.target.value);
-        if (!isOpen && e.target.value.length >= searchMinChars) {
-            toggleDropdown();
+        updateModalStats(filtered.length, currentOptions.length);
+
+        if (filtered.length === 0) {
+            modalGrid.style.display = 'none';
+            modalEmpty.style.display = 'block';
+            return;
         }
-    });
 
-    searchInput.addEventListener('focus', () => {
-        if (searchInput.value.length >= searchMinChars && !isOpen) {
-            toggleDropdown();
-        }
-    });
+        modalGrid.style.display = 'grid';
+        modalEmpty.style.display = 'none';
 
-    searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            const term = searchInput.value.trim();
-            if (term && !selectedValues.includes(term)) {
-                // Allow adding custom values
-                addValue(term);
+        filtered.forEach(opt => {
+            const label = typeof opt === 'object' ? opt.label : String(opt);
+            const val = typeof opt === 'object' && opt.value !== undefined ? opt.value : label;
+            const strVal = String(val);
+            const isSelected = pendingSelections.has(strVal);
+            const count = typeof opt === 'object' && showCounts && opt.count !== undefined ? opt.count : null;
+
+            // Prefix icon / symbol
+            let prefixHtml = '';
+            if (meta.type === 'tag') {
+                prefixHtml = '<span class="multiselect-card-prefix hash-prefix">#</span>';
+            } else if (meta.type === 'list') {
+                prefixHtml = '<i class="fas fa-folder multiselect-card-prefix list-ico"></i>';
+            } else if (meta.type === 'recurring') {
+                prefixHtml = '<i class="fas fa-redo-alt multiselect-card-prefix recurring-ico"></i>';
+            } else if (meta.type === 'status') {
+                prefixHtml = `<span class="multiselect-card-prefix status-dot status-${escapeHtml(strVal.toLowerCase())}"></span>`;
             }
-        } else if (e.key === 'Escape') {
-            closeDropdown();
-            searchInput.blur();
-        } else if (e.key === 'Backspace' && searchInput.value === '' && selectedValues.length > 0) {
-            removeValue(selectedValues[selectedValues.length - 1]);
+
+            const countHtml = (showCounts && count !== null) 
+                ? `<span class="multiselect-card-count">${count}</span>` 
+                : '';
+
+            const card = document.createElement('div');
+            card.className = `multiselect-grid-card ${isSelected ? 'selected' : ''}`;
+            card.dataset.value = strVal;
+            card.innerHTML = `
+                <div class="multiselect-card-checkbox">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="multiselect-card-label-wrap">
+                    ${prefixHtml}
+                    <span class="multiselect-card-label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+                </div>
+                ${countHtml}
+            `;
+
+            card.addEventListener('click', () => {
+                if (pendingSelections.has(strVal)) {
+                    pendingSelections.delete(strVal);
+                    card.classList.remove('selected');
+                } else {
+                    pendingSelections.add(strVal);
+                    card.classList.add('selected');
+                }
+                updateModalStats(filtered.length, currentOptions.length);
+            });
+
+            modalGrid.appendChild(card);
+        });
+    }
+
+    // Open Modal
+    function openModal() {
+        isOpen = true;
+        pendingSelections = new Set(selectedValues.map(String));
+        modalSearchInput.value = '';
+        modalSearchClear.style.display = 'none';
+
+        overlay.style.display = 'flex';
+        // Trigger smooth CSS transition
+        requestAnimationFrame(() => {
+            overlay.classList.add('active');
+        });
+        document.body.classList.add('multiselect-modal-open');
+
+        renderCards('');
+
+        setTimeout(() => {
+            modalSearchInput.focus();
+        }, 60);
+    }
+
+    // Close Modal without applying changes
+    function closeModal() {
+        isOpen = false;
+        overlay.classList.remove('active');
+        document.body.classList.remove('multiselect-modal-open');
+        setTimeout(() => {
+            if (!isOpen) {
+                overlay.style.display = 'none';
+            }
+        }, 220);
+    }
+
+    // Apply selections and close
+    function applyAndClose() {
+        selectedValues = Array.from(pendingSelections);
+        updateDisplay();
+        onChange(selectedValues);
+        closeModal();
+    }
+
+    // Modal Event Listeners
+    modalSearchInput.addEventListener('input', (e) => {
+        const val = e.target.value;
+        modalSearchClear.style.display = val ? 'inline-block' : 'none';
+        renderCards(val);
+    });
+
+    modalSearchClear.addEventListener('click', () => {
+        modalSearchInput.value = '';
+        modalSearchClear.style.display = 'none';
+        renderCards('');
+        modalSearchInput.focus();
+    });
+
+    btnSelectAll.addEventListener('click', () => {
+        const term = modalSearchInput.value.toLowerCase().trim();
+        const visibleOptions = currentOptions.filter(opt => {
+            const optLabel = typeof opt === 'object' ? opt.label : String(opt);
+            return !term || optLabel.toLowerCase().includes(term);
+        });
+        visibleOptions.forEach(opt => {
+            const val = typeof opt === 'object' && opt.value !== undefined ? opt.value : (opt.label || opt);
+            pendingSelections.add(String(val));
+        });
+        renderCards(modalSearchInput.value);
+    });
+
+    btnClearAll.addEventListener('click', () => {
+        pendingSelections.clear();
+        renderCards(modalSearchInput.value);
+    });
+
+    btnApply.addEventListener('click', () => {
+        applyAndClose();
+    });
+
+    btnCancel.addEventListener('click', () => {
+        closeModal();
+    });
+
+    modalCloseIcon.addEventListener('click', () => {
+        applyAndClose();
+    });
+
+    modalBackdrop.addEventListener('click', () => {
+        applyAndClose();
+    });
+
+    // Keyboard support
+    overlay.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            applyAndClose();
+        } else if (e.key === 'Enter' && e.target === modalSearchInput) {
+            e.preventDefault();
+            applyAndClose();
         }
     });
 
-    // Close on outside click
-    document.addEventListener('click', (e) => {
-        if (!container.contains(e.target)) {
-            closeDropdown();
-        }
+    // Form/drawer trigger clicks
+    inputWrapper.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openModal();
     });
 
-    // Initialize
+    // Initialize display
     updateDisplay();
 
-    // Expose methods
+    // Container API methods
     container.setOptions = (newOptions) => {
         currentOptions = [...newOptions];
+        if (isOpen) {
+            renderCards(modalSearchInput.value);
+        }
     };
 
     container.getSelectedValues = () => [...selectedValues];
 
     container.setSelectedValues = (values) => {
         selectedValues = [...values];
+        pendingSelections = new Set(selectedValues.map(String));
         updateDisplay();
     };
 
@@ -245,16 +483,17 @@ export function createMultiselect(config) {
 
     container.clear = () => {
         selectedValues = [];
+        pendingSelections.clear();
         updateDisplay();
         onChange(selectedValues);
     };
 
     container.open = () => {
-        if (!isOpen) toggleDropdown();
+        if (!isOpen) openModal();
     };
 
     container.close = () => {
-        if (isOpen) closeDropdown();
+        if (isOpen) closeModal();
     };
 
     return container;

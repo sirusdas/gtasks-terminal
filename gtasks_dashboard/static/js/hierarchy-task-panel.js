@@ -368,8 +368,8 @@ export function filterNodeTasks(node) {
     const dateField = document.getElementById('node-task-date-field')?.value || 'due';
     const dateStart = document.getElementById('node-task-date-start')?.value || '';
     const dateEnd = document.getElementById('node-task-date-end')?.value || '';
-    const sortField = document.getElementById('node-task-sort-field')?.value || 'due';
-    const sortOrder = document.getElementById('node-task-sort-order')?.value || 'asc';
+    const sortField = document.getElementById('node-task-sort-field')?.value || 'modified_at';
+    const sortOrder = document.getElementById('node-task-sort-order')?.value || 'desc';
 
     let filteredTasks = relatedTasks;
 

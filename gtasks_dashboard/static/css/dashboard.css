@@ -65,6 +65,7 @@ body {
     transition: all var(--transition-speed) ease;
     box-shadow: 2px 0 10px rgba(0,0,0,0.1);
     overflow-y: auto;
+    scroll-behavior: smooth;
 }
 
 .sidebar.collapsed {
@@ -72,8 +73,10 @@ body {
 }
 
 .sidebar.collapsed .sidebar-header h2,
-.sidebar.collapsed .nav-item span {
-    display: none;
+.sidebar.collapsed .nav-item span,
+.sidebar.collapsed .sidebar-tasks-submenu,
+.sidebar.collapsed .submenu-chevron {
+    display: none !important;
 }
 
 .sidebar-header {
@@ -133,6 +136,234 @@ body {
 .nav-item span {
     margin-left: 0.75rem;
 }
+
+/* ========== Sidebar Tasks Submenu (Lists & Tags) ========== */
+.sidebar-tasks-group {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--bg-sidebar);
+}
+
+.nav-item .submenu-chevron {
+    margin-left: auto;
+    font-size: 0.72rem;
+    transition: transform var(--transition-speed) ease;
+    opacity: 0.75;
+}
+
+.sidebar-tasks-submenu {
+    padding: 0.35rem 0.65rem 0.75rem 0.65rem;
+    background: rgba(0, 0, 0, 0.16);
+    border-radius: 0 0 10px 10px;
+    margin: 0 0.5rem 0.5rem 0.5rem;
+    transition: all var(--transition-speed) ease;
+}
+
+.sidebar-tasks-submenu.collapsed {
+    display: none;
+}
+
+/* Sidebar Quick Search */
+.sidebar-search-wrapper {
+    position: relative;
+    margin: 0.25rem 0 0.6rem 0;
+    display: flex;
+    align-items: center;
+}
+
+.sidebar-search-icon {
+    position: absolute;
+    left: 0.65rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.45);
+    pointer-events: none;
+}
+
+.sidebar-search-input {
+    width: 100%;
+    padding: 0.38rem 1.6rem 0.38rem 1.85rem;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    font-size: 0.78rem;
+    transition: all var(--transition-speed) ease;
+    box-sizing: border-box;
+}
+
+.sidebar-search-input:focus {
+    outline: none;
+    border-color: #fbbf24;
+    background: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.2);
+}
+
+.sidebar-search-input::placeholder {
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.sidebar-search-clear {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 2px;
+}
+
+.sidebar-search-clear:hover {
+    color: white;
+}
+
+/* Sidebar Subitems (All Tasks, List item, Tag item) */
+.sidebar-subitem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.42rem 0.6rem;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.82);
+    cursor: pointer;
+    font-size: 0.82rem;
+    transition: all 0.15s ease;
+    user-select: none;
+    margin-bottom: 2px;
+}
+
+.sidebar-subitem:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+}
+
+.sidebar-subitem.active {
+    background: rgba(251, 191, 36, 0.18);
+    color: #fbbf24;
+    font-weight: 600;
+}
+
+.sidebar-subitem-main {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.sidebar-subitem-main .subitem-icon {
+    font-size: 0.75rem;
+    opacity: 0.75;
+    flex-shrink: 0;
+}
+
+.sidebar-subitem-main .subitem-tag-hash {
+    font-weight: 700;
+    color: #fbbf24;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.sidebar-subitem-main .subitem-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.subitem-badge {
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.1rem 0.42rem;
+    border-radius: 10px;
+    flex-shrink: 0;
+    margin-left: 0.4rem;
+}
+
+.sidebar-subitem.active .subitem-badge {
+    background: rgba(251, 191, 36, 0.3);
+    color: #fbbf24;
+}
+
+/* Sidebar Section Headers (Lists, Tags) */
+.sidebar-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.35rem 0.25rem 0.35rem;
+    margin-top: 0.4rem;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s ease;
+}
+
+.sidebar-section-header:hover {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.sidebar-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.sidebar-section-title i {
+    font-size: 0.68rem;
+}
+
+.section-chevron {
+    font-size: 0.65rem;
+    transition: transform var(--transition-speed) ease;
+}
+
+/* Subitems Container */
+.sidebar-subitems-container {
+    max-height: calc(100vh - 210px);
+    overflow-y: auto;
+    margin-bottom: 0.5rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.sidebar-subitems-container::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar-subitems-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar-subitems-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.sidebar-subitems-container.collapsed {
+    display: none;
+}
+
+.sidebar-empty-hint {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+}
+
 
 /* ========== Main Content ========== */
 .main-content {
@@ -935,7 +1166,13 @@ body {
     gap: 0.75rem;
     margin-bottom: 0.75rem;
     flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 850;
+    background: var(--bg-primary);
+    padding: 0.75rem 0;
 }
+
 
 .task-search-wrapper {
     position: relative;
@@ -1505,12 +1742,12 @@ body {
     padding-top: 0.5rem;
 }
 
-/* ========== Mobile Floating Action Button (FAB) ========== */
+/* ========== Floating Action Button (FAB: Mobile & Desktop) ========== */
 .mobile-fab {
-    display: none;
+    display: flex;
     position: fixed;
-    bottom: 24px;
-    right: 20px;
+    bottom: 32px;
+    right: 32px;
     width: 56px;
     height: 56px;
     border-radius: 50%;
@@ -1523,7 +1760,12 @@ body {
     font-size: 1.35rem;
     align-items: center;
     justify-content: center;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.mobile-fab:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.55);
 }
 
 .mobile-fab:active {
@@ -1882,24 +2124,31 @@ body {
         font-size: 1.5rem;
     }
     
-    /* Tasks Toolbar */
+    /* Tasks Toolbar: On mobile, only the search wrapper sticks under the mobile top bar (56px) */
     .tasks-toolbar {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 0.5rem;
+        display: contents;
     }
     
     .task-search-wrapper {
+        position: sticky;
+        top: 56px;
+        z-index: 850;
+        background: var(--bg-primary);
+        padding: 0.5rem 0;
+        margin-bottom: 0.5rem;
         width: 100%;
         min-width: unset;
+        box-sizing: border-box;
     }
     
     .tasks-toolbar-controls {
+        position: static;
         width: 100%;
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 0.5rem;
+        margin-bottom: 0.75rem;
     }
     
     .filter-drawer-toggle-btn {
@@ -2115,7 +2364,8 @@ body {
     
     /* Mobile FAB */
     .mobile-fab {
-        display: flex;
+        bottom: 24px;
+        right: 20px;
     }
     
     /* Hierarchy Task Panel on Mobile */
