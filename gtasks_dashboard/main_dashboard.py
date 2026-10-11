@@ -99,6 +99,13 @@ def tasks_page_local():
     return render_dashboard(view='tasks', base_path='')
 
 
+@app.route('/reports')
+def reports_page_local():
+    """Reports page - shows reports and analytics view (local development)"""
+    from routes.dashboard import render_dashboard
+    return render_dashboard(view='reports', base_path='')
+
+
 @app.route('/favicon.ico')
 def favicon_local():
     """Serve favicon as SVG data URI (local development)"""
@@ -518,6 +525,74 @@ def api_generate_report_root():
     from routes.api import api_generate_report
     return api_generate_report()
 
+@app.route('/api/reports/export', methods=['POST'])
+def api_export_report_root():
+    """Export a generated report (local development)"""
+    from routes.api import api_export_report
+    return api_export_report()
+
+@app.route('/api/reports/email', methods=['POST'])
+def api_email_report_root():
+    """Send report via email (local development)"""
+    from routes.api import api_email_report
+    return api_email_report()
+
+@app.route('/api/notifications', methods=['GET'])
+def api_notifications_list_root():
+    """List notifications (local development)"""
+    from routes.api import api_list_notifications
+    return api_list_notifications()
+
+@app.route('/api/notifications/read', methods=['POST'])
+def api_notifications_read_root():
+    """Mark notifications read (local development)"""
+    from routes.api import api_read_notifications
+    return api_read_notifications()
+
+@app.route('/api/notifications/clear', methods=['POST'])
+def api_notifications_clear_root():
+    """Clear notifications (local development)"""
+    from routes.api import api_clear_notifications
+    return api_clear_notifications()
+
+@app.route('/api/notifications/check', methods=['POST'])
+def api_notifications_check_root():
+    """Check notifications (local development)"""
+    from routes.api import api_check_notifications
+    return api_check_notifications()
+
+@app.route('/api/settings', methods=['GET', 'POST'])
+def api_settings_root():
+    """Get or update settings (local development)"""
+    from routes.api import api_get_settings, api_update_settings
+    if request.method == 'POST':
+        return api_update_settings()
+    return api_get_settings()
+
+@app.route('/api/debug/diagnostics', methods=['GET'])
+def api_debug_diagnostics_root():
+    """Get debug diagnostics (local development)"""
+    from routes.api import api_debug_diagnostics
+    return api_debug_diagnostics()
+
+@app.route('/api/debug/logs', methods=['GET'])
+def api_debug_logs_root():
+    """Get application logs (local development)"""
+    from routes.api import api_debug_logs
+    return api_debug_logs()
+
+@app.route('/api/debug/toggle', methods=['POST'])
+def api_debug_toggle_root():
+    """Toggle debug log level (local development)"""
+    from routes.api import api_debug_toggle
+    return api_debug_toggle()
+
+@app.route('/api/debug/clear-logs', methods=['POST'])
+def api_debug_clear_logs_root():
+    """Clear application logs (local development)"""
+    from routes.api import api_debug_clear_logs
+    return api_debug_clear_logs()
+
 @app.route('/api/filter-tasks', methods=['POST'])
 def api_filter_tasks_root():
     """Advanced task filtering (local development)"""
@@ -529,6 +604,30 @@ def api_last_update_root():
     """Get last update timestamp (local development)"""
     from routes.api import api_last_update
     return api_last_update()
+
+@app.route('/api/openapi.json')
+def api_openapi_json_root():
+    """Get OpenAPI specification (local development)"""
+    from routes.api import get_openapi_spec
+    return get_openapi_spec()
+
+@app.route('/api/docs')
+def api_docs_root():
+    """Swagger UI documentation (local development)"""
+    from routes.api import swagger_ui
+    return swagger_ui()
+
+@app.route('/api/auth/google/start', methods=['GET', 'POST'])
+def api_auth_google_start_root():
+    """Start Google OAuth authorization (local development)"""
+    from routes.api import api_auth_google_start
+    return api_auth_google_start()
+
+@app.route('/api/auth/google/submit-code', methods=['POST'])
+def api_auth_google_submit_code_root():
+    """Exchange OAuth code for tokens (local development)"""
+    from routes.api import api_auth_google_submit_code
+    return api_auth_google_submit_code()
 
 # End of local development routes
 

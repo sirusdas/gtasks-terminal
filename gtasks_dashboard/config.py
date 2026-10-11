@@ -72,42 +72,109 @@ PRIORITY_ICONS = {
 
 # Available Report Types
 REPORT_TYPES = {
-    'task_completion': {
+    'rp1': {
+        'id': 'rp1',
+        'alias': 'task_completion',
         'name': 'Task Completion Report',
-        'description': 'Summary of completed tasks over a specified period',
+        'description': 'Summary of completed tasks, trends, and daily completion velocity',
         'icon': 'fa-check-circle',
         'category': 'Performance',
         'supports_date_range': True,
     },
-    'overdue_tasks': {
-        'name': 'Overdue Tasks Report',
-        'description': 'Detailed list of tasks that are past their due dates',
-        'icon': 'fa-exclamation-triangle',
-        'category': 'Analysis',
-        'supports_date_range': False,
-    },
-    'task_distribution': {
-        'name': 'Task Distribution Report',
-        'description': 'Analysis of tasks by category, priority, or tags',
-        'icon': 'fa-chart-pie',
-        'category': 'Analytics',
-        'supports_date_range': False,
-    },
-    'timeline': {
-        'name': 'Timeline Report',
-        'description': 'Visual representation of tasks completed over a specified time period',
-        'icon': 'fa-timeline',
-        'category': 'Visualization',
-        'supports_date_range': True,
-    },
-    'pending_tasks': {
+    'rp2': {
+        'id': 'rp2',
+        'alias': 'pending_tasks',
         'name': 'Pending Tasks Report',
-        'description': 'List of all pending tasks with their due dates',
+        'description': 'Comprehensive overview of all pending tasks categorized by due urgency',
         'icon': 'fa-clock',
         'category': 'Status',
         'supports_date_range': False,
     },
+    'rp3': {
+        'id': 'rp3',
+        'alias': 'task_creation',
+        'name': 'Task Creation Report',
+        'description': 'Rate of new task creation and intake patterns over time',
+        'icon': 'fa-plus-circle',
+        'category': 'Performance',
+        'supports_date_range': True,
+    },
+    'rp4': {
+        'id': 'rp4',
+        'alias': 'overdue_tasks',
+        'name': 'Overdue Tasks Report',
+        'description': 'Detailed breakdown of overdue tasks with age analysis and urgency',
+        'icon': 'fa-exclamation-triangle',
+        'category': 'Analysis',
+        'supports_date_range': False,
+    },
+    'rp5': {
+        'id': 'rp5',
+        'alias': 'task_distribution',
+        'name': 'Task Distribution Report',
+        'description': 'Distribution of tasks by status, priority, and functional categories',
+        'icon': 'fa-chart-pie',
+        'category': 'Analytics',
+        'supports_date_range': False,
+    },
+    'rp6': {
+        'id': 'rp6',
+        'alias': 'completion_rate',
+        'name': 'Completion Rate Report',
+        'description': 'Completion percentage ratios, velocity metrics, and progress health',
+        'icon': 'fa-percentage',
+        'category': 'Analytics',
+        'supports_date_range': True,
+    },
+    'rp7': {
+        'id': 'rp7',
+        'alias': 'future_timeline',
+        'name': 'Future Timeline Report',
+        'description': 'Upcoming scheduled tasks grouped by future weeks and months',
+        'icon': 'fa-calendar-alt',
+        'category': 'Planning',
+        'supports_date_range': False,
+    },
+    'rp8': {
+        'id': 'rp8',
+        'alias': 'timeline',
+        'name': 'Timeline Report',
+        'description': 'Chronological timeline of task lifecycle and milestone completions',
+        'icon': 'fa-stream',
+        'category': 'Visualization',
+        'supports_date_range': True,
+    },
+    'rp9': {
+        'id': 'rp9',
+        'alias': 'organized_tasks',
+        'name': 'Organized Tasks Report',
+        'description': 'Curated executive view categorized by domain with tag cleanup',
+        'icon': 'fa-layer-group',
+        'category': 'Executive',
+        'supports_date_range': False,
+    },
+    'rp10': {
+        'id': 'rp10',
+        'alias': 'custom_filtered',
+        'name': 'Custom Filtered Report',
+        'description': 'Advanced report with custom dynamic filters, tag matching, and ordering',
+        'icon': 'fa-filter',
+        'category': 'Custom',
+        'supports_date_range': True,
+    },
 }
+
+# Alias mapping for backwards compatibility
+REPORT_TYPES['task_completion'] = REPORT_TYPES['rp1']
+REPORT_TYPES['pending_tasks'] = REPORT_TYPES['rp2']
+REPORT_TYPES['task_creation'] = REPORT_TYPES['rp3']
+REPORT_TYPES['overdue_tasks'] = REPORT_TYPES['rp4']
+REPORT_TYPES['task_distribution'] = REPORT_TYPES['rp5']
+REPORT_TYPES['completion_rate'] = REPORT_TYPES['rp6']
+REPORT_TYPES['future_timeline'] = REPORT_TYPES['rp7']
+REPORT_TYPES['timeline'] = REPORT_TYPES['rp8']
+REPORT_TYPES['organized_tasks'] = REPORT_TYPES['rp9']
+REPORT_TYPES['custom_filtered'] = REPORT_TYPES['rp10']
 
 # Enhanced category mapping configuration
 CATEGORIES = {

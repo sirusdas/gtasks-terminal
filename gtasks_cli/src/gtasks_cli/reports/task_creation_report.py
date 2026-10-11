@@ -35,24 +35,55 @@ class TaskCreationReport(BaseReport):
         Returns:
             Dict containing report data
         """
-        start_date = kwargs.get('start_date')
-        end_date = kwargs.get('end_date')
-        period_days = kwargs.get('period_days', 30)
+        def _parse_dt(d):
+            if isinstance(d, str):
+                try:
+                    return datetime.fromisoformat(d.replace('Z', '+00:00'))
+                except Exception:
+                    pass
+            return d
+
+        start_date = _parse_dt(kwargs.get('start_date'))
+        end_date = _parse_dt(kwargs.get('end_date'))
+        period_days = kwargs.get('period_days')
+        if period_days is None:
+            if start_date and end_date:
+                period_days = max(1, (end_date - start_date).days)
+            else:
+                period_days = 30
+        else:
+            try:
+                period_days = int(period_days)
+            except Exception:
+                period_days = 30
         
         # If no dates provided, use last N days
+        now = datetime.now()
         if not start_date and not end_date:
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=period_days)
+            end_date = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+            start_date = (now - timedelta(days=period_days)).replace(hour=0, minute=0, second=0, microsecond=0)
         elif not end_date:
-            end_date = datetime.now()
+            end_date = now.replace(hour=23, minute=59, second=59, microsecond=999999)
         elif not start_date:
-            start_date = end_date - timedelta(days=period_days)
+            start_date = (end_date - timedelta(days=period_days)).replace(hour=0, minute=0, second=0, microsecond=0)
         
+        # Ensure timezone-naive comparison
+        if hasattr(start_date, 'tzinfo') and start_date.tzinfo is not None:
+            start_date = start_date.replace(tzinfo=None)
+        if hasattr(end_date, 'tzinfo') and end_date.tzinfo is not None:
+            end_date = end_date.replace(tzinfo=None)
+        
+        if end_date.hour == 0 and end_date.minute == 0 and end_date.second == 0:
+            end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+
         # Filter tasks created within the date range
         created_tasks = []
         for task in tasks:
             if task.created_at:
-                if start_date <= task.created_at <= end_date:
+                task_created = task.created_at
+                if hasattr(task_created, 'tzinfo') and task_created.tzinfo is not None:
+                    task_created = task_created.replace(tzinfo=None)
+                if start_date <= task_created <= end_date:
                     created_tasks.append(task)
         
         # Group by date
@@ -81,6 +112,8 @@ class TaskCreationReport(BaseReport):
             'period_end': end_date.isoformat() if hasattr(end_date, 'isoformat') else str(end_date),
             'period_days': period_days,
             'total_created': total_created,
+            'created_tasks': created_tasks,
+            'tasks': created_tasks,
             'daily_creation': daily_creation,
             'daily_counts': daily_counts,
             'average_per_day': average_per_day,

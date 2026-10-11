@@ -20,7 +20,7 @@ import {
     getTaskDate,
     getDefaultDateRange
 } from './utils.js';
-import { createTaskCard, renderTasksGrid } from './task-card.js';
+import { createTaskCard, renderTasksGrid } from './task-card.js?v=38';
 import { createMultiselect, getUniqueLists, getUniqueTags, getListsWithCounts, getTagsWithCounts, getStatusWithCounts, getFilteredTagsByLists, getFilteredListsByTags, getFilteredTasksBySearchAndDate, getFilteredListsByTagsAndCriteria, getFilteredTagsByListsAndCriteria } from './multiselect.js';
 import { 
     renderHierarchy,
@@ -105,6 +105,8 @@ export function getCurrentSectionFromPath() {
         return 'hierarchy';
     } else if (relativePath === '/tasks' || relativePath.startsWith('/tasks')) {
         return 'tasks';
+    } else if (relativePath === '/reports' || relativePath.startsWith('/reports')) {
+        return 'reports';
     } else if (relativePath === '/dashboard' || relativePath === '/') {
         return 'dashboard';
     }
@@ -159,6 +161,10 @@ export function showSection(section, updateUrl = true) {
     } else if (section === 'tasks') {
         if (dashboardData && dashboardData.tasks) {
             filterTasks();
+        }
+    } else if (section === 'reports') {
+        if (window.initReportsView) {
+            window.initReportsView();
         }
     }
 }
@@ -262,12 +268,11 @@ export async function startAdvancedSync() {
     isSyncing = true;
     syncProgress = { percentage: 0, message: 'Starting sync...', status: 'running' };
 
-    // Disable refresh button
-    const refreshBtn = document.querySelector('.header-refresh-btn');
-    if (refreshBtn) {
+    // Disable all refresh buttons
+    document.querySelectorAll('.header-refresh-btn').forEach(refreshBtn => {
         refreshBtn.disabled = true;
         refreshBtn.classList.add('disabled');
-    }
+    });
 
     // Show progress UI
     updateSyncProgressUI();
@@ -482,12 +487,11 @@ export function stopSyncProgressUI() {
         overlay.classList.remove('active');
     }
 
-    // Re-enable refresh button
-    const refreshBtn = document.querySelector('.header-refresh-btn');
-    if (refreshBtn) {
+    // Re-enable all refresh buttons
+    document.querySelectorAll('.header-refresh-btn').forEach(refreshBtn => {
         refreshBtn.disabled = false;
         refreshBtn.classList.remove('disabled');
-    }
+    });
 }
 
 /**
@@ -504,6 +508,11 @@ export async function refreshWithAdvancedSync() {
  */
 export async function simpleCacheRefresh() {
     console.log('[Dashboard] Simple cache refresh...');
+    const refreshBtns = document.querySelectorAll('.header-refresh-btn');
+    refreshBtns.forEach(btn => {
+        btn.disabled = true;
+        btn.classList.add('disabled');
+    });
     try {
         const response = await fetch(apiEndpoints.refresh, {
             method: 'POST',
@@ -518,6 +527,10 @@ export async function simpleCacheRefresh() {
             console.log('[Dashboard] Cache refreshed successfully:', data);
             // Reload dashboard data to reflect changes
             await loadDashboard();
+            const currentSec = (typeof stateManager.getCurrentSection === 'function' ? stateManager.getCurrentSection() : stateManager.get('currentSection')) || getCurrentSectionFromPath();
+            if (currentSec === 'reports' && typeof window.generateSelectedReport === 'function') {
+                window.generateSelectedReport();
+            }
             showNotification('Dashboard refreshed! ✅', 'success');
         } else {
             console.error('[Dashboard] Cache refresh failed:', data.message);
@@ -526,18 +539,56 @@ export async function simpleCacheRefresh() {
     } catch (error) {
         console.error('[Dashboard] Error during cache refresh:', error);
         showNotification('Error refreshing dashboard', 'error');
+    } finally {
+        refreshBtns.forEach(btn => {
+            btn.disabled = false;
+            btn.classList.remove('disabled');
+        });
     }
 }
 
 // ========== Refresh Dropdown Functions ==========
 
 /**
- * Toggle the refresh dropdown menu
+ * Close all active refresh dropdown menus across the page
  */
-export function toggleRefreshDropdown() {
-    const dropdown = document.getElementById('refresh-dropdown-menu');
-    if (dropdown) {
-        dropdown.classList.toggle('active');
+export function closeAllRefreshDropdowns() {
+    document.querySelectorAll('.refresh-dropdown-menu.active').forEach(menu => {
+        menu.classList.remove('active');
+    });
+}
+
+/**
+ * Toggle the refresh dropdown menu for the clicked element or current visible view
+ */
+export function toggleRefreshDropdown(event) {
+    if (event) {
+        if (typeof event.stopPropagation === 'function') {
+            event.stopPropagation();
+        }
+        const toggleBtn = event.currentTarget || (event.target ? event.target.closest('.refresh-dropdown-toggle') : null);
+        const container = toggleBtn ? toggleBtn.closest('.refresh-dropdown') : null;
+        if (container) {
+            const menu = container.querySelector('.refresh-dropdown-menu');
+            if (menu) {
+                const isCurrentlyActive = menu.classList.contains('active');
+                closeAllRefreshDropdowns();
+                if (!isCurrentlyActive) {
+                    menu.classList.add('active');
+                }
+                return;
+            }
+        }
+    }
+    // Fallback if called without event or button context
+    const visibleSection = document.querySelector('.section:not([style*="display: none"])');
+    const targetMenu = (visibleSection && visibleSection.querySelector('.refresh-dropdown-menu')) || document.querySelector('.refresh-dropdown-menu');
+    if (targetMenu) {
+        const isCurrentlyActive = targetMenu.classList.contains('active');
+        closeAllRefreshDropdowns();
+        if (!isCurrentlyActive) {
+            targetMenu.classList.add('active');
+        }
     }
 }
 
@@ -586,10 +637,8 @@ export async function syncRemoteDb() {
  */
 export function setupRefreshDropdown() {
     document.addEventListener('click', (e) => {
-        const dropdown = document.getElementById('refresh-dropdown-menu');
-        const toggle = document.querySelector('.refresh-dropdown-toggle');
-        if (dropdown && toggle && !dropdown.contains(e.target) && !toggle.contains(e.target)) {
-            dropdown.classList.remove('active');
+        if (!e.target.closest('.refresh-dropdown')) {
+            closeAllRefreshDropdowns();
         }
     });
 }
@@ -1901,10 +1950,10 @@ export async function refreshHierarchy() {
 /**
  * Initialize settings
  */
-export function initSettings() {
+export async function initSettings() {
     const settings = stateManager.getSettings();
     
-    // Update UI
+    // Update local UI
     const toggleElement = document.getElementById('auto-refresh-toggle');
     const intervalSelect = document.getElementById('refresh-interval');
     const viewSelect = document.getElementById('default-view');
@@ -1931,18 +1980,144 @@ export function initSettings() {
         stateManager.startAutoRefresh(settings.refreshInterval);
     }
     
-    // Apply default view only when accessing root URL (not /dashboard)
-    // URL path takes precedence over saved default view setting
     const path = window.location.pathname;
-    
-    // Only apply default view on root URL, not on /dashboard
     if (settings.defaultView && settings.defaultView !== 'dashboard' && path === '/') {
         showSection(settings.defaultView, false);
     }
 }
 
-export function openSettings() {
-    document.getElementById('settings-modal').classList.add('active');
+export async function openSettings() {
+    const modal = document.getElementById('settings-modal');
+    if (!modal) return;
+    modal.classList.add('active');
+
+    // Fetch live backend config
+    try {
+        const basePath = window.GTASKS_BASE_PATH || '';
+        const res = await fetch(`${basePath}/api/settings`);
+        const json = await res.json();
+        if (json.success && json.data) {
+            populateBackendSettingsForm(json.data.config || {}, json.data.feature_flags || {});
+        }
+    } catch (e) {
+        console.warn('[Settings] Failed to fetch backend settings:', e);
+    }
+}
+
+function populateBackendSettingsForm(cfg, flags) {
+    const defaultList = document.getElementById('setting-default-list');
+    const dateFormat = document.getElementById('setting-date-format');
+    const timeFormat = document.getElementById('setting-time-format');
+    const tableStyle = document.getElementById('setting-table-style');
+
+    const autoSave = document.getElementById('setting-auto-save');
+    const pullDays = document.getElementById('setting-pull-days');
+
+    const emailUser = document.getElementById('setting-email-user');
+    const emailPassword = document.getElementById('setting-email-password');
+
+    const flagPriority = document.getElementById('setting-flag-priority');
+    const flagReports = document.getElementById('setting-flag-reports');
+    const flagAdvanced = document.getElementById('setting-flag-advanced');
+
+    if (defaultList) defaultList.value = cfg.default_tasklist || 'My Tasks';
+    if (dateFormat) dateFormat.value = cfg.date_format || '%Y-%m-%d';
+    if (timeFormat) timeFormat.value = cfg.time_format || '%H:%M';
+    if (tableStyle && cfg.display) tableStyle.value = cfg.display.table_style || 'simple';
+
+    if (autoSave && cfg.sync) autoSave.checked = Boolean(cfg.sync.auto_save);
+    if (pullDays && cfg.sync) pullDays.value = cfg.sync.pull_range_days || 10;
+
+    if (emailUser && cfg.email) emailUser.value = cfg.email.user || '';
+    if (emailPassword && cfg.email) emailPassword.value = cfg.email.password || '';
+
+    if (flagPriority) flagPriority.checked = Boolean(flags.ENABLE_PRIORITY_SYSTEM);
+    if (flagReports) flagReports.checked = Boolean(flags.ENABLE_REPORTS);
+    if (flagAdvanced) flagAdvanced.checked = Boolean(flags.ENABLE_ADVANCED_FILTERS);
+}
+
+export function switchSettingsTab(tabName) {
+    document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.settings-tab-pane').forEach(p => p.classList.remove('active'));
+
+    const btn = document.getElementById(`tab-btn-${tabName}`);
+    const pane = document.getElementById(`tab-pane-${tabName}`);
+
+    if (btn) btn.classList.add('active');
+    if (pane) pane.classList.add('active');
+}
+
+export async function saveAllSettings() {
+    const btn = document.getElementById('btn-save-settings');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    }
+
+    try {
+        const defaultList = document.getElementById('setting-default-list');
+        const dateFormat = document.getElementById('setting-date-format');
+        const timeFormat = document.getElementById('setting-time-format');
+        const tableStyle = document.getElementById('setting-table-style');
+
+        const autoSave = document.getElementById('setting-auto-save');
+        const pullDays = document.getElementById('setting-pull-days');
+
+        const emailUser = document.getElementById('setting-email-user');
+        const emailPassword = document.getElementById('setting-email-password');
+
+        const flagPriority = document.getElementById('setting-flag-priority');
+        const flagReports = document.getElementById('setting-flag-reports');
+        const flagAdvanced = document.getElementById('setting-flag-advanced');
+
+        const settingsPayload = {
+            'default_tasklist': defaultList ? defaultList.value : 'My Tasks',
+            'date_format': dateFormat ? dateFormat.value : '%Y-%m-%d',
+            'time_format': timeFormat ? timeFormat.value : '%H:%M',
+            'display.table_style': tableStyle ? tableStyle.value : 'simple',
+            'sync.auto_save': autoSave ? autoSave.checked : true,
+            'sync.pull_range_days': pullDays ? parseInt(pullDays.value) : 10
+        };
+
+        if (emailUser && emailUser.value) {
+            settingsPayload['email.user'] = emailUser.value.trim();
+        }
+        if (emailPassword && emailPassword.value && !emailPassword.value.startsWith('•••')) {
+            settingsPayload['email.password'] = emailPassword.value.trim();
+        }
+
+        const featureFlagsPayload = {
+            'ENABLE_PRIORITY_SYSTEM': flagPriority ? flagPriority.checked : true,
+            'ENABLE_REPORTS': flagReports ? flagReports.checked : true,
+            'ENABLE_ADVANCED_FILTERS': flagAdvanced ? flagAdvanced.checked : true
+        };
+
+        const basePath = window.GTASKS_BASE_PATH || '';
+        const res = await fetch(`${basePath}/api/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                settings: settingsPayload,
+                feature_flags: featureFlagsPayload
+            })
+        });
+
+        const json = await res.json();
+        if (json.success) {
+            alert('✅ Settings saved and synchronized successfully!');
+            closeSettings();
+        } else {
+            alert('❌ Failed to save settings: ' + json.message);
+        }
+    } catch (e) {
+        alert('Error saving settings: ' + e.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
 }
 
 export function closeSettings() {
@@ -1970,7 +2145,6 @@ export function updateRefreshInterval() {
     
     stateManager.updateSetting('refreshInterval', interval);
     
-    // Restart auto-refresh with new interval if enabled
     if (stateManager.getSettings().autoRefreshEnabled) {
         stateManager.stopAutoRefresh();
         stateManager.startAutoRefresh(interval);
@@ -1987,16 +2161,10 @@ export function toggleHideDeleted() {
     const isEnabled = toggleElement.classList.toggle('active');
     
     stateManager.updateSetting('hideDeletedEnabled', isEnabled);
-    
-    // Refresh tasks and hierarchy to apply the filter
     loadTasks();
-    
-    // Re-filter hierarchy visualization
     if (typeof refreshHierarchyVisualization === 'function') {
         refreshHierarchyVisualization();
     }
-    
-    console.log(`Hide deleted tasks: ${isEnabled ? 'enabled' : 'disabled'}`);
 }
 
 // ========== Keyboard Shortcuts ==========
@@ -2124,6 +2292,11 @@ export async function initDashboard() {
     const tasksGrid = document.getElementById('tasks-grid');
     if (tasksGrid) {
         tasksGrid.classList.toggle('compact', currentTaskViewMode === 'compact');
+    }
+
+    // Initialize notifications system
+    if (window.initNotifications) {
+        window.initNotifications();
     }
 
     console.log('Dashboard initialized with task view mode:', currentTaskViewMode);
@@ -2263,7 +2436,20 @@ export async function completeTask(taskId) {
         if (data.success) {
             console.log('Task completed:', taskId);
             
-            // Update UI - change task appearance to completed (no full reload)
+            // 1. Update task in local dashboardData.tasks array
+            if (dashboardData.tasks && Array.isArray(dashboardData.tasks)) {
+                const localTask = dashboardData.tasks.find(t => t.id === taskId);
+                if (localTask) {
+                    localTask.status = 'completed';
+                    localTask.completed_at = new Date().toISOString();
+                }
+            }
+            
+            // 2. Re-filter tasks so active filters (e.g. pending) immediately hide the task,
+            // or re-render it with completed state if all/completed filter is active
+            filterTasks();
+            
+            // 3. Update task in hierarchy node tasks or remaining DOM elements
             updateTaskCompletedState(taskId);
             
             // Show success feedback
@@ -2419,6 +2605,8 @@ window.loadHierarchy = loadHierarchy;
 window.initSettings = initSettings;
 window.openSettings = openSettings;
 window.closeSettings = closeSettings;
+window.switchSettingsTab = switchSettingsTab;
+window.saveAllSettings = saveAllSettings;
 window.toggleAutoRefresh = toggleAutoRefresh;
 window.updateRefreshInterval = updateRefreshInterval;
 window.updateDefaultView = updateDefaultView;
@@ -2443,6 +2631,7 @@ window.stopSyncProgressUI = stopSyncProgressUI;
 window.refreshWithAdvancedSync = refreshWithAdvancedSync;
 window.simpleCacheRefresh = simpleCacheRefresh;
 window.toggleRefreshDropdown = toggleRefreshDropdown;
+window.closeAllRefreshDropdowns = closeAllRefreshDropdowns;
 window.syncAndRefresh = syncAndRefresh;
 window.syncRemoteDb = syncRemoteDb;
 window.setupRefreshDropdown = setupRefreshDropdown;

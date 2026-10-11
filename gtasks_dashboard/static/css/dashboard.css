@@ -64,8 +64,8 @@ body {
     z-index: 1000;
     transition: all var(--transition-speed) ease;
     box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-    overflow-y: auto;
-    scroll-behavior: smooth;
+    display: flex;
+    flex-direction: column;
 }
 
 .sidebar.collapsed {
@@ -109,6 +109,50 @@ body {
 
 .sidebar-nav {
     padding: 1rem 0;
+    flex: 1;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+}
+
+.sidebar-footer {
+    margin-top: auto;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    gap: 0.5rem;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-footer-btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.825rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-speed);
+}
+
+.sidebar-footer-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.sidebar.collapsed .sidebar-footer {
+    padding: 0.5rem;
+    flex-direction: column;
+}
+
+.sidebar.collapsed .sidebar-footer-btn span {
+    display: none;
 }
 
 .nav-item {
@@ -1132,6 +1176,42 @@ body {
     transition: all var(--transition-speed);
 }
 
+.mobile-refresh-dropdown {
+    display: inline-flex;
+    align-items: stretch;
+    height: 38px;
+}
+
+.mobile-refresh-dropdown .header-refresh-btn {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border-radius: 8px 0 0 8px;
+    justify-content: center;
+    border-right: none;
+    font-size: 0.95rem;
+}
+
+.mobile-refresh-toggle {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    color: white;
+    border: none;
+    padding: 0 8px;
+    height: 38px;
+    border-radius: 0 8px 8px 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-left: 1px solid rgba(255, 255, 255, 0.25);
+    font-size: 0.75rem;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+.dark-mode .mobile-refresh-toggle {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
 .sidebar-backdrop,
 .filter-drawer-backdrop {
     display: none;
@@ -1950,20 +2030,34 @@ body {
 }
 
 .refresh-dropdown-toggle {
-    background: var(--primary-color);
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
     color: white;
     border: none;
-    padding: 0.625rem 0.75rem;
+    padding: 8px 12px;
     border-radius: 0 8px 8px 0;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all var(--transition-speed);
+    border-left: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
 }
 
 .refresh-dropdown-toggle:hover {
-    background: var(--primary-dark);
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+}
+
+.dark-mode .refresh-dropdown-toggle {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-left: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 2px 4px rgba(96, 165, 250, 0.3);
+}
+
+.dark-mode .refresh-dropdown-toggle:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    box-shadow: 0 4px 8px rgba(96, 165, 250, 0.4);
 }
 
 .refresh-dropdown-menu {
@@ -1973,13 +2067,20 @@ body {
     background: var(--bg-secondary);
     border-radius: 8px;
     box-shadow: var(--shadow-lg);
-    min-width: 180px;
-    z-index: 1000;
+    min-width: 190px;
+    z-index: 1050;
     opacity: 0;
     visibility: hidden;
     transform: translateY(-10px);
     transition: all 0.2s ease;
     margin-top: 0.25rem;
+    border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+}
+
+.dark-mode .refresh-dropdown-menu {
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
 }
 
 .refresh-dropdown-menu.active {

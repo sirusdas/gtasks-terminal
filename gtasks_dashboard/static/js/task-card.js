@@ -94,6 +94,7 @@ export function createTaskCard(task, options = {}) {
     
     if (options.isNodeTask) {
         // Node task card HTML
+        card.className = `node-task-card ${isCompleted ? 'completed' : ''}`;
         card.innerHTML = `
             <div class="node-task-header">
                 ${completeBtnHtml}
@@ -157,6 +158,7 @@ export function createTaskCard(task, options = {}) {
         `;
     } else {
         // Main task card HTML (Comfortable Card View)
+        card.className = `task-card ${isCompleted ? 'completed' : ''}`;
         card.innerHTML = `
             <div class="task-card-actions">
                 ${completeBtnHtml}

@@ -16,6 +16,19 @@ class EmailSender:
     def __init__(self, email_address: str = None, password: str = None):
         self.email_address = email_address or os.environ.get('GTASKS_EMAIL_USER')
         self.password = password or os.environ.get('GTASKS_EMAIL_PASSWORD')
+        
+        # Fallback to ConfigManager ~/.gtasks/config.yaml
+        if not self.email_address or not self.password:
+            try:
+                from gtasks_cli.storage.config_manager import ConfigManager
+                cfg = ConfigManager.get_global_config()
+                if not self.email_address:
+                    self.email_address = cfg.get('email.user') or cfg.get('email.address')
+                if not self.password:
+                    self.password = cfg.get('email.password')
+            except Exception as e:
+                logger.debug(f"Could not load email credentials from config: {e}")
+
         self.smtp_server = "smtp.gmail.com"
         self.smtp_port = 587
 

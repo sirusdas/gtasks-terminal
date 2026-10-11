@@ -19,7 +19,9 @@ from gtasks_cli.commands.deduplicate import deduplicate
 from gtasks_cli.commands.account import account
 from gtasks_cli.commands.advanced_sync import advanced_sync
 from gtasks_cli.commands.generate_report import generate_report
+from gtasks_cli.commands.notify import notify
 from gtasks_cli.commands.config import config
+from gtasks_cli.commands.debug import debug
 from gtasks_cli.commands.ai import ai
 from gtasks_cli.commands.mcp import mcp
 from gtasks_cli.commands.tasklist import tasklist
@@ -93,7 +95,9 @@ cli.add_command(auth)
 cli.add_command(deduplicate)
 cli.add_command(account)
 cli.add_command(generate_report)
+cli.add_command(notify)
 cli.add_command(config)
+cli.add_command(debug)
 # cli.add_command(ai)
 cli.add_command(mcp)
 cli.add_command(tasklist)

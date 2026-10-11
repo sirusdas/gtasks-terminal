@@ -1,0 +1,241 @@
+/* Advanced Settings Panel & Debugger Console Styles */
+
+/* ==========================================================================
+   SETTINGS MODAL & TABS
+   ========================================================================== */
+
+.settings-modal-dialog {
+    max-width: 680px !important;
+    width: 95% !important;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-tabs-nav {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.5rem 1.25rem 0 1.25rem;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    background: var(--hover-bg, #f8fafc);
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.settings-tab-btn {
+    padding: 0.6rem 1rem;
+    border: none;
+    background: transparent;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary, #64748b);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.settings-tab-btn:hover {
+    color: var(--primary-color, #3b82f6);
+}
+
+.settings-tab-btn.active {
+    color: var(--primary-color, #3b82f6);
+    border-bottom-color: var(--primary-color, #3b82f6);
+    background: var(--card-bg, #ffffff);
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+
+.settings-tab-pane {
+    display: none;
+    padding: 1.25rem;
+    overflow-y: auto;
+    max-height: 58vh;
+}
+
+.settings-tab-pane.active {
+    display: block;
+}
+
+.settings-grid-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.settings-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 0.85rem;
+}
+
+.settings-input-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary, #1e293b);
+}
+
+.settings-input-desc {
+    font-size: 0.72rem;
+    color: var(--text-muted, #94a3b8);
+    margin-top: -0.15rem;
+}
+
+.settings-input-field {
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 6px;
+    background: var(--card-bg, #ffffff);
+    color: var(--text-primary, #1e293b);
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.settings-input-field:focus {
+    border-color: var(--primary-color, #3b82f6);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+/* ==========================================================================
+   DEBUGGER CONSOLE & DRAWER
+   ========================================================================== */
+
+.debug-trigger-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary, #64748b);
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.05rem;
+    transition: all 0.2s ease;
+}
+
+.debug-trigger-btn:hover,
+.debug-trigger-btn.active {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.debugger-modal-dialog {
+    max-width: 900px !important;
+    width: 96% !important;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.debugger-diag-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.debugger-diag-card {
+    background: var(--hover-bg, #f8fafc);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.debugger-diag-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.debugger-diag-val {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary, #1e293b);
+}
+
+.debugger-diag-lbl {
+    font-size: 0.72rem;
+    color: var(--text-secondary, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Terminal Log Console */
+.debugger-terminal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0.85rem;
+    background: #0f172a;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    color: #94a3b8;
+    font-size: 0.8rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.debugger-terminal-body {
+    background: #020617;
+    color: #f1f5f9;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    padding: 0.85rem;
+    height: 340px;
+    overflow-y: auto;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+    scrollbar-width: thin;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-line {
+    padding: 2px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.log-line.DEBUG { color: #38bdf8; }
+.log-line.INFO { color: #e2e8f0; }
+.log-line.WARNING { color: #facc15; }
+.log-line.ERROR { color: #f87171; font-weight: 600; }
+
+.debugger-badge {
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+.debugger-badge.healthy { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+.debugger-badge.warning { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+.debugger-badge.error { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+/* Dark mode adjustments */
+body.dark-mode .settings-tabs-nav {
+    background: #0f172a;
+    border-color: #334155;
+}
+body.dark-mode .settings-tab-btn.active {
+    background: #1e293b;
+}
+body.dark-mode .debugger-diag-card {
+    background: #0f172a;
+    border-color: #334155;
+}
+body.dark-mode .settings-input-field {
+    background: #0f172a;
+    border-color: #334155;
+    color: #f1f5f9;
+}
