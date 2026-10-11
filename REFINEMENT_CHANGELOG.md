@@ -34,12 +34,15 @@ This document tracks all changes made on the `refinement` branch. Any new client
 
 ## 2. Sync & Authentication Portability
 
-### Google Tasks Token Fallback:
-* **Commit**: `b5e0f4d`
+### Google Tasks Token Fallback & Remote In-App OAuth:
+* **Commit**: `b5e0f4d` and subsequent updates
 * **Changes**:
   * Supports dual credential paths: `token.pickle` and `token.json`.
   * Enables headless / cloud portability without depending strictly on Python pickle serialization.
   * Added non-blocking background sync queue for task completion triggers from the web UI / REST API.
+  * **Remote OAuth Start**: `POST /api/auth/google/start` dynamically resolves `redirect_uri` against the incoming request Host header (supports localhost, LAN IP, or public domain HTTPS).
+  * **Remote OAuth Callback**: `GET /api/auth/google/callback` captures Google's authorization code, exchanges it on the server, provisions `token.json` and `tasks.db`, triggers initial sync, and renders a clean confirmation page.
+  * **Direct Token Import**: `POST /api/auth/tokens/import` allows direct programmatic injection of token JSON over REST.
 
 ---
 

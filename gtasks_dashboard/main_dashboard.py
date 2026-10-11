@@ -629,6 +629,18 @@ def api_auth_google_submit_code_root():
     from routes.api import api_auth_google_submit_code
     return api_auth_google_submit_code()
 
+@app.route('/api/auth/google/callback', methods=['GET', 'POST'])
+def api_auth_google_callback_root():
+    """Google OAuth callback endpoint (local development)"""
+    from routes.api import api_auth_google_callback
+    return api_auth_google_callback()
+
+@app.route('/api/auth/tokens/import', methods=['POST'])
+def api_auth_tokens_import_root():
+    """Directly import token credentials JSON (local development)"""
+    from routes.api import api_auth_tokens_import
+    return api_auth_tokens_import()
+
 # End of local development routes
 
 

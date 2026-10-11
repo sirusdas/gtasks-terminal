@@ -542,7 +542,13 @@ def api_auth_google_start():
     
     data = request.get_json(silent=True) or {}
     account_name = request.args.get('account_name') or data.get('account_name') or 'Personal'
-    redirect_uri = request.args.get('redirect_uri') or data.get('redirect_uri') or 'http://localhost:48275/api/auth/google/callback'
+    
+    # Dynamically resolve redirect_uri from incoming Host header if not specified or set to auto
+    redirect_uri = request.args.get('redirect_uri') or data.get('redirect_uri')
+    if not redirect_uri or redirect_uri in ('auto', 'default'):
+        # Dynamically build using current server host (supports localhost, LAN IP, or public domain HTTPS)
+        base_host = request.host_url.rstrip('/')
+        redirect_uri = f"{base_host}/api/auth/google/callback"
 
     # Master credentials file
     cred_file = Path.home() / '.gtasks' / 'credentials.json'
@@ -586,11 +592,236 @@ def api_auth_google_start():
             'success': True,
             'auth_url': auth_url,
             'account_name': account_name,
+            'redirect_uri': redirect_uri,
             'client_id': client_id
         })
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/auth/google/callback', methods=['GET', 'POST'])
+def api_auth_google_callback():
+    """
+    Callback endpoint that Google redirects to after user approves permissions.
+    Exchanges code for tokens and renders a user-friendly completion page.
+    """
+    from flask import Response
+    import requests
+    from pathlib import Path
+    import json
+    import sqlite3
+
+    code = request.args.get('code')
+    account_name = request.args.get('state') or 'Personal'
+    error = request.args.get('error')
+
+    if error:
+        return Response(f"""<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Auth Cancelled</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;background:#1e1e2e;color:#fff;">
+  <h2 style="color:#ef4444;">Authorization Cancelled</h2>
+  <p>{error}</p>
+  <p><a href="/" style="color:#3b82f6;">Return to Dashboard</a></p>
+</body>
+</html>""", mimetype='text/html')
+
+    if not code:
+        return Response("Missing authorization code from Google.", status=400)
+
+    # Reconstruct dynamic redirect_uri matching what was sent
+    base_host = request.host_url.rstrip('/')
+    redirect_uri = f"{base_host}/api/auth/google/callback"
+
+    cred_file = Path.home() / '.gtasks' / 'credentials.json'
+    if not cred_file.exists():
+        return Response("Server credentials.json not found", status=500)
+
+    try:
+        with open(cred_file, 'r') as f:
+            cred_data = json.load(f)
+        client_info = cred_data.get('installed') or cred_data.get('web') or {}
+        client_id = client_info.get('client_id')
+        client_secret = client_info.get('client_secret')
+
+        # Exchange code for tokens
+        token_res = requests.post('https://oauth2.googleapis.com/token', data={
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code'
+        })
+
+        token_json = token_res.json()
+        if 'error' in token_json:
+            return Response(f"Token exchange error: {token_json.get('error_description', token_json['error'])}", status=400)
+
+        # Create account folder
+        account_id = account_name.lower().replace(' ', '_')
+        acc_dir = Path.home() / '.gtasks' / (account_id if account_id != 'default' else '')
+        acc_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save token.json
+        token_save_path = acc_dir / 'token.json'
+        token_data_to_save = {
+            'token': token_json.get('access_token'),
+            'refresh_token': token_json.get('refresh_token'),
+            'token_uri': 'https://oauth2.googleapis.com/token',
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'scopes': ['https://www.googleapis.com/auth/tasks']
+        }
+        with open(token_save_path, 'w') as f:
+            json.dump(token_data_to_save, f, indent=2)
+
+        # Copy credentials.json
+        with open(acc_dir / 'credentials.json', 'w') as f:
+            json.dump(cred_data, f, indent=2)
+
+        # Initialize SQLite database
+        db_path = acc_dir / 'tasks.db'
+        if not db_path.exists():
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    notes TEXT,
+                    priority TEXT DEFAULT 'medium',
+                    status TEXT DEFAULT 'pending',
+                    due TEXT,
+                    tags TEXT,
+                    created_at TEXT,
+                    modified_at TEXT,
+                    completed_at TEXT,
+                    list_title TEXT
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS task_lists (
+                    task_id TEXT,
+                    list_name TEXT,
+                    PRIMARY KEY (task_id, list_name)
+                )
+            ''')
+            conn.commit()
+            conn.close()
+
+        # Refresh cache and trigger initial sync
+        refresh_dashboard_cache()
+        threading.Thread(target=lambda: _sync_initial_pull(account_id), daemon=True).start()
+
+        # Render clean mobile-friendly success landing page
+        return Response(f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GTasks - Account Connected</title>
+  <style>
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }}
+    .card {{
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 440px;
+      text-align: center;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }}
+    .icon {{
+      font-size: 54px;
+      color: #10b981;
+      margin-bottom: 16px;
+    }}
+    h2 {{ margin: 0 0 12px; font-size: 24px; font-weight: 700; }}
+    p {{ color: #94a3b8; line-height: 1.5; margin: 0 0 24px; }}
+    .btn {{
+      display: inline-block;
+      background: #3b82f6;
+      color: #fff;
+      text-decoration: none;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }}
+    .btn:hover {{ background: #2563eb; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">✓</div>
+    <h2>Account Connected!</h2>
+    <p>Google Tasks account <strong>{account_name}</strong> was linked successfully to the server. You can now close this tab and return to the GTasks app.</p>
+    <a href="/" class="btn">Open Web Dashboard</a>
+  </div>
+</body>
+</html>""", mimetype='text/html')
+
+    except Exception as e:
+        return Response(f"Internal error completing OAuth: {str(e)}", status=500)
+
+
+@api.route('/auth/tokens/import', methods=['POST'])
+def api_auth_tokens_import():
+    """
+    Directly import token credentials JSON from client to remote server.
+    Allows zero-browser API provisioning.
+    """
+    from pathlib import Path
+    import json
+    import sqlite3
+
+    data = request.get_json() or {}
+    account_name = data.get('account_name', 'Personal').strip()
+    token_data = data.get('token_data')
+
+    if not token_data or not isinstance(token_data, dict):
+        return jsonify({'success': False, 'error': 'token_data JSON object is required'}), 400
+
+    account_id = account_name.lower().replace(' ', '_')
+    acc_dir = Path.home() / '.gtasks' / (account_id if account_id != 'default' else '')
+    acc_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(acc_dir / 'token.json', 'w') as f:
+        json.dump(token_data, f, indent=2)
+
+    # Master credentials copy
+    cred_file = Path.home() / '.gtasks' / 'credentials.json'
+    if cred_file.exists():
+        import shutil
+        shutil.copy(cred_file, acc_dir / 'credentials.json')
+
+    # Seed SQLite database
+    db_path = acc_dir / 'tasks.db'
+    if not db_path.exists():
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, notes TEXT, priority TEXT, status TEXT, due TEXT, tags TEXT, created_at TEXT, modified_at TEXT, completed_at TEXT, list_title TEXT)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS task_lists (task_id TEXT, list_name TEXT, PRIMARY KEY (task_id, list_name))''')
+        conn.commit()
+        conn.close()
+
+    refresh_dashboard_cache()
+    threading.Thread(target=lambda: _sync_initial_pull(account_id), daemon=True).start()
+
+    return jsonify({'success': True, 'account_id': account_id, 'message': f"Tokens imported successfully for '{account_name}'"})
 
 
 @api.route('/auth/google/submit-code', methods=['POST'])
@@ -608,7 +839,12 @@ def api_auth_google_submit_code():
     data = request.get_json() or {}
     code = data.get('code', '').strip()
     account_name = data.get('account_name', 'Personal').strip()
-    redirect_uri = data.get('redirect_uri', 'http://localhost:48275/api/auth/google/callback')
+    
+    # Auto-resolve redirect_uri matching incoming Host if not given
+    redirect_uri = data.get('redirect_uri')
+    if not redirect_uri or redirect_uri in ('auto', 'default'):
+        base_host = request.host_url.rstrip('/')
+        redirect_uri = f"{base_host}/api/auth/google/callback"
 
     if not code:
         return jsonify({'success': False, 'error': 'Authorization code is required'}), 400
