@@ -54,6 +54,20 @@ class GoogleAuthManager:
                 
         self.credentials_file = credentials_file or found_creds or os.path.join(config_dir, "credentials.json")
         self.token_file = token_file or os.path.join(config_dir, "token.pickle")
+        self.token_json_file = os.path.splitext(self.token_file)[0] + ".json"
+        
+        # If token_file doesn't exist, check json or global fallback
+        if not os.path.exists(self.token_file):
+            if os.path.exists(self.token_json_file):
+                pass
+            else:
+                global_token = os.path.join(os.path.expanduser("~"), ".gtasks", "token.pickle")
+                global_token_json = os.path.join(os.path.expanduser("~"), ".gtasks", "token.json")
+                if os.path.exists(global_token):
+                    self.token_file = global_token
+                    self.token_json_file = global_token_json
+                elif os.path.exists(global_token_json):
+                    self.token_json_file = global_token_json
         
         logger.debug(f"Auth manager initialized. Credentials: {self.credentials_file}, Token: {self.token_file}")
 
@@ -107,14 +121,22 @@ class GoogleAuthManager:
         """
         creds = None
         
-        # The file token.pickle stores the user's access and refresh tokens
-        if os.path.exists(self.token_file) and not force_refresh:
+        # 1. Try loading from token_json_file (standard JSON, immune to pickle version mismatch)
+        if hasattr(self, 'token_json_file') and os.path.exists(self.token_json_file) and not force_refresh:
+            try:
+                creds = Credentials.from_authorized_user_file(self.token_json_file, self.SCOPES)
+                logger.debug("Loaded existing credentials from JSON token file")
+            except Exception as e:
+                logger.warning(f"Failed to load JSON token file: {e}")
+
+        # 2. If no creds from JSON, try loading from token_file (pickle)
+        if not creds and os.path.exists(self.token_file) and not force_refresh:
             try:
                 with open(self.token_file, 'rb') as token:
                     creds = pickle.load(token)
-                logger.debug("Loaded existing credentials from token file")
+                logger.debug("Loaded existing credentials from pickle token file")
             except Exception as e:
-                logger.warning(f"Failed to load token file: {e}")
+                logger.warning(f"Failed to load pickle token file ({e}). Will attempt recovery or refresh.")
         
         # If there are no (valid) credentials available, let the user log in
         if not creds or not creds.valid:
@@ -155,15 +177,33 @@ class GoogleAuthManager:
                     logger.error(f"Authentication flow failed: {e}")
                     raise
             
-            # Save the credentials for the next run
+            # Save credentials (both JSON and pickle for maximum compatibility)
             try:
-                # Ensure directory exists before saving
                 os.makedirs(os.path.dirname(self.token_file), exist_ok=True)
                 with open(self.token_file, 'wb') as token:
                     pickle.dump(creds, token)
                 logger.debug(f"Saved credentials to {self.token_file}")
             except Exception as e:
                 logger.warning(f"Failed to save token file: {e}")
+
+            if hasattr(self, 'token_json_file'):
+                try:
+                    os.makedirs(os.path.dirname(self.token_json_file), exist_ok=True)
+                    with open(self.token_json_file, 'w') as jf:
+                        jf.write(creds.to_json())
+                    logger.debug(f"Saved credentials to {self.token_json_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to save JSON token file: {e}")
+        elif creds and creds.valid:
+            # If credentials loaded successfully but JSON token file doesn't exist yet, save it
+            if hasattr(self, 'token_json_file') and not os.path.exists(self.token_json_file):
+                try:
+                    os.makedirs(os.path.dirname(self.token_json_file), exist_ok=True)
+                    with open(self.token_json_file, 'w') as jf:
+                        jf.write(creds.to_json())
+                    logger.debug(f"Mirrored credentials to {self.token_json_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to mirror credentials to JSON: {e}")
         
         self.credentials = creds
         return creds

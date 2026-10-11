@@ -57,6 +57,10 @@ class GoogleTasksClient:
                 credentials_file = found_creds or os.path.join(config_dir, "credentials.json")
             if token_file is None:
                 token_file = os.path.join(config_dir, "token.pickle")
+                if not os.path.exists(token_file):
+                    global_token = os.path.join(os.path.expanduser("~"), ".gtasks", "token.pickle")
+                    if os.path.exists(global_token):
+                        token_file = global_token
         else:
             # Default behavior
             if credentials_file is None:

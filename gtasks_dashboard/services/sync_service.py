@@ -92,23 +92,29 @@ class SyncService:
             from gtasks_cli.integrations.advanced_sync_manager import AdvancedSyncManager
             from gtasks_cli.storage.config_manager import ConfigManager
             
-            # Determine the account to use - exactly like CLI
-            if account:
+            # Determine the account to use
+            from pathlib import Path
+            gtasks_home = Path.home() / '.gtasks'
+            
+            account_name = None
+            if account and account not in ('demo', 'default') and (gtasks_home / account / 'tasks.db').exists():
                 account_name = account
+                print(f"[SyncService] Using account: {account_name}")
             else:
-                # Check GTASKS_DEFAULT_ACCOUNT environment variable first (session default)
                 import os
-                account_name = os.environ.get('GTASKS_DEFAULT_ACCOUNT')
-                if account_name:
+                env_acc = os.environ.get('GTASKS_DEFAULT_ACCOUNT')
+                if env_acc and (gtasks_home / env_acc / 'tasks.db').exists():
+                    account_name = env_acc
                     print(f"[SyncService] Using session default account: {account_name}")
                 else:
-                    # Check default from config like CLI does
                     config_manager = ConfigManager()
-                    account_name = config_manager.get('default_account')
-                    if not account_name:
-                        # Fallback to 'Work' account if no default set
-                        account_name = 'Work'
-                        print(f"[SyncService] No default account in config, using: {account_name}")
+                    cfg_acc = config_manager.get('default_account')
+                    if cfg_acc and (gtasks_home / cfg_acc / 'tasks.db').exists():
+                        account_name = cfg_acc
+                        print(f"[SyncService] Using config default account: {account_name}")
+                    else:
+                        account_name = None
+                        print(f"[SyncService] Using default root storage")
             
             # Load configuration to get sync settings - exactly like CLI
             config_manager = ConfigManager(account_name=account_name)

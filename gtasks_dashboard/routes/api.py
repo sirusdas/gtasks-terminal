@@ -21,14 +21,33 @@ _dashboard_state = {
 _sync_lock = threading.Lock()
 
 
+def _resolve_cli_account(account_id: Optional[str] = None) -> Optional[str]:
+    """
+    Resolve account_id to the appropriate account_name for gtasks_cli.
+    If account_id corresponds to a real subdirectory under ~/.gtasks containing tasks.db,
+    return that account_id.
+    Otherwise, if account_id is None, 'demo', or 'default', or no account subdirectory exists,
+    return None so gtasks_cli uses the root ~/.gtasks directory.
+    """
+    if not account_id or account_id in ('demo', 'default'):
+        return None
+    from pathlib import Path
+    acc_dir = Path.home() / '.gtasks' / account_id
+    if acc_dir.is_dir() and (acc_dir / 'tasks.db').exists():
+        return account_id
+    return None
+
+
 def _sync_task_to_google_background(task_id: str, account_id: str):
     """Background task to sync task completion to Google Tasks (non-blocking)"""
     with _sync_lock:
         try:
-            print(f'[Background Sync] Starting sync for task {task_id} (account: {account_id})')
+            cli_account = _resolve_cli_account(account_id)
+            print(f'[Background Sync] Starting sync for task {task_id} (account: {account_id} -> cli: {cli_account})')
             
             # Import here to avoid circular imports and only load when needed
             import sys
+            import traceback
             from pathlib import Path
             from datetime import datetime
             
@@ -40,48 +59,55 @@ def _sync_task_to_google_background(task_id: str, account_id: str):
             from gtasks_cli.core.task_manager import TaskManager
             from gtasks_cli.storage.sqlite_storage import SQLiteStorage
             from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
-            from gtasks_cli.models.task import TaskStatus
+            from gtasks_cli.models.task import TaskStatus, Task
             
-            # Initialize components
-            storage = SQLiteStorage(account_name=account_id)
-            google_client = GoogleTasksClient(account_name=account_id)
+            # Initialize components with resolved account
+            storage = SQLiteStorage(account_name=cli_account)
+            google_client = GoogleTasksClient(account_name=cli_account)
             
             # Connect to Google Tasks (non-blocking, uses cached credentials)
             if not google_client.connect(interactive=False):
                 print(f'[Background Sync] Failed to connect to Google Tasks - credentials may need refresh')
                 return
             
-            # Get the task from local storage
+            # Get the task from local storage (or fallback to root storage if needed)
             task_dicts = storage.load_tasks()
-            task = None
-            for t in task_dicts:
-                if t.get('id') == task_id:
-                    task = t
-                    break
+            task = next((t for t in task_dicts if t.get('id') == task_id), None)
+            
+            if not task and cli_account is not None:
+                root_storage = SQLiteStorage(account_name=None)
+                task_dicts = root_storage.load_tasks()
+                task = next((t for t in task_dicts if t.get('id') == task_id), None)
+            
+            # Fallback to _dashboard_state memory cache if task still not in storage
+            if not task:
+                for acc_tasks in _dashboard_state.get('tasks', {}).values():
+                    found = next((t for t in acc_tasks if t.get('id') == task_id), None)
+                    if found:
+                        task = found
+                        break
             
             if not task:
-                print(f'[Background Sync] Task {task_id} not found in local storage')
+                print(f'[Background Sync] Task {task_id} not found in local storage or memory')
                 return
             
             # Create Task object
-            from gtasks_cli.models.task import Task
             task_obj = Task(**task)
             
             # Update status to completed
             task_obj.status = TaskStatus.COMPLETED
-            task_obj.completed_at = datetime.utcnow()
-            task_obj.modified_at = datetime.utcnow()
+            now = datetime.now()
+            task_obj.completed_at = now
+            task_obj.modified_at = now
             
             # Try to update via Google Tasks API
             try:
-                if hasattr(task_obj, 'tasklist_id') and task_obj.tasklist_id:
-                    updated = google_client.update_task(task_obj, task_obj.tasklist_id)
-                    if updated:
-                        print(f'[Background Sync] ✅ Successfully synced task {task_id} to Google Tasks')
-                    else:
-                        print(f'[Background Sync] ⚠️ Google Tasks API returned empty response for {task_id}')
+                tasklist_id = getattr(task_obj, 'tasklist_id', None) or task.get('tasklist_id') or '@default'
+                updated = google_client.update_task(task_obj, tasklist_id)
+                if updated:
+                    print(f'[Background Sync] ✅ Successfully synced task {task_id} to Google Tasks')
                 else:
-                    print(f'[Background Sync] ⚠️ Task {task_id} has no tasklist_id, cannot sync to Google')
+                    print(f'[Background Sync] ⚠️ Google Tasks API returned empty response for {task_id}')
             except Exception as e:
                 error_msg = str(e)
                 if 'invalid_grant' in error_msg.lower() or 'credentials' in error_msg.lower():
@@ -91,13 +117,15 @@ def _sync_task_to_google_background(task_id: str, account_id: str):
                     
         except Exception as e:
             print(f'[Background Sync] ❌ Unexpected error: {e}')
+            import traceback
             traceback.print_exc()
 
 
 def _sync_task_to_turso_background(task_id: str, account_id: str):
     """Background task to sync task completion to Turso Remote DB (non-blocking)"""
     try:
-        print(f'[Turso Background Sync] Starting sync for task {task_id} (account: {account_id})')
+        cli_account = _resolve_cli_account(account_id)
+        print(f'[Turso Background Sync] Starting sync for task {task_id} (account: {account_id} -> cli: {cli_account})')
         
         # Import required modules
         import sys
@@ -113,20 +141,28 @@ def _sync_task_to_turso_background(task_id: str, account_id: str):
         from gtasks_cli.storage.libsql_storage import LibSQLStorage
         
         # Initialize storage and load the task
-        storage = SQLiteStorage(account_name=account_id)
+        storage = SQLiteStorage(account_name=cli_account)
         task_dicts = storage.load_tasks()
-        task = None
-        for t in task_dicts:
-            if t.get('id') == task_id:
-                task = t
-                break
+        task = next((t for t in task_dicts if t.get('id') == task_id), None)
+        
+        if not task and cli_account is not None:
+            root_storage = SQLiteStorage(account_name=None)
+            task_dicts = root_storage.load_tasks()
+            task = next((t for t in task_dicts if t.get('id') == task_id), None)
+        
+        if not task:
+            for acc_tasks in _dashboard_state.get('tasks', {}).values():
+                found = next((t for t in acc_tasks if t.get('id') == task_id), None)
+                if found:
+                    task = found
+                    break
         
         if not task:
             print(f'[Turso Background Sync] Task {task_id} not found in local storage')
             return
         
         # Get active remote databases
-        config_storage = SyncConfigStorage(account_name=account_id)
+        config_storage = SyncConfigStorage(account_name=cli_account)
         active_dbs = config_storage.get_active_remote_dbs()
         
         if not active_dbs:
@@ -136,7 +172,7 @@ def _sync_task_to_turso_background(task_id: str, account_id: str):
         # Push the task to each active remote DB
         for db_config in active_dbs:
             try:
-                remote_storage = LibSQLStorage(url=db_config.url, account_name=account_id)
+                remote_storage = LibSQLStorage(url=db_config.url, account_name=cli_account)
                 # Get existing remote tasks
                 remote_tasks = remote_storage.load_tasks()
                 
@@ -147,8 +183,8 @@ def _sync_task_to_turso_background(task_id: str, account_id: str):
                     if rt.get('id') == task_id:
                         # Update existing task with completed status
                         rt['status'] = task['status']
-                        rt['completed_at'] = task['completed_at']
-                        rt['modified_at'] = task.get('modified_at', task['completed_at'])
+                        rt['completed_at'] = task.get('completed_at')
+                        rt['modified_at'] = task.get('modified_at', task.get('completed_at'))
                         task_updated = True
                     updated_remote_tasks.append(rt)
                 
@@ -164,10 +200,8 @@ def _sync_task_to_turso_background(task_id: str, account_id: str):
                 config_storage.update_last_synced(db_config.url)
                 
                 print(f'[Turso Background Sync] ✅ Synced task {task_id} to {db_config.name}')
-                
             except Exception as e:
                 print(f'[Turso Background Sync] ❌ Error syncing to {db_config.name}: {e}')
-                
     except Exception as e:
         print(f'[Turso Background Sync] ❌ Unexpected error: {e}')
         import traceback
@@ -285,8 +319,8 @@ def api_data():
             gtasks_cli_path = Path(__file__).parent.parent.parent / 'gtasks_cli' / 'src'
             if str(gtasks_cli_path) not in sys.path:
                 sys.path.insert(0, str(gtasks_cli_path))
-            from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
-            google_client = GoogleTasksClient(account_name=current_account_id)
+            cli_account = _resolve_cli_account(current_account_id)
+            google_client = GoogleTasksClient(account_name=cli_account)
             if google_client.connect(interactive=False):
                 google_lists = google_client.list_tasklists()
                 for gl in google_lists:
@@ -615,7 +649,8 @@ def api_create_task():
         from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
         from gtasks_cli.models.task import Task as CLITask, TaskStatus, Priority as CLIPriority
 
-        google_client = GoogleTasksClient(account_name=account_id)
+        cli_account = _resolve_cli_account(account_id)
+        google_client = GoogleTasksClient(account_name=cli_account)
         if google_client.connect(interactive=False):
             all_lists = google_client.list_tasklists()
             target_list_id = '@default'
@@ -767,7 +802,8 @@ def update_task(task_id):
             sys.path.insert(0, str(gtasks_cli_path))
 
         from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
-        google_client = GoogleTasksClient(account_name=target_account)
+        cli_account = _resolve_cli_account(target_account)
+        google_client = GoogleTasksClient(account_name=cli_account)
         if google_client.connect(interactive=False):
             all_lists = google_client.list_tasklists()
             new_list_id = '@default'
