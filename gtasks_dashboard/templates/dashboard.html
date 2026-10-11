@@ -13,13 +13,17 @@
     <title>GTasks Dashboard - Hierarchical Visualization</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css?v=32">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css?v=32">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css?v=32">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=32">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=32">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=32">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=32">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css?v=36">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css?v=36">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/components.css?v=36">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=37">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=36">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=36">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=36">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/reports.css?v=36">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/notifications.css?v=36">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/debugger.css?v=36">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -28,19 +32,55 @@
         <button class="mobile-menu-btn" id="mobile-sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle navigation">
             <i class="fas fa-bars"></i>
         </button>
-        <div class="mobile-brand">
-            <i class="fas fa-tasks"></i>
-            <span class="mobile-title">GTasks</span>
-        </div>
         <div class="mobile-header-actions">
             <!-- Mobile Top Filter Button -->
             <button class="mobile-action-btn mobile-filter-btn" id="mobile-top-filter-btn" onclick="toggleFilterDrawer()" title="Filter Tasks">
                 <i class="fas fa-filter"></i>
                 <span class="filter-count-badge" id="mobile-filter-badge" style="display: none;">0</span>
             </button>
-            <div id="mobileDarkModeToggle" class="mobile-dark-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
-                <i class="fas fa-sun sun-icon"></i>
-                <i class="fas fa-moon moon-icon"></i>
+            <!-- Mobile Refresh Dropdown -->
+            <div class="refresh-dropdown mobile-refresh-dropdown">
+                <button class="mobile-action-btn header-refresh-btn" onclick="refreshData()" title="Refresh Data">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <button class="refresh-dropdown-toggle mobile-refresh-toggle" onclick="toggleRefreshDropdown(event)" title="More sync options">
+                    <i class="fas fa-caret-down"></i>
+                </button>
+                <div class="refresh-dropdown-menu">
+                    <a href="#" onclick="refreshData(); closeAllRefreshDropdowns(); return false;">
+                        <i class="fas fa-database"></i> Refresh Cache
+                    </a>
+                    <a href="#" onclick="syncAndRefresh(); closeAllRefreshDropdowns(); return false;">
+                        <i class="fas fa-sync"></i> Sync Data
+                    </a>
+                    <a href="#" onclick="syncRemoteDb(); closeAllRefreshDropdowns(); return false;">
+                        <i class="fas fa-cloud-upload-alt"></i> Sync External DB
+                    </a>
+                </div>
+            </div>
+            <!-- Mobile Notifications Bell -->
+            <div class="notif-bell-container" id="notif-bell-container-mobile">
+                <button class="notif-bell-btn" onclick="toggleNotifications('mobile')" title="Notifications">
+                    <i class="fas fa-bell"></i>
+                    <span class="notif-badge" id="notif-badge-mobile" style="display: none;">0</span>
+                </button>
+                <div class="notif-dropdown" id="notif-dropdown-mobile">
+                    <div class="notif-header">
+                        <div class="notif-header-title">
+                            <i class="fas fa-bell text-primary"></i> Notifications
+                        </div>
+                        <div class="notif-header-actions">
+                            <button class="notif-action-btn" onclick="markNotificationAsRead(null)" title="Mark all read">Mark Read</button>
+                            <button class="notif-action-btn" onclick="clearNotifications(null)" title="Clear all">Clear</button>
+                        </div>
+                    </div>
+                    <div class="notif-list" id="notif-list-mobile"></div>
+                    <div class="notif-footer">
+                        <button class="notif-action-btn" onclick="checkTaskAlerts()" style="width: 100%; text-align: center;">
+                            <i class="fas fa-sync-alt"></i> Scan For Alerts
+                        </button>
+                    </div>
+                </div>
             </div>
             <button class="mobile-action-btn" onclick="openSettings()" title="Settings">
                 <i class="fas fa-cog"></i>
@@ -68,6 +108,10 @@
                 <a href="{{ base_path }}/hierarchy" class="nav-item {% if default_view == 'hierarchy' %}active{% endif %}" id="nav-hierarchy" onclick="showSection('hierarchy'); closeSidebarOnMobile(); return false;">
                     <i class="fas fa-project-diagram"></i>
                     <span>Hierarchy</span>
+                </a>
+                <a href="{{ base_path }}/reports" class="nav-item {% if default_view == 'reports' %}active{% endif %}" id="nav-reports" onclick="showSection('reports'); closeSidebarOnMobile(); return false;">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>Reports & Analytics</span>
                 </a>
                 <!-- Tasks Nav Item with Nested Lists & Tags -->
                 <div class="sidebar-tasks-group" id="sidebar-tasks-group">
@@ -122,6 +166,18 @@
                     </div>
                 </div>
             </nav>
+            <!-- Sidebar Bottom Footer -->
+            <div class="sidebar-footer">
+                <button type="button" class="sidebar-footer-btn" onclick="toggleDarkMode()" title="Toggle Dark/Light Mode">
+                    <i class="fas fa-moon moon-icon"></i>
+                    <i class="fas fa-sun sun-icon"></i>
+                    <span>Theme</span>
+                </button>
+                <button type="button" class="sidebar-footer-btn" onclick="openSettings()" title="Settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </button>
+            </div>
         </aside>
 
         <!-- Main Content -->
@@ -131,29 +187,48 @@
                 <div class="header">
                     <h1><i class="fas fa-tasks mr-2"></i>GTasks Dashboard</h1>
                     <div class="header-actions">
-                        <div id="darkModeToggle" class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
-                            <i class="fas fa-sun sun-icon"></i>
-                            <i class="fas fa-moon moon-icon"></i>
-                            <span class="mode-text"><span class="sun-icon">Light</span><span class="moon-icon">Dark</span></span>
-                        </div>
                         <div class="refresh-dropdown">
                             <button class="header-refresh-btn" onclick="refreshData()" title="Refresh Data">
                                 <i class="fas fa-sync-alt"></i>
                                 <span>Refresh</span>
                             </button>
-                            <button class="refresh-dropdown-toggle" onclick="toggleRefreshDropdown()" title="More options">
+                            <button class="refresh-dropdown-toggle" onclick="toggleRefreshDropdown(event)" title="More options">
                                 <i class="fas fa-caret-down"></i>
                             </button>
                             <div class="refresh-dropdown-menu" id="refresh-dropdown-menu">
-                                <a href="#" onclick="refreshData(); toggleRefreshDropdown(); return false;">
+                                <a href="#" onclick="refreshData(); closeAllRefreshDropdowns(); return false;">
                                     <i class="fas fa-database"></i> Refresh Cache
                                 </a>
-                                <a href="#" onclick="syncAndRefresh(); toggleRefreshDropdown(); return false;">
+                                <a href="#" onclick="syncAndRefresh(); closeAllRefreshDropdowns(); return false;">
                                     <i class="fas fa-sync"></i> Sync Data
                                 </a>
-                                <a href="#" onclick="syncRemoteDb(); toggleRefreshDropdown(); return false;">
+                                <a href="#" onclick="syncRemoteDb(); closeAllRefreshDropdowns(); return false;">
                                     <i class="fas fa-cloud-upload-alt"></i> Sync External DB
                                 </a>
+                            </div>
+                        </div>
+                        <!-- Desktop Notifications Bell -->
+                        <div class="notif-bell-container" id="notif-bell-container-desktop">
+                            <button class="notif-bell-btn" onclick="toggleNotifications('desktop')" title="Notifications">
+                                <i class="fas fa-bell"></i>
+                                <span class="notif-badge" id="notif-badge-desktop" style="display: none;">0</span>
+                            </button>
+                            <div class="notif-dropdown" id="notif-dropdown-desktop">
+                                <div class="notif-header">
+                                    <div class="notif-header-title">
+                                        <i class="fas fa-bell text-primary"></i> Notifications
+                                    </div>
+                                    <div class="notif-header-actions">
+                                        <button class="notif-action-btn" onclick="markNotificationAsRead(null)" title="Mark all read">Mark Read</button>
+                                        <button class="notif-action-btn" onclick="clearNotifications(null)" title="Clear all">Clear</button>
+                                    </div>
+                                </div>
+                                <div class="notif-list" id="notif-list-desktop"></div>
+                                <div class="notif-footer">
+                                    <button class="notif-action-btn" onclick="checkTaskAlerts()" style="width: 100%; text-align: center;">
+                                        <i class="fas fa-sync-alt"></i> Scan For Alerts
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <button class="settings-btn" onclick="openSettings()" title="Settings">
@@ -226,6 +301,252 @@
                 </div>
             </section>
 
+            <!-- Reports & Analytics Section -->
+            <section id="reports-section" class="section" {% if default_view != 'reports' %}style="display: none;"{% endif %}>
+                <div class="reports-container">
+                    <!-- Header -->
+                    <div class="reports-header header">
+                        <div class="reports-title">
+                            <i class="fas fa-chart-pie" style="color: #3b82f6;"></i>
+                            <span>Reports & Analytics</span>
+                        </div>
+                        <div class="reports-header-actions header-actions">
+                            <div class="refresh-dropdown">
+                                <button class="header-refresh-btn" onclick="generateSelectedReport()" title="Refresh Report">
+                                    <i class="fas fa-sync-alt"></i>
+                                    <span>Refresh</span>
+                                </button>
+                                <button class="refresh-dropdown-toggle" onclick="toggleRefreshDropdown(event)" title="More options">
+                                    <i class="fas fa-caret-down"></i>
+                                </button>
+                                <div class="refresh-dropdown-menu">
+                                    <a href="#" onclick="generateSelectedReport(); closeAllRefreshDropdowns(); return false;">
+                                        <i class="fas fa-chart-pie"></i> Refresh Report
+                                    </a>
+                                    <a href="#" onclick="refreshData().then(() => generateSelectedReport()); closeAllRefreshDropdowns(); return false;">
+                                        <i class="fas fa-database"></i> Refresh Cache
+                                    </a>
+                                    <a href="#" onclick="syncAndRefresh().then(() => generateSelectedReport()); closeAllRefreshDropdowns(); return false;">
+                                        <i class="fas fa-sync"></i> Sync Data
+                                    </a>
+                                    <a href="#" onclick="syncRemoteDb(); closeAllRefreshDropdowns(); return false;">
+                                        <i class="fas fa-cloud-upload-alt"></i> Sync External DB
+                                    </a>
+                                </div>
+                            </div>
+                            <button class="settings-btn" onclick="openSettings()" title="Settings">
+                                <i class="fas fa-cog"></i>
+                            </button>
+                            <select id="reports-account-selector" class="report-form-control account-selector" onchange="generateSelectedReport()">
+                                <option value="all">All Accounts</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Presets Chips -->
+                    <div class="reports-presets">
+                        <button class="preset-chip active" id="preset-weekly" onclick="applyPreset('weekly')">
+                            <i class="fas fa-bolt"></i> Weekly Pulse
+                        </button>
+                        <button class="preset-chip" id="preset-monthly" onclick="applyPreset('monthly')">
+                            <i class="fas fa-calendar-alt"></i> Monthly Overview
+                        </button>
+                        <button class="preset-chip" id="preset-overdue" onclick="applyPreset('overdue')">
+                            <i class="fas fa-exclamation-triangle"></i> Overdue Audit
+                        </button>
+                        <button class="preset-chip" id="preset-distribution" onclick="applyPreset('distribution')">
+                            <i class="fas fa-chart-pie"></i> Task Distribution
+                        </button>
+                        <button class="preset-chip" id="preset-organized" onclick="applyPreset('organized')">
+                            <i class="fas fa-layer-group"></i> Executive Summary
+                        </button>
+                    </div>
+
+                    <!-- Builder Mode Switcher Tabs -->
+                    <div class="reports-mode-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+                        <button class="mode-tab-btn active" id="tab-builder-standard" onclick="toggleReportBuilderMode('standard')" style="padding: 0.4rem 0.9rem; border-radius: 6px; border: 1px solid var(--border-color, #e2e8f0); background: var(--card-bg, #ffffff); font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+                            <i class="fas fa-sliders-h"></i> Standard Filter
+                        </button>
+                        <button class="mode-tab-btn" id="tab-builder-custom" onclick="toggleReportBuilderMode('custom')" style="padding: 0.4rem 0.9rem; border-radius: 6px; border: 1px solid var(--border-color, #e2e8f0); background: var(--card-bg, #ffffff); font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+                            <i class="fas fa-magic"></i> Advanced Custom Query Builder (RP10)
+                        </button>
+                    </div>
+
+                    <!-- Standard Builder / Filter Card -->
+                    <div class="reports-builder-card" id="reports-standard-builder">
+                        <div class="reports-builder-grid">
+                            <div class="report-form-group">
+                                <label class="report-form-label">Report Type</label>
+                                <select id="report-type-selector" class="report-form-control">
+                                    <option value="rp1">RP1 - Task Completion Report</option>
+                                    <option value="rp2">RP2 - Pending Tasks Report</option>
+                                    <option value="rp3">RP3 - Task Creation Report</option>
+                                    <option value="rp4">RP4 - Overdue Tasks Report</option>
+                                    <option value="rp5">RP5 - Task Distribution Report</option>
+                                    <option value="rp6">RP6 - Completion Rate Report</option>
+                                    <option value="rp7">RP7 - Future Timeline Report</option>
+                                    <option value="rp8">RP8 - Timeline Report</option>
+                                    <option value="rp9">RP9 - Organized Tasks Report</option>
+                                    <option value="rp10">RP10 - Custom Filtered Report</option>
+                                </select>
+                            </div>
+                            <div class="report-form-group">
+                                <label class="report-form-label">Task List</label>
+                                <select id="report-list-filter" class="report-form-control">
+                                    <option value="all">All Lists</option>
+                                </select>
+                            </div>
+                            <div class="report-form-group">
+                                <label class="report-form-label">Start Date</label>
+                                <input type="date" id="report-start-date" class="report-form-control">
+                            </div>
+                            <div class="report-form-group">
+                                <label class="report-form-label">End Date</label>
+                                <input type="date" id="report-end-date" class="report-form-control">
+                            </div>
+                            <div class="report-form-group">
+                                <label class="report-form-label">Tag Filter</label>
+                                <select id="report-tag-filter" class="report-form-control">
+                                    <option value="">All Tags</option>
+                                </select>
+                            </div>
+                            <button class="btn-generate-report" onclick="generateSelectedReport()">
+                                <i class="fas fa-play"></i> Run Report
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Custom Builder Panel (rp10 Engine) -->
+                    <div class="reports-builder-card" id="reports-custom-builder" style="display: none; border-left: 4px solid #8b5cf6;">
+                        <div style="margin-bottom: 0.85rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-filter text-primary"></i> Multi-Dimensional Custom Query Engine
+                        </div>
+                        <div class="reports-builder-grid">
+                            <div class="report-form-group">
+                                <label class="report-form-label">Date Window Expression</label>
+                                <input type="text" id="report-custom-filter-str" class="report-form-control" placeholder="e.g. this_week:created_at or past2weeks:modified_at">
+                            </div>
+                            <div class="report-form-group">
+                                <label class="report-form-label">Order / Sort Dimension</label>
+                                <input type="text" id="report-custom-order-by" class="report-form-control" placeholder="e.g. modified_at:desc or created_at:asc">
+                            </div>
+                            <div class="report-form-group">
+                                <label class="report-form-label">Output Tags Filter</label>
+                                <input type="text" id="report-custom-output-tags" class="report-form-control" placeholder="e.g. em:tag1,tag2|ex:tag3">
+                            </div>
+                            <div class="report-form-group">
+                                <label class="report-form-label">Output Lists Filter</label>
+                                <input type="text" id="report-custom-output-lists" class="report-form-control" placeholder="e.g. em:Work,Projects|ex:Archive">
+                            </div>
+                            <button class="btn-generate-report" style="background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);" onclick="generateSelectedReport()">
+                                <i class="fas fa-cogs"></i> Execute Query
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Loading Indicator -->
+                    <div id="reports-loading" style="display: none; text-align: center; padding: 1.5rem; color: #3b82f6;">
+                        <i class="fas fa-spinner fa-spin fa-2x"></i>
+                        <p style="margin-top: 0.5rem; font-weight: 500;">Calculating analytics and generating report...</p>
+                    </div>
+
+                    <!-- Metrics KPI Grid -->
+                    <div class="reports-metrics-grid">
+                        <div class="report-metric-card">
+                            <div class="report-metric-icon" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6;">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="report-metric-info">
+                                <div class="report-metric-val" id="metric-1-val">-</div>
+                                <div class="report-metric-lbl" id="metric-1-lbl">Completed Tasks</div>
+                            </div>
+                        </div>
+                        <div class="report-metric-card">
+                            <div class="report-metric-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">
+                                <i class="fas fa-percentage"></i>
+                            </div>
+                            <div class="report-metric-info">
+                                <div class="report-metric-val" id="metric-2-val">-</div>
+                                <div class="report-metric-lbl" id="metric-2-lbl">Completion Rate</div>
+                            </div>
+                        </div>
+                        <div class="report-metric-card">
+                            <div class="report-metric-icon" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b;">
+                                <i class="fas fa-tachometer-alt"></i>
+                            </div>
+                            <div class="report-metric-info">
+                                <div class="report-metric-val" id="metric-3-val">-</div>
+                                <div class="report-metric-lbl" id="metric-3-lbl">Daily Velocity</div>
+                            </div>
+                        </div>
+                        <div class="report-metric-card">
+                            <div class="report-metric-icon" style="background: rgba(139, 92, 246, 0.1); color: #8b5cf6;">
+                                <i class="fas fa-calendar-check"></i>
+                            </div>
+                            <div class="report-metric-info">
+                                <div class="report-metric-val" id="metric-4-val">-</div>
+                                <div class="report-metric-lbl" id="metric-4-lbl">Days Analyzed</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Grid -->
+                    <div class="reports-charts-grid">
+                        <div class="reports-chart-card">
+                            <div class="reports-chart-header">
+                                <div class="reports-chart-title">
+                                    <i class="fas fa-chart-line" style="color: #3b82f6;"></i>
+                                    <span>Trajectory & Velocity</span>
+                                </div>
+                            </div>
+                            <div class="reports-chart-body">
+                                <canvas id="report-trend-chart"></canvas>
+                            </div>
+                        </div>
+                        <div class="reports-chart-card">
+                            <div class="reports-chart-header">
+                                <div class="reports-chart-title">
+                                    <i class="fas fa-chart-pie" style="color: #10b981;"></i>
+                                    <span>Task Distribution</span>
+                                </div>
+                            </div>
+                            <div class="reports-chart-body">
+                                <canvas id="report-dist-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Output Data Table / Text Preview -->
+                    <div class="reports-output-card">
+                        <div class="reports-output-header">
+                            <div class="reports-chart-title" id="reports-output-title">
+                                Report Data Breakdown
+                            </div>
+                            <div class="reports-export-actions">
+                                <button class="btn-export" onclick="exportReport('csv')" title="Download CSV">
+                                    <i class="fas fa-file-csv"></i> CSV
+                                </button>
+                                <button class="btn-export" onclick="exportReport('json')" title="Download JSON">
+                                    <i class="fas fa-file-code"></i> JSON
+                                </button>
+                                <button class="btn-export" onclick="exportReport('txt')" title="Download Text">
+                                    <i class="fas fa-file-alt"></i> TXT
+                                </button>
+                                <button class="btn-export btn-export-email" onclick="openEmailModal()" title="Send Report on Email" style="color: #3b82f6; font-weight: 600;">
+                                    <i class="fas fa-envelope"></i> Send Email
+                                </button>
+                                <button class="btn-export" onclick="copyReportToClipboard()" title="Copy to Clipboard">
+                                    <i class="fas fa-copy"></i> Copy
+                                </button>
+                            </div>
+                        </div>
+                        <div id="reports-table-container">
+                            <!-- Populated dynamically: formatted table or structured view -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Hierarchy Section -->
             <section id="hierarchy-section" class="section" {% if default_view != 'hierarchy' %}style="display: none;"{% endif %}>
                 <div class="header">
@@ -235,17 +556,39 @@
                             <i class="fas fa-filter"></i>
                             <span>Filters</span>
                         </button>
+                        <button class="btn btn-secondary" onclick="toggleFullscreen()" title="Fullscreen">
+                            <i class="fas fa-expand"></i>
+                            <span>Fullscreen</span>
+                        </button>
+                        <div class="refresh-dropdown">
+                            <button class="header-refresh-btn" onclick="refreshHierarchy()" title="Refresh Hierarchy">
+                                <i class="fas fa-sync-alt"></i>
+                                <span>Refresh</span>
+                            </button>
+                            <button class="refresh-dropdown-toggle" onclick="toggleRefreshDropdown(event)" title="More options">
+                                <i class="fas fa-caret-down"></i>
+                            </button>
+                            <div class="refresh-dropdown-menu">
+                                <a href="#" onclick="refreshHierarchy(); closeAllRefreshDropdowns(); return false;">
+                                    <i class="fas fa-project-diagram"></i> Refresh Hierarchy
+                                </a>
+                                <a href="#" onclick="refreshData().then(() => refreshHierarchy()); closeAllRefreshDropdowns(); return false;">
+                                    <i class="fas fa-database"></i> Refresh Cache
+                                </a>
+                                <a href="#" onclick="syncAndRefresh().then(() => refreshHierarchy()); closeAllRefreshDropdowns(); return false;">
+                                    <i class="fas fa-sync"></i> Sync Data
+                                </a>
+                                <a href="#" onclick="syncRemoteDb(); closeAllRefreshDropdowns(); return false;">
+                                    <i class="fas fa-cloud-upload-alt"></i> Sync External DB
+                                </a>
+                            </div>
+                        </div>
+                        <button class="settings-btn" onclick="openSettings()" title="Settings">
+                            <i class="fas fa-cog"></i>
+                        </button>
                         <select id="hierarchy-account-selector" class="account-selector" onchange="switchAccountForHierarchy(this.value)">
                             <option value="">Loading accounts...</option>
                         </select>
-                        <button class="btn btn-primary" onclick="refreshHierarchy()">
-                            <i class="fas fa-sync-alt"></i>
-                            Refresh
-                        </button>
-                        <button class="btn btn-secondary" onclick="toggleFullscreen()">
-                            <i class="fas fa-expand"></i>
-                            Fullscreen
-                        </button>
                     </div>
                 </div>
 
@@ -394,9 +737,32 @@
             <section id="tasks-section" class="section" {% if default_view != 'tasks' %}style="display: none;"{% endif %}>
                 <div class="header">
                     <h1><i class="fas fa-tasks mr-2"></i>Task Management</h1>
-                    <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
+                    <div class="header-actions">
                         <button class="btn btn-primary" onclick="openAddModal()" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background-color: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer;">
                             <i class="fas fa-plus"></i> New Task
+                        </button>
+                        <div class="refresh-dropdown">
+                            <button class="header-refresh-btn" onclick="refreshData()" title="Refresh Tasks">
+                                <i class="fas fa-sync-alt"></i>
+                                <span>Refresh</span>
+                            </button>
+                            <button class="refresh-dropdown-toggle" onclick="toggleRefreshDropdown(event)" title="More options">
+                                <i class="fas fa-caret-down"></i>
+                            </button>
+                            <div class="refresh-dropdown-menu">
+                                <a href="#" onclick="refreshData(); closeAllRefreshDropdowns(); return false;">
+                                    <i class="fas fa-database"></i> Refresh Cache
+                                </a>
+                                <a href="#" onclick="syncAndRefresh(); closeAllRefreshDropdowns(); return false;">
+                                    <i class="fas fa-sync"></i> Sync Data
+                                </a>
+                                <a href="#" onclick="syncRemoteDb(); closeAllRefreshDropdowns(); return false;">
+                                    <i class="fas fa-cloud-upload-alt"></i> Sync External DB
+                                </a>
+                            </div>
+                        </div>
+                        <button class="settings-btn" onclick="openSettings()" title="Settings">
+                            <i class="fas fa-cog"></i>
                         </button>
                         <select id="tasks-account-selector" class="account-selector" onchange="switchAccountForTasks(this.value)">
                             <option value="">Loading accounts...</option>
@@ -556,67 +922,194 @@
 
     <!-- Settings Modal -->
     <div class="modal-overlay" id="settings-modal">
-        <div class="modal-content">
+        <div class="modal-content settings-modal-dialog">
             <div class="modal-header">
-                <h2><i class="fas fa-cog"></i> Settings</h2>
+                <h2><i class="fas fa-cog text-primary"></i> Application Settings</h2>
                 <button class="modal-close" onclick="closeSettings()">&times;</button>
             </div>
-            
-            <div class="settings-section">
-                <h3>Auto-Refresh</h3>
-                <div class="setting-item">
-                    <div class="setting-label">
-                        <span>Enable Auto-Refresh</span>
-                        <span>Automatically refresh data at specified intervals</span>
+
+            <!-- Settings Tabs Navigation -->
+            <div class="settings-tabs-nav">
+                <button type="button" class="settings-tab-btn active" id="tab-btn-general" onclick="switchSettingsTab('general')">
+                    <i class="fas fa-sliders-h"></i> General & Display
+                </button>
+                <button type="button" class="settings-tab-btn" id="tab-btn-sync" onclick="switchSettingsTab('sync')">
+                    <i class="fas fa-sync"></i> Sync & Auto-Save
+                </button>
+                <button type="button" class="settings-tab-btn" id="tab-btn-email" onclick="switchSettingsTab('email')">
+                    <i class="fas fa-envelope"></i> Email / SMTP
+                </button>
+                <button type="button" class="settings-tab-btn" id="tab-btn-flags" onclick="switchSettingsTab('flags')">
+                    <i class="fas fa-toggle-on"></i> Feature Flags
+                </button>
+            </div>
+
+            <!-- Tab 1: General & Display -->
+            <div class="settings-tab-pane active" id="tab-pane-general">
+                <div class="settings-grid-row">
+                    <div class="settings-input-group">
+                        <label class="settings-input-label">Default Task List</label>
+                        <span class="settings-input-desc">Default list name for new tasks</span>
+                        <input type="text" id="setting-default-list" class="settings-input-field" placeholder="My Tasks">
                     </div>
-                    <div class="setting-control">
-                        <div class="toggle-switch" id="auto-refresh-toggle" onclick="toggleAutoRefresh()"></div>
+                    <div class="settings-input-group">
+                        <label class="settings-input-label">Default Landing View</label>
+                        <span class="settings-input-desc">View shown on root load</span>
+                        <select class="settings-input-field" id="default-view" onchange="updateDefaultView()">
+                            <option value="dashboard">Dashboard Overview</option>
+                            <option value="hierarchy">Hierarchy Visualization</option>
+                            <option value="tasks">Task Explorer</option>
+                            <option value="reports">Reports & Analytics</option>
+                        </select>
                     </div>
                 </div>
-                <div class="setting-item">
-                    <div class="setting-label">
-                        <span>Refresh Interval</span>
-                        <span>How often to refresh data</span>
+
+                <div class="settings-grid-row">
+                    <div class="settings-input-group">
+                        <label class="settings-input-label">Date Format Pattern</label>
+                        <span class="settings-input-desc">Standard strftime format</span>
+                        <input type="text" id="setting-date-format" class="settings-input-field" placeholder="%Y-%m-%d">
                     </div>
-                    <div class="setting-control">
-                        <select class="settings-select" id="refresh-interval" onchange="updateRefreshInterval()">
+                    <div class="settings-input-group">
+                        <label class="settings-input-label">Time Format Pattern</label>
+                        <span class="settings-input-desc">Standard time format</span>
+                        <input type="text" id="setting-time-format" class="settings-input-field" placeholder="%H:%M">
+                    </div>
+                </div>
+
+                <div class="settings-grid-row">
+                    <div class="settings-input-group">
+                        <label class="settings-input-label">CLI Table Style</label>
+                        <span class="settings-input-desc">Rendering style for terminal outputs</span>
+                        <select class="settings-input-field" id="setting-table-style">
+                            <option value="simple">Simple</option>
+                            <option value="rounded">Rounded</option>
+                            <option value="grid">Grid</option>
+                            <option value="fancy_grid">Fancy Grid</option>
+                        </select>
+                    </div>
+                    <div class="settings-input-group">
+                        <label class="settings-input-label">Hide Deleted Tasks</label>
+                        <span class="settings-input-desc">Filter soft-deleted items automatically</span>
+                        <div style="margin-top: 0.35rem;">
+                            <div class="toggle-switch" id="hide-deleted-toggle" onclick="toggleHideDeleted()"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-grid-row" style="margin-top: 0.5rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color, #e2e8f0);">
+                    <div class="settings-input-group">
+                        <label class="settings-input-label">Theme / Visual Mode</label>
+                        <span class="settings-input-desc">Switch between Light and Dark interface appearance</span>
+                        <div style="margin-top: 0.4rem;">
+                            <button type="button" class="btn btn-secondary" onclick="toggleDarkMode()" style="display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; padding: 0.45rem 0.9rem;">
+                                <i class="fas fa-moon moon-icon"></i>
+                                <i class="fas fa-sun sun-icon"></i>
+                                <span>Toggle Dark / Light Theme</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="settings-input-group">
+                        <label class="settings-input-label">System Diagnostics & Debugger</label>
+                        <span class="settings-input-desc">Inspect SQLite health KPIs, database size, and live log tail</span>
+                        <div style="margin-top: 0.4rem;">
+                            <button type="button" class="btn btn-secondary" onclick="closeSettings(); openDebugger();" style="display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; padding: 0.45rem 0.9rem;">
+                                <i class="fas fa-bug text-danger"></i>
+                                <span>Launch Debugger & Live Logs</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Sync & Auto-Save -->
+            <div class="settings-tab-pane" id="tab-pane-sync">
+                <div class="settings-grid-row">
+                    <div class="settings-input-group">
+                        <label class="settings-input-label">Auto-Refresh Interval</label>
+                        <span class="settings-input-desc">Browser dashboard background refresh rate</span>
+                        <select class="settings-input-field" id="refresh-interval" onchange="updateRefreshInterval()">
                             <option value="30">30 seconds</option>
                             <option value="60">1 minute</option>
                             <option value="300">5 minutes</option>
                             <option value="600">10 minutes</option>
                         </select>
                     </div>
-                </div>
-            </div>
-            
-            <div class="settings-section">
-                <h3>Display</h3>
-                <div class="setting-item">
-                    <div class="setting-label">
-                        <span>Default View</span>
-                        <span>Section to show when dashboard loads</span>
-                    </div>
-                    <div class="setting-control">
-                        <select class="settings-select" id="default-view" onchange="updateDefaultView()">
-                            <option value="dashboard">Dashboard</option>
-                            <option value="hierarchy">Hierarchy</option>
-                            <option value="tasks">Tasks</option>
-                        </select>
+                    <div class="settings-input-group">
+                        <label class="settings-input-label">Dashboard Auto-Refresh</label>
+                        <span class="settings-input-desc">Periodically re-query local state</span>
+                        <div style="margin-top: 0.35rem;">
+                            <div class="toggle-switch" id="auto-refresh-toggle" onclick="toggleAutoRefresh()"></div>
+                        </div>
                     </div>
                 </div>
-                <div class="setting-item">
-                    <div class="setting-label">
-                        <span>Hide Deleted Tasks</span>
-                        <span>Never show deleted tasks when enabled</span>
+
+                <div class="settings-grid-row">
+                    <div class="settings-input-group">
+                        <label class="settings-input-label">Google Tasks Auto-Save</label>
+                        <span class="settings-input-desc">Immediately push completed tasks to Google Tasks</span>
+                        <div style="margin-top: 0.4rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="setting-auto-save" style="width: 18px; height: 18px; cursor: pointer;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Enable Google Auto-Save</span>
+                        </div>
                     </div>
-                    <div class="setting-control">
-                        <div class="toggle-switch" id="hide-deleted-toggle" onclick="toggleHideDeleted()"></div>
+                    <div class="settings-input-group">
+                        <label class="settings-input-label">Sync Pull Range (Days)</label>
+                        <span class="settings-input-desc">Number of previous days to pull during sync</span>
+                        <input type="number" id="setting-pull-days" class="settings-input-field" min="1" max="365" value="10">
                     </div>
                 </div>
             </div>
-            
-            <div class="modal-footer">
-                <button class="btn-secondary-modal" onclick="closeSettings()">Close</button>
+
+            <!-- Tab 3: Email / SMTP -->
+            <div class="settings-tab-pane" id="tab-pane-email">
+                <div class="settings-input-group">
+                    <label class="settings-input-label">Sender Email Address (Gmail / SMTP)</label>
+                    <span class="settings-input-desc">Email address used to dispatch reports</span>
+                    <input type="email" id="setting-email-user" class="settings-input-field" placeholder="your-email@gmail.com">
+                </div>
+                <div class="settings-input-group">
+                    <label class="settings-input-label">App Password / SMTP Password</label>
+                    <span class="settings-input-desc">Google App Password (stored securely in ~/.gtasks/config.yaml)</span>
+                    <input type="password" id="setting-email-password" class="settings-input-field" placeholder="••••••••••••••••">
+                </div>
+                <div style="font-size: 0.78rem; color: var(--text-muted); background: var(--hover-bg); padding: 0.75rem; border-radius: 6px;">
+                    <i class="fas fa-info-circle text-primary"></i> For Gmail, generate a 16-character App Password under your Google Account Security settings.
+                </div>
+            </div>
+
+            <!-- Tab 4: Feature Flags -->
+            <div class="settings-tab-pane" id="tab-pane-flags">
+                <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                        <input type="checkbox" id="setting-flag-reports" style="width: 18px; height: 18px;">
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.85rem;">ENABLE_REPORTS</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Enable advanced reports & analytics engine</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                        <input type="checkbox" id="setting-flag-priority" style="width: 18px; height: 18px;">
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.85rem;">ENABLE_PRIORITY_SYSTEM</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Calculate and visualize priority score breakdowns</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                        <input type="checkbox" id="setting-flag-advanced" style="width: 18px; height: 18px;">
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.85rem;">ENABLE_ADVANCED_FILTERS</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Support multi-tag boolean expressions and dynamic grouping</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <button class="btn-secondary-modal" onclick="closeSettings()">Cancel</button>
+                <button type="button" id="btn-save-settings" class="btn btn-primary" onclick="saveAllSettings()">
+                    <i class="fas fa-save"></i> Save Settings
+                </button>
             </div>
         </div>
     </div>
@@ -663,6 +1156,13 @@
                         </select>
                     </div>
                 </div>
+                <div class="edit-form-group edit-tags-group">
+                    <div class="edit-tags-header">
+                        <label><i class="fas fa-tags" style="color: #6366f1;"></i> Tags</label>
+                        <span class="tags-hint">Search, select, or type new tags (saved as [tag])</span>
+                    </div>
+                    <div id="edit-task-tags-container" class="task-tags-selector-wrapper"></div>
+                </div>
                 <div class="edit-form-group edit-notes-group">
                     <div class="edit-notes-header">
                         <label>Notes <span class="markdown-hint">— Markdown & JSON supported</span></label>
@@ -685,7 +1185,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary-modal" onclick="closeEditModal()">Cancel</button>
-                <button class="btn-primary-modal" onclick="saveTaskEdit()"><i class="fas fa-save"></i> Save Changes</button>
+                <button class="btn-primary-modal" id="edit-task-save-btn" onclick="saveTaskEdit()"><i class="fas fa-save"></i> <span>Save Changes</span></button>
             </div>
         </div>
     </div>
@@ -744,6 +1244,13 @@
                         <input type="date" id="add-task-due" class="filter-input">
                     </div>
                 </div>
+                <div class="edit-form-group edit-tags-group">
+                    <div class="edit-tags-header">
+                        <label><i class="fas fa-tags" style="color: #6366f1;"></i> Tags</label>
+                        <span class="tags-hint">Search, select, or type new tags (saved as [tag])</span>
+                    </div>
+                    <div id="add-task-tags-container" class="task-tags-selector-wrapper"></div>
+                </div>
                 <div class="edit-form-group edit-notes-group">
                     <div class="edit-notes-header">
                         <label>Notes <span class="markdown-hint">— Markdown & JSON supported</span></label>
@@ -766,7 +1273,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary-modal" onclick="closeAddModal()">Cancel</button>
-                <button class="btn-primary-modal" onclick="saveNewTask()"><i class="fas fa-plus"></i> Create Task</button>
+                <button class="btn-primary-modal" id="add-task-save-btn" onclick="saveNewTask()"><i class="fas fa-plus"></i> <span>Create Task</span></button>
             </div>
         </div>
     </div>
@@ -865,13 +1372,138 @@
         </div>
     </div>
 
+    <!-- Email Report Modal -->
+    <div class="modal" id="report-email-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center;">
+        <div class="modal-dialog" style="background: var(--card-bg, #ffffff); border-radius: 12px; width: 480px; max-width: 90vw; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color, #e2e8f0); padding-bottom: 0.75rem;">
+                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-paper-plane" style="color: #3b82f6;"></i> Send Report Via Email
+                </h3>
+                <button type="button" onclick="closeEmailModal()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.9rem;">
+                <div class="report-form-group">
+                    <label class="report-form-label">Recipient Email(s) <span style="color:#ef4444;">*</span></label>
+                    <input type="text" id="report-email-recipients" class="report-form-control" placeholder="user@example.com, team@example.com">
+                </div>
+                <div class="report-form-group">
+                    <label class="report-form-label">Subject</label>
+                    <input type="text" id="report-email-subject" class="report-form-control" placeholder="GTasks Report Summary">
+                </div>
+                <div class="report-form-group">
+                    <label class="report-form-label">CC (Optional)</label>
+                    <input type="text" id="report-email-cc" class="report-form-control" placeholder="manager@example.com">
+                </div>
+            </div>
+            <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
+                <button type="button" class="btn btn-secondary" onclick="closeEmailModal()">Cancel</button>
+                <button type="button" id="btn-confirm-send-email" class="btn btn-primary" onclick="sendReportViaEmail()">
+                    <i class="fas fa-envelope"></i> Send Report
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debugger Console Modal -->
+    <div class="modal-overlay" id="debugger-modal">
+        <div class="modal-content debugger-modal-dialog">
+            <div class="modal-header">
+                <h2><i class="fas fa-bug text-danger"></i> System Debugger & Diagnostics Console</h2>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <button type="button" class="btn-action-modal" id="debug-toggle-btn" onclick="toggleDebugLevel()" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">
+                        Debug Mode: ON
+                    </button>
+                    <button class="modal-close" onclick="closeDebugger()">&times;</button>
+                </div>
+            </div>
+
+            <!-- Diagnostics KPI Grid -->
+            <div class="debugger-diag-grid">
+                <div class="debugger-diag-card">
+                    <div class="debugger-diag-icon" style="color: #10b981;">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <div>
+                        <div class="debugger-diag-lbl">SQLite Database</div>
+                        <div class="debugger-diag-val" id="debug-diag-db-status">-</div>
+                    </div>
+                </div>
+                <div class="debugger-diag-card">
+                    <div class="debugger-diag-icon" style="color: #3b82f6;">
+                        <i class="fas fa-hdd"></i>
+                    </div>
+                    <div>
+                        <div class="debugger-diag-lbl">DB File Size</div>
+                        <div class="debugger-diag-val" id="debug-diag-db-size">-</div>
+                    </div>
+                </div>
+                <div class="debugger-diag-card">
+                    <div class="debugger-diag-icon" style="color: #f59e0b;">
+                        <i class="fas fa-tasks"></i>
+                    </div>
+                    <div>
+                        <div class="debugger-diag-lbl">Total Tasks (DB)</div>
+                        <div class="debugger-diag-val" id="debug-diag-tasks-count">-</div>
+                    </div>
+                </div>
+                <div class="debugger-diag-card">
+                    <div class="debugger-diag-icon" style="color: #8b5cf6;">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <div>
+                        <div class="debugger-diag-lbl">Log File Size</div>
+                        <div class="debugger-diag-val" id="debug-diag-log-size">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Terminal Live Logs -->
+            <div style="display: flex; flex-direction: column;">
+                <div class="debugger-terminal-header">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1;">
+                        <span><i class="fas fa-terminal"></i> Live Log Tail (~/.gtasks/logs/gtasks.log)</span>
+                        <select id="debug-log-level-filter" onchange="fetchLogs()" style="background: #1e293b; color: #f1f5f9; border: 1px solid #334155; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem;">
+                            <option value="ALL">All Levels</option>
+                            <option value="DEBUG">DEBUG</option>
+                            <option value="INFO">INFO</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="ERROR">ERROR</option>
+                        </select>
+                        <input type="text" id="debug-log-search" oninput="fetchLogs()" placeholder="Filter logs..." style="background: #1e293b; color: #f1f5f9; border: 1px solid #334155; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; width: 140px;">
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button type="button" class="btn-action-modal" id="debug-autoscroll-toggle" onclick="toggleAutoScroll()" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;">
+                            Auto-Scroll: ON
+                        </button>
+                        <button type="button" class="btn-action-modal" onclick="fetchLogs()" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" title="Refresh logs">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        <button type="button" class="btn-action-modal" onclick="clearAllLogs()" style="font-size: 0.7rem; padding: 0.2rem 0.5rem; color: #ef4444;" title="Clear log file">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                    </div>
+                </div>
+                <div class="debugger-terminal-body" id="debugger-terminal-body">
+                    <div style="color: #64748b; font-style: italic;">Loading live application logs...</div>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="margin-top: 1rem; display: flex; justify-content: flex-end;">
+                <button class="btn-secondary-modal" onclick="closeDebugger()">Close Debugger</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading-overlay" style="display: none;">
         <div class="loading-spinner"></div>
         <p>Loading...</p>
     </div>
 
-    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=32"></script>
-    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=32"></script>
+    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=41"></script>
+    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=41"></script>
+    <script type="module" src="{{ base_path }}/static/js/reports.js?v=41"></script>
+    <script type="module" src="{{ base_path }}/static/js/notifications.js?v=41"></script>
+    <script type="module" src="{{ base_path }}/static/js/debugger.js?v=41"></script>
 </body>
 </html>

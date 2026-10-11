@@ -187,7 +187,7 @@ class DataManager:
                 # Build query based on available columns
                 select_columns = ['id', 'title', 'description', 'due', 'priority', 'status', 'tags', 'notes', 
                                 'created_at', 'modified_at', 'dependencies']
-                for opt_col in ['list_title', 'tasklist_id', 'is_recurring', 'recurrence_rule', 'recurring_task_id']:
+                for opt_col in ['completed_at', 'list_title', 'tasklist_id', 'is_recurring', 'recurrence_rule', 'recurring_task_id']:
                     if opt_col in columns:
                         select_columns.append(opt_col)
                 
@@ -340,6 +340,7 @@ class DataManager:
             t_notes = row[col_idx['notes']] if 'notes' in col_idx and len(row) > col_idx['notes'] else ''
             t_created = row[col_idx['created_at']] if 'created_at' in col_idx and len(row) > col_idx['created_at'] else None
             t_mod = row[col_idx['modified_at']] if 'modified_at' in col_idx and len(row) > col_idx['modified_at'] else None
+            t_comp = row[col_idx['completed_at']] if 'completed_at' in col_idx and len(row) > col_idx['completed_at'] else None
             raw_deps = row[col_idx['dependencies']] if 'dependencies' in col_idx and len(row) > col_idx['dependencies'] else None
             t_list_title = row[col_idx['list_title']] if 'list_title' in col_idx and len(row) > col_idx['list_title'] else ''
             t_tasklist_id = row[col_idx['tasklist_id']] if 'tasklist_id' in col_idx and len(row) > col_idx['tasklist_id'] else None
@@ -380,6 +381,7 @@ class DataManager:
                 'tasklist_id': t_tasklist_id,
                 'created_at': t_created,
                 'modified_at': t_mod,
+                'completed_at': t_comp,
                 'dependencies': deps_list,
                 'is_recurring': t_is_rec,
                 'recurrence_rule': t_rrule,
@@ -1207,95 +1209,164 @@ class DataManager:
             return {}
         return REPORT_TYPES
     
-    def generate_report(self, report_type: str, tasks: List[Task], **kwargs) -> Dict[str, Any]:
-        """Generate a report (demo implementation)"""
+    def _get_report_manager(self):
+        """Lazy load and return configured ReportManager with all CLI reports"""
+        if hasattr(self, '_report_manager') and self._report_manager:
+            return self._report_manager
+
+        try:
+            import sys
+            from pathlib import Path
+            cli_src = Path(__file__).parent.parent.parent / 'gtasks_cli' / 'src'
+            if str(cli_src) not in sys.path:
+                sys.path.insert(0, str(cli_src))
+
+            from gtasks_cli.reports.base_report import ReportManager
+            from gtasks_cli.reports.task_completion_report import TaskCompletionReport
+            from gtasks_cli.reports.pending_tasks_report import PendingTasksReport
+            from gtasks_cli.reports.task_creation_report import TaskCreationReport
+            from gtasks_cli.reports.overdue_tasks_report import OverdueTasksReport
+            from gtasks_cli.reports.task_distribution_report import TaskDistributionReport
+            from gtasks_cli.reports.task_completion_rate_report import TaskCompletionRateReport
+            from gtasks_cli.reports.future_timeline_report import FutureTimelineReport
+            from gtasks_cli.reports.timeline_report import TimelineReport
+            from gtasks_cli.reports.organized_tasks_report import OrganizedTasksReport
+            from gtasks_cli.reports.custom_filtered_report import CustomFilteredReport
+
+            rm = ReportManager()
+            mapping = {
+                'rp1': TaskCompletionReport(),
+                'rp2': PendingTasksReport(),
+                'rp3': TaskCreationReport(),
+                'rp4': OverdueTasksReport(),
+                'rp5': TaskDistributionReport(),
+                'rp6': TaskCompletionRateReport(),
+                'rp7': FutureTimelineReport(),
+                'rp8': TimelineReport(),
+                'rp9': OrganizedTasksReport(),
+                'rp10': CustomFilteredReport()
+            }
+            for code, instance in mapping.items():
+                rm.register_report(code, instance)
+                # also register by alias
+                meta = REPORT_TYPES.get(code)
+                if meta and 'alias' in meta:
+                    rm.register_report(meta['alias'], instance)
+
+            self._report_manager = rm
+            return rm
+        except Exception as e:
+            print(f"[DataManager] Failed to initialize ReportManager: {e}")
+            return None
+
+    def _convert_to_cli_tasks(self, tasks: List[Any]) -> list:
+        """Convert list of dicts or tasks into CLI Task pydantic objects"""
+        import sys
+        from pathlib import Path
+        cli_src = Path(__file__).parent.parent.parent / 'gtasks_cli' / 'src'
+        if str(cli_src) not in sys.path:
+            sys.path.insert(0, str(cli_src))
+
+        from gtasks_cli.models.task import Task as CLITask
+
+        cli_tasks = []
+        for t in tasks:
+            if isinstance(t, CLITask):
+                cli_tasks.append(t)
+            elif isinstance(t, dict):
+                try:
+                    cli_tasks.append(CLITask.model_validate(t) if hasattr(CLITask, 'model_validate') else CLITask(**t))
+                except Exception:
+                    pass
+            elif hasattr(t, 'to_dict'):
+                try:
+                    d = t.to_dict()
+                    cli_tasks.append(CLITask.model_validate(d) if hasattr(CLITask, 'model_validate') else CLITask(**d))
+                except Exception:
+                    pass
+        return cli_tasks
+
+    def _make_serializable(self, val: Any) -> Any:
+        """Recursively convert Tasks, models, and datetimes into json-serializable dicts/primitives"""
+        if isinstance(val, dict):
+            return {k: self._make_serializable(v) for k, v in val.items()}
+        elif isinstance(val, (list, tuple, set)):
+            return [self._make_serializable(item) for item in val]
+        elif hasattr(val, 'model_dump'):
+            return self._make_serializable(val.model_dump())
+        elif hasattr(val, 'to_dict'):
+            return self._make_serializable(val.to_dict())
+        elif hasattr(val, 'dict'):
+            return self._make_serializable(val.dict())
+        elif hasattr(val, 'isoformat'):
+            return val.isoformat()
+        return val
+
+    def generate_report(self, report_type: str, tasks: List[Any], **kwargs) -> Dict[str, Any]:
+        """Generate report using CLI ReportManager engine with fallback"""
         if not FEATURE_FLAGS.get('ENABLE_REPORTS', False):
             return {}
-            
-        try:
-            if report_type == 'task_completion':
-                return self._generate_completion_report(tasks, **kwargs)
-            elif report_type == 'overdue_tasks':
-                return self._generate_overdue_report(tasks)
-            elif report_type == 'task_distribution':
-                return self._generate_distribution_report(tasks)
-            elif report_type == 'timeline':
-                return self._generate_timeline_report(tasks, **kwargs)
-            else:
-                return self._generate_generic_report(report_type, tasks, **kwargs)
-        except Exception as e:
-            print(f"Error generating report {report_type}: {e}")
-            return self._generate_generic_report(report_type, tasks, **kwargs)
-    
-    def _generate_completion_report(self, tasks: List[Task], **kwargs) -> Dict[str, Any]:
-        """Generate task completion report"""
-        period_days = kwargs.get('period_days', 30)
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=period_days)
-        
-        completed_tasks = [t for t in tasks if t.status == 'completed']
-        
-        return {
-            'report_name': 'Task Completion Report',
-            'period_start': start_date.isoformat(),
-            'period_end': end_date.isoformat(),
-            'total_completed': len(completed_tasks),
-            'completion_rate': (len(completed_tasks) / len(tasks) * 100) if tasks else 0
-        }
-    
-    def _generate_overdue_report(self, tasks: List[Task]) -> Dict[str, Any]:
-        """Generate overdue tasks report"""
-        today = datetime.now().date()
-        overdue_tasks = []
-        
-        for task in tasks:
-            if (task.status != 'completed' and task.due):
-                due_date = datetime.fromisoformat(task.due).date()
-                if due_date < today:
-                    overdue_tasks.append({
-                        'id': task.id,
-                        'title': task.title,
-                        'due': task.due,
-                        'days_overdue': (today - due_date).days
-                    })
-        
-        return {
-            'report_name': 'Overdue Tasks Report',
-            'total_overdue': len(overdue_tasks),
-            'overdue_tasks': overdue_tasks
-        }
-    
-    def _generate_distribution_report(self, tasks: List[Task]) -> Dict[str, Any]:
-        """Generate task distribution report"""
-        from collections import Counter
-        
-        status_counter = Counter(t.status for t in tasks)
-        priority_counter = Counter(getattr(t, 'calculated_priority', 'medium') for t in tasks)
-        
-        return {
-            'report_name': 'Task Distribution Report',
-            'total_tasks': len(tasks),
-            'status_distribution': dict(status_counter),
-            'priority_distribution': dict(priority_counter)
-        }
-    
-    def _generate_timeline_report(self, tasks: List[Task], **kwargs) -> Dict[str, Any]:
-        """Generate timeline report"""
-        period_days = kwargs.get('period_days', 30)
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=period_days)
-        
-        return {
-            'report_name': 'Timeline Report',
-            'period_start': start_date.isoformat(),
-            'period_end': end_date.isoformat(),
-            'total_tasks': len(tasks)
-        }
-    
-    def _generate_generic_report(self, report_type: str, tasks: List[Task], **kwargs) -> Dict[str, Any]:
-        """Generate a generic report"""
+
+        cli_tasks = self._convert_to_cli_tasks(tasks)
+        rm = self._get_report_manager()
+
+        if rm:
+            try:
+                # Map report_type if needed
+                report_id = report_type
+                if report_type not in rm.reports and report_type in REPORT_TYPES:
+                    report_id = REPORT_TYPES[report_type].get('id', report_type)
+
+                report_instance = rm.get_report(report_id)
+                if report_instance:
+                    data = report_instance.generate(cli_tasks, **kwargs)
+                    if isinstance(data, dict):
+                        # Ensure report metadata is included
+                        data['report_type'] = report_id
+                        data['generated_at'] = datetime.now().isoformat()
+                        return self._make_serializable(data)
+            except Exception as e:
+                print(f"[DataManager] Error in CLI report {report_type}: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # Fallback implementation
+        return self._generate_generic_report(report_type, tasks, **kwargs)
+
+    def export_report(self, report_type: str, report_data: Dict[str, Any], format: str = 'txt', **kwargs) -> str:
+        """Export a generated report in txt, csv, or json format"""
+        if format.lower() == 'json':
+            import json
+            # Sanitize dates/objects
+            def _default_ser(o):
+                if hasattr(o, 'isoformat'):
+                    return o.isoformat()
+                if hasattr(o, '__dict__'):
+                    return o.__dict__
+                return str(o)
+            return json.dumps(report_data, default=_default_ser, indent=2)
+
+        rm = self._get_report_manager()
+        if rm:
+            report_id = report_type
+            if report_type not in rm.reports and report_type in REPORT_TYPES:
+                report_id = REPORT_TYPES[report_type].get('id', report_type)
+
+            report_instance = rm.get_report(report_id)
+            if report_instance:
+                try:
+                    return report_instance.export(report_data, format=format, **kwargs)
+                except Exception as e:
+                    print(f"[DataManager] Export error: {e}")
+
+        # Fallback plain text representation
+        return f"Report: {report_data.get('report_name', report_type)}\nGenerated: {datetime.now().isoformat()}\n"
+
+    def _generate_generic_report(self, report_type: str, tasks: List[Any], **kwargs) -> Dict[str, Any]:
+        """Generate a generic report fallback"""
         return {
             'report_name': f'{report_type.title()} Report',
+            'report_type': report_type,
             'total_tasks': len(tasks),
             'generated_at': datetime.now().isoformat()
         }

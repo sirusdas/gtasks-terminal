@@ -55,6 +55,12 @@ def tasks_page():
     return render_dashboard(view='tasks')
 
 
+@dashboard.route(f'{BASE_PATH}/reports')
+def reports_page():
+    """Reports page - shows reports and analytics view"""
+    return render_dashboard(view='reports')
+
+
 @dashboard.route(f'{BASE_PATH}/favicon.ico')
 def favicon():
     """Serve favicon as SVG data URI"""

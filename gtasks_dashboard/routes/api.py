@@ -1,10 +1,19 @@
 """
 API Routes
 """
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, Response
+from typing import Optional
 from services.data_manager import DataManager
+import os
+import sys
+from pathlib import Path
 import threading
 import traceback
+
+# Ensure gtasks_cli package is importable
+_cli_src_path = Path(__file__).resolve().parent.parent.parent / 'gtasks_cli' / 'src'
+if str(_cli_src_path) not in sys.path:
+    sys.path.insert(0, str(_cli_src_path))
 
 api = Blueprint('api', __name__)
 data_manager = DataManager()
@@ -16,6 +25,9 @@ _dashboard_state = {
     'current_account': None,
     'stats': {}
 }
+
+# Cache tracking for database file modification times
+_last_db_mtimes = {}
 
 # Background sync lock to prevent concurrent Google sync
 _sync_lock = threading.Lock()
@@ -208,6 +220,55 @@ def _sync_task_to_turso_background(task_id: str, account_id: str):
         traceback.print_exc()
 
 
+def _get_account_db_path(account_id: Optional[str] = None) -> Optional[Path]:
+    """Get the path to the sqlite database for the given account"""
+    gtasks_path = data_manager.gtasks_path or (Path.home() / '.gtasks')
+    if account_id and account_id not in ('demo', 'default'):
+        acc_db = gtasks_path / account_id / 'tasks.db'
+        if acc_db.exists():
+            return acc_db
+    root_db = gtasks_path / 'tasks.db'
+    if root_db.exists():
+        return root_db
+    return None
+
+
+def ensure_cache_fresh(account_id: Optional[str] = None):
+    """Ensure in-memory task cache is up to date with the sqlite database file."""
+    if not account_id:
+        account_id = _dashboard_state.get('current_account')
+    
+    # Check CLI current account file for switches
+    try:
+        current_account_file = Path.home() / '.gtasks' / '.current_account'
+        if current_account_file.exists():
+            cli_acc = current_account_file.read_text().strip()
+            if cli_acc and cli_acc != _dashboard_state.get('current_account'):
+                if any(a.id == cli_acc for a in _dashboard_state.get('accounts', [])):
+                    _dashboard_state['current_account'] = cli_acc
+                    if not account_id:
+                        account_id = cli_acc
+    except Exception:
+        pass
+
+    db_path = _get_account_db_path(account_id)
+    if not db_path or not db_path.exists():
+        return
+
+    try:
+        current_mtime = os.path.getmtime(db_path)
+        cache_key = account_id or '__default__'
+        last_mtime = _last_db_mtimes.get(cache_key, 0)
+
+        if current_mtime > last_mtime or account_id not in _dashboard_state['tasks']:
+            print(f'[Cache] Database modified for account {account_id} (mtime {current_mtime} > {last_mtime}), reloading tasks...')
+            tasks = data_manager.load_tasks_for_account(account_id)
+            _dashboard_state['tasks'][account_id] = [t.to_dict() for t in tasks]
+            _last_db_mtimes[cache_key] = current_mtime
+    except Exception as e:
+        print(f'[Cache] Error checking db mtime: {e}')
+
+
 def refresh_dashboard_cache():
     """Refresh the in-memory dashboard cache from database"""
     print('[Cache] Refreshing dashboard cache...')
@@ -233,6 +294,9 @@ def refresh_dashboard_cache():
     for account in _dashboard_state['accounts']:
         tasks = data_manager.load_tasks_for_account(account.id)
         _dashboard_state['tasks'][account.id] = [t.to_dict() for t in tasks]
+        db_path = _get_account_db_path(account.id)
+        if db_path and db_path.exists():
+            _last_db_mtimes[account.id or '__default__'] = os.path.getmtime(db_path)
     
     print(f'[Cache] ✅ Cache refreshed with {len(_dashboard_state.get("tasks", {}))} accounts')
     return True
@@ -264,6 +328,8 @@ def api_refresh_cache():
 def get_current_tasks():
     """Get tasks for current account"""
     current = _dashboard_state.get('current_account')
+    ensure_cache_fresh(current)
+    current = _dashboard_state.get('current_account')
     if current:
         return _dashboard_state['tasks'].get(current, [])
     return []
@@ -272,6 +338,8 @@ def get_current_tasks():
 @api.route('/data')
 def api_data():
     """Get all dashboard data"""
+    current_account_id = _dashboard_state.get('current_account')
+    ensure_cache_fresh(current_account_id)
     current_account_id = _dashboard_state.get('current_account')
     tasks = _dashboard_state['tasks'].get(current_account_id, []) if current_account_id else []
     
@@ -358,18 +426,17 @@ def api_data():
 @api.route('/tasks')
 def api_tasks():
     """Get tasks with optional filters"""
-    tasks = get_current_tasks()
+    account_id = request.args.get('account_id')
+    if account_id:
+        ensure_cache_fresh(account_id)
+        tasks = _dashboard_state['tasks'].get(account_id, [])
+    else:
+        tasks = get_current_tasks()
     
     # Apply filters
     status = request.args.get('status')
     priority = request.args.get('priority')
     search = request.args.get('search')
-    account_id = request.args.get('account_id')
-    
-    if account_id and account_id in _dashboard_state['tasks']:
-        tasks = _dashboard_state['tasks'][account_id]
-    elif not account_id:
-        tasks = get_current_tasks()
     
     if status:
         tasks = [t for t in tasks if t.get('status') == status]
@@ -461,6 +528,439 @@ def api_create_account():
             'success': False,
             'error': f'Error creating account: {str(e)}'
         }), 500
+
+
+@api.route('/auth/google/start', methods=['GET', 'POST'])
+def api_auth_google_start():
+    """
+    Generate Google OAuth authorization URL for adding or connecting an account.
+    Returns the auth URL so the app can launch the browser, or redirects directly.
+    """
+    from pathlib import Path
+    import urllib.parse
+    import json
+    
+    data = request.get_json(silent=True) or {}
+    account_name = request.args.get('account_name') or data.get('account_name') or 'Personal'
+    
+    # Dynamically resolve redirect_uri from incoming Host header if not specified or set to auto
+    redirect_uri = request.args.get('redirect_uri') or data.get('redirect_uri')
+    if not redirect_uri or redirect_uri in ('auto', 'default'):
+        # Dynamically build using current server host (supports localhost, LAN IP, or public domain HTTPS)
+        base_host = request.host_url.rstrip('/')
+        redirect_uri = f"{base_host}/api/auth/google/callback"
+
+    # Master credentials file
+    cred_file = Path.home() / '.gtasks' / 'credentials.json'
+    if not cred_file.exists():
+        return jsonify({
+            'success': False,
+            'error': 'Google OAuth credentials.json not found on server.'
+        }), 404
+
+    try:
+        with open(cred_file, 'r') as f:
+            cred_data = json.load(f)
+        client_info = cred_data.get('installed') or cred_data.get('web') or {}
+        client_id = client_info.get('client_id')
+        
+        if not client_id:
+            return jsonify({'success': False, 'error': 'Invalid credentials.json: client_id missing'}), 400
+
+        scopes = [
+            'https://www.googleapis.com/auth/tasks',
+            'https://www.googleapis.com/auth/tasks.readonly',
+            'openid',
+            'email',
+            'profile'
+        ]
+
+        # Use Google's standard OAuth2 auth endpoint
+        auth_params = {
+            'client_id': client_id,
+            'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob' if redirect_uri == 'oob' else redirect_uri,
+            'response_type': 'code',
+            'scope': ' '.join(scopes),
+            'access_type': 'offline',
+            'prompt': 'consent',
+            'state': account_name
+        }
+
+        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(auth_params)}"
+
+        return jsonify({
+            'success': True,
+            'auth_url': auth_url,
+            'account_name': account_name,
+            'redirect_uri': redirect_uri,
+            'client_id': client_id
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/auth/google/callback', methods=['GET', 'POST'])
+def api_auth_google_callback():
+    """
+    Callback endpoint that Google redirects to after user approves permissions.
+    Exchanges code for tokens and renders a user-friendly completion page.
+    """
+    from flask import Response
+    import requests
+    from pathlib import Path
+    import json
+    import sqlite3
+
+    code = request.args.get('code')
+    account_name = request.args.get('state') or 'Personal'
+    error = request.args.get('error')
+
+    if error:
+        return Response(f"""<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Auth Cancelled</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;background:#1e1e2e;color:#fff;">
+  <h2 style="color:#ef4444;">Authorization Cancelled</h2>
+  <p>{error}</p>
+  <p><a href="/" style="color:#3b82f6;">Return to Dashboard</a></p>
+</body>
+</html>""", mimetype='text/html')
+
+    if not code:
+        return Response("Missing authorization code from Google.", status=400)
+
+    # Reconstruct dynamic redirect_uri matching what was sent
+    base_host = request.host_url.rstrip('/')
+    redirect_uri = f"{base_host}/api/auth/google/callback"
+
+    cred_file = Path.home() / '.gtasks' / 'credentials.json'
+    if not cred_file.exists():
+        return Response("Server credentials.json not found", status=500)
+
+    try:
+        with open(cred_file, 'r') as f:
+            cred_data = json.load(f)
+        client_info = cred_data.get('installed') or cred_data.get('web') or {}
+        client_id = client_info.get('client_id')
+        client_secret = client_info.get('client_secret')
+
+        # Exchange code for tokens
+        token_res = requests.post('https://oauth2.googleapis.com/token', data={
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code'
+        })
+
+        token_json = token_res.json()
+        if 'error' in token_json:
+            return Response(f"Token exchange error: {token_json.get('error_description', token_json['error'])}", status=400)
+
+        # Create account folder
+        account_id = account_name.lower().replace(' ', '_')
+        acc_dir = Path.home() / '.gtasks' / (account_id if account_id != 'default' else '')
+        acc_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save token.json
+        token_save_path = acc_dir / 'token.json'
+        token_data_to_save = {
+            'token': token_json.get('access_token'),
+            'refresh_token': token_json.get('refresh_token'),
+            'token_uri': 'https://oauth2.googleapis.com/token',
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'scopes': ['https://www.googleapis.com/auth/tasks']
+        }
+        with open(token_save_path, 'w') as f:
+            json.dump(token_data_to_save, f, indent=2)
+
+        # Copy credentials.json
+        with open(acc_dir / 'credentials.json', 'w') as f:
+            json.dump(cred_data, f, indent=2)
+
+        # Initialize SQLite database
+        db_path = acc_dir / 'tasks.db'
+        if not db_path.exists():
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    notes TEXT,
+                    priority TEXT DEFAULT 'medium',
+                    status TEXT DEFAULT 'pending',
+                    due TEXT,
+                    tags TEXT,
+                    created_at TEXT,
+                    modified_at TEXT,
+                    completed_at TEXT,
+                    list_title TEXT
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS task_lists (
+                    task_id TEXT,
+                    list_name TEXT,
+                    PRIMARY KEY (task_id, list_name)
+                )
+            ''')
+            conn.commit()
+            conn.close()
+
+        # Refresh cache and trigger initial sync
+        refresh_dashboard_cache()
+        threading.Thread(target=lambda: _sync_initial_pull(account_id), daemon=True).start()
+
+        # Render clean mobile-friendly success landing page
+        return Response(f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GTasks - Account Connected</title>
+  <style>
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }}
+    .card {{
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 440px;
+      text-align: center;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }}
+    .icon {{
+      font-size: 54px;
+      color: #10b981;
+      margin-bottom: 16px;
+    }}
+    h2 {{ margin: 0 0 12px; font-size: 24px; font-weight: 700; }}
+    p {{ color: #94a3b8; line-height: 1.5; margin: 0 0 24px; }}
+    .btn {{
+      display: inline-block;
+      background: #3b82f6;
+      color: #fff;
+      text-decoration: none;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }}
+    .btn:hover {{ background: #2563eb; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">✓</div>
+    <h2>Account Connected!</h2>
+    <p>Google Tasks account <strong>{account_name}</strong> was linked successfully to the server. You can now close this tab and return to the GTasks app.</p>
+    <a href="/" class="btn">Open Web Dashboard</a>
+  </div>
+</body>
+</html>""", mimetype='text/html')
+
+    except Exception as e:
+        return Response(f"Internal error completing OAuth: {str(e)}", status=500)
+
+
+@api.route('/auth/tokens/import', methods=['POST'])
+def api_auth_tokens_import():
+    """
+    Directly import token credentials JSON from client to remote server.
+    Allows zero-browser API provisioning.
+    """
+    from pathlib import Path
+    import json
+    import sqlite3
+
+    data = request.get_json() or {}
+    account_name = data.get('account_name', 'Personal').strip()
+    token_data = data.get('token_data')
+
+    if not token_data or not isinstance(token_data, dict):
+        return jsonify({'success': False, 'error': 'token_data JSON object is required'}), 400
+
+    account_id = account_name.lower().replace(' ', '_')
+    acc_dir = Path.home() / '.gtasks' / (account_id if account_id != 'default' else '')
+    acc_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(acc_dir / 'token.json', 'w') as f:
+        json.dump(token_data, f, indent=2)
+
+    # Master credentials copy
+    cred_file = Path.home() / '.gtasks' / 'credentials.json'
+    if cred_file.exists():
+        import shutil
+        shutil.copy(cred_file, acc_dir / 'credentials.json')
+
+    # Seed SQLite database
+    db_path = acc_dir / 'tasks.db'
+    if not db_path.exists():
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, notes TEXT, priority TEXT, status TEXT, due TEXT, tags TEXT, created_at TEXT, modified_at TEXT, completed_at TEXT, list_title TEXT)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS task_lists (task_id TEXT, list_name TEXT, PRIMARY KEY (task_id, list_name))''')
+        conn.commit()
+        conn.close()
+
+    refresh_dashboard_cache()
+    threading.Thread(target=lambda: _sync_initial_pull(account_id), daemon=True).start()
+
+    return jsonify({'success': True, 'account_id': account_id, 'message': f"Tokens imported successfully for '{account_name}'"})
+
+
+@api.route('/auth/google/submit-code', methods=['POST'])
+def api_auth_google_submit_code():
+    """
+    Exchange an authorization code for tokens and provision the account.
+    Supports in-app paste of code (oob) or direct redirect code submission.
+    """
+    import os
+    import requests
+    from pathlib import Path
+    import json
+    import sqlite3
+
+    data = request.get_json() or {}
+    code = data.get('code', '').strip()
+    account_name = data.get('account_name', 'Personal').strip()
+    
+    # Auto-resolve redirect_uri matching incoming Host if not given
+    redirect_uri = data.get('redirect_uri')
+    if not redirect_uri or redirect_uri in ('auto', 'default'):
+        base_host = request.host_url.rstrip('/')
+        redirect_uri = f"{base_host}/api/auth/google/callback"
+
+    if not code:
+        return jsonify({'success': False, 'error': 'Authorization code is required'}), 400
+
+    cred_file = Path.home() / '.gtasks' / 'credentials.json'
+    if not cred_file.exists():
+        return jsonify({'success': False, 'error': 'credentials.json not found'}), 404
+
+    try:
+        with open(cred_file, 'r') as f:
+            cred_data = json.load(f)
+        client_info = cred_data.get('installed') or cred_data.get('web') or {}
+        client_id = client_info.get('client_id')
+        client_secret = client_info.get('client_secret')
+
+        # Exchange code for tokens
+        token_res = requests.post('https://oauth2.googleapis.com/token', data={
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob' if redirect_uri == 'oob' else redirect_uri,
+            'grant_type': 'authorization_code'
+        })
+
+        token_json = token_res.json()
+        if 'error' in token_json:
+            return jsonify({'success': False, 'error': token_json.get('error_description', token_json['error'])}), 400
+
+        # Create account folder
+        account_id = account_name.lower().replace(' ', '_')
+        acc_dir = Path.home() / '.gtasks' / (account_id if account_id != 'default' else '')
+        acc_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save token.json
+        token_save_path = acc_dir / 'token.json'
+        token_data_to_save = {
+            'token': token_json.get('access_token'),
+            'refresh_token': token_json.get('refresh_token'),
+            'token_uri': 'https://oauth2.googleapis.com/token',
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'scopes': ['https://www.googleapis.com/auth/tasks']
+        }
+        with open(token_save_path, 'w') as f:
+            json.dump(token_data_to_save, f, indent=2)
+
+        # Copy credentials.json
+        with open(acc_dir / 'credentials.json', 'w') as f:
+            json.dump(cred_data, f, indent=2)
+
+        # Initialize SQLite database if not present
+        db_path = acc_dir / 'tasks.db'
+        if not db_path.exists():
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    notes TEXT,
+                    priority TEXT DEFAULT 'medium',
+                    status TEXT DEFAULT 'pending',
+                    due TEXT,
+                    tags TEXT,
+                    created_at TEXT,
+                    modified_at TEXT,
+                    completed_at TEXT,
+                    list_title TEXT
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS task_lists (
+                    task_id TEXT,
+                    list_name TEXT,
+                    PRIMARY KEY (task_id, list_name)
+                )
+            ''')
+            conn.commit()
+            conn.close()
+
+        # Refresh cache and trigger initial sync
+        refresh_dashboard_cache()
+
+        # Trigger background pull
+        threading.Thread(target=lambda: _sync_initial_pull(account_id), daemon=True).start()
+
+        return jsonify({
+            'success': True,
+            'account_id': account_id,
+            'message': f"Account '{account_name}' connected and initialized successfully!"
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _sync_initial_pull(account_name: str):
+    """Background helper to pull initial tasks for new account"""
+    try:
+        import sys
+        from pathlib import Path
+        gtasks_cli_path = Path(__file__).parent.parent.parent / 'gtasks_cli' / 'src'
+        if str(gtasks_cli_path) not in sys.path:
+            sys.path.insert(0, str(gtasks_cli_path))
+        from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
+        cli_acc = None if account_name in ('default', 'personal') else account_name
+        client = GoogleTasksClient(account_name=cli_acc)
+        if client.connect(interactive=False):
+            client.sync_tasks()
+            refresh_dashboard_cache()
+            print(f"[OAuth Onboarding] Initial task sync completed for {account_name}")
+    except Exception as e:
+        print(f"[OAuth Onboarding] Initial pull warning: {e}")
 
 
 @api.route('/stats')
@@ -584,6 +1084,11 @@ def api_create_task():
         'created_at': now_iso,
         'modified_at': now_iso,
         'tags': extracted_tags,
+        'hybrid_tags': {
+            'bracket': list(dict.fromkeys(extracted_tags)),
+            'hash': [],
+            'user': []
+        },
         'dependencies': []
     }
 
@@ -733,6 +1238,9 @@ def update_task(task_id):
     raw_tags = re.findall(r'\[([^\]\r\n]+)\](?!\()', f"{target_task.get('title', '')} {target_task.get('notes', '')}")
     extracted_tags = [t.strip().lower() for t in raw_tags if t.strip() and len(t.strip()) <= 40 and not any(c in t for c in '{}"\':,\r\n\t')]
     target_task['tags'] = extracted_tags
+    if 'hybrid_tags' not in target_task or not isinstance(target_task['hybrid_tags'], dict):
+        target_task['hybrid_tags'] = {'bracket': [], 'hash': [], 'user': []}
+    target_task['hybrid_tags']['bracket'] = list(dict.fromkeys(extracted_tags))
 
     target_task['modified_at'] = datetime.now().isoformat()
     new_list_title = target_task.get('list_title', old_list_title)
@@ -878,6 +1386,195 @@ def api_health():
 
 
 # ============================================
+# SETTINGS & CONFIGURATION ENDPOINTS
+# ============================================
+
+@api.route('/settings', methods=['GET'])
+def api_get_settings():
+    """Get merged configuration and feature flags"""
+    try:
+        from gtasks_cli.storage.config_manager import ConfigManager
+        from config import FEATURE_FLAGS
+
+        account = request.args.get('account') or _dashboard_state.get('current_account')
+        cli_account = _resolve_cli_account(account)
+        cm = ConfigManager(account_name=cli_account)
+
+        # Clone config dict
+        cfg = dict(cm.config)
+        # Mask sensitive email password if present
+        if 'email' in cfg and isinstance(cfg['email'], dict):
+            email_cfg = dict(cfg['email'])
+            if email_cfg.get('password'):
+                email_cfg['password'] = '••••••••'
+            cfg['email'] = email_cfg
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'config': cfg,
+                'feature_flags': FEATURE_FLAGS,
+                'config_path': str(cm.config_path)
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@api.route('/settings', methods=['POST'])
+def api_update_settings():
+    """Update configuration settings in config.yaml"""
+    try:
+        from gtasks_cli.storage.config_manager import ConfigManager
+        data = request.get_json() or {}
+        account = data.get('account') or _dashboard_state.get('current_account')
+        cli_account = _resolve_cli_account(account)
+        cm = ConfigManager(account_name=cli_account)
+
+        updates = data.get('settings', {})
+        for key, val in updates.items():
+            # If email.password is masked, skip updating it
+            if key in ('email.password', 'password') and str(val).startswith('•••'):
+                continue
+            cm.set(key, val)
+
+        # Update FEATURE_FLAGS in memory if provided
+        feature_updates = data.get('feature_flags', {})
+        if feature_updates:
+            from config import FEATURE_FLAGS
+            for fk, fv in feature_updates.items():
+                if fk in FEATURE_FLAGS:
+                    FEATURE_FLAGS[fk] = bool(fv)
+
+        return jsonify({
+            'success': True,
+            'message': 'Settings updated successfully',
+            'data': cm.config
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============================================
+# ADVANCED DEBUGGER & LOGS ENDPOINTS
+# ============================================
+
+@api.route('/debug/diagnostics', methods=['GET'])
+def api_debug_diagnostics():
+    """Run comprehensive system diagnostics"""
+    import os
+    import sys
+    import sqlite3
+    import platform
+    from pathlib import Path
+    from gtasks_cli.utils.logger import get_log_file_path
+
+    account = request.args.get('account') or _dashboard_state.get('current_account')
+    cli_account = _resolve_cli_account(account)
+
+    db_path = Path.home() / '.gtasks' / (f"{cli_account}/tasks.db" if cli_account else "tasks.db")
+    log_path = get_log_file_path()
+
+    db_info = {'exists': db_path.exists(), 'path': str(db_path), 'size_bytes': 0, 'tables': {}, 'healthy': False}
+    if db_path.exists():
+        try:
+            db_info['size_bytes'] = db_path.stat().st_size
+            conn = sqlite3.connect(str(db_path))
+            cur = conn.cursor()
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tables = [row[0] for row in cur.fetchall()]
+            for tbl in tables:
+                try:
+                    cur.execute(f"SELECT COUNT(*) FROM {tbl};")
+                    db_info['tables'][tbl] = cur.fetchone()[0]
+                except Exception:
+                    db_info['tables'][tbl] = 'error'
+            
+            # Quick integrity check
+            cur.execute("PRAGMA quick_check;")
+            check = cur.fetchone()
+            db_info['healthy'] = (check and check[0] == 'ok')
+            conn.close()
+        except Exception as err:
+            db_info['error'] = str(err)
+
+    # Memory state summary
+    accounts_loaded = list(_dashboard_state.get('tasks', {}).keys())
+    tasks_count = sum(len(v) for v in _dashboard_state.get('tasks', {}).values())
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'system': {
+                'os': platform.system(),
+                'platform': platform.platform(),
+                'python_version': sys.version.split()[0],
+                'pid': os.getpid()
+            },
+            'database': db_info,
+            'log_file': {
+                'path': str(log_path),
+                'exists': log_path.exists(),
+                'size_bytes': log_path.stat().st_size if log_path.exists() else 0
+            },
+            'dashboard_state': {
+                'current_account': account,
+                'resolved_cli_account': cli_account,
+                'cached_accounts': accounts_loaded,
+                'cached_tasks_total': tasks_count
+            }
+        }
+    })
+
+
+@api.route('/debug/logs', methods=['GET'])
+def api_debug_logs():
+    """Retrieve recent application logs with filtering"""
+    from gtasks_cli.utils.logger import get_recent_logs, get_log_file_path
+    limit = int(request.args.get('limit', 150))
+    level = request.args.get('level')
+    search = request.args.get('search')
+
+    logs = get_recent_logs(lines=limit, level=level, search=search)
+    log_file = get_log_file_path()
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'logs': logs,
+            'total_lines': len(logs),
+            'file_size': log_file.stat().st_size if log_file.exists() else 0
+        }
+    })
+
+
+@api.route('/debug/toggle', methods=['POST'])
+def api_debug_toggle():
+    """Dynamically set the logging level"""
+    from gtasks_cli.utils.logger import set_global_log_level
+    data = request.get_json() or {}
+    level = data.get('level', 'DEBUG').upper()
+    active_level = set_global_log_level(level)
+
+    return jsonify({
+        'success': True,
+        'active_level': active_level,
+        'message': f"Log level switched to {active_level}"
+    })
+
+
+@api.route('/debug/clear-logs', methods=['POST'])
+def api_debug_clear_logs():
+    """Clear application logs"""
+    from gtasks_cli.utils.logger import clear_logs
+    success = clear_logs()
+    return jsonify({
+        'success': success,
+        'message': 'Logs cleared successfully' if success else 'Failed to clear logs'
+    })
+
+
+# ============================================
 # ENHANCED API ENDPOINTS (Consolidated)
 # ============================================
 
@@ -929,33 +1626,6 @@ def api_tasks_due_today():
         'success': True,
         'data': [t.to_dict() for t in due_today_tasks]
     })
-
-
-@api.route('/settings', methods=['GET'])
-def api_get_settings():
-    """Get dashboard settings"""
-    return jsonify({
-        'success': True,
-        'data': data_manager.dashboard_state.get('settings', {})
-    })
-
-
-@api.route('/settings', methods=['POST'])
-def api_update_settings():
-    """Update dashboard settings"""
-    data = request.get_json()
-    try:
-        updated_settings = data_manager.update_settings(data)
-        return jsonify({
-            'success': True,
-            'data': updated_settings,
-            'message': 'Settings updated successfully'
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'Error updating settings: {str(e)}'
-        }), 500
 
 
 @api.route('/tasks/<task_id>/delete', methods=['POST'])
@@ -1038,10 +1708,11 @@ def api_report_types():
 @api.route('/reports/generate', methods=['POST'])
 def api_generate_report():
     """Generate a report"""
-    data = request.get_json()
+    data = request.get_json() or {}
     report_type = data.get('report_type')
     filters = data.get('filters', {})
     parameters = data.get('parameters', {})
+    account_id = data.get('account') or filters.get('account') or _dashboard_state.get('current_account')
     
     if not report_type:
         return jsonify({
@@ -1050,11 +1721,30 @@ def api_generate_report():
         }), 400
     
     try:
-        # Get filtered tasks
-        filtered_tasks = data_manager.get_filtered_tasks(filters)
-        
+        # Load tasks for specific account or all accounts
+        raw_tasks = []
+        if account_id and account_id != 'all':
+            raw_tasks = _dashboard_state['tasks'].get(account_id, [])
+            if not raw_tasks:
+                # Reload if memory was cold
+                tasks_objs = data_manager.load_tasks_for_account(account_id)
+                raw_tasks = [t.to_dict() for t in tasks_objs]
+        else:
+            for acc_tasks in _dashboard_state['tasks'].values():
+                raw_tasks.extend(acc_tasks)
+
+        # Apply basic filters (list, tags, status) if specified in parameters or filters
+        list_filter = filters.get('list_id') or parameters.get('list_id')
+        if list_filter and list_filter != 'all':
+            raw_tasks = [t for t in raw_tasks if t.get('tasklist_id') == list_filter]
+
+        tag_filter = filters.get('tags') or parameters.get('tags')
+        if tag_filter:
+            tags_to_match = [tag_filter] if isinstance(tag_filter, str) else tag_filter
+            raw_tasks = [t for t in raw_tasks if any(tg in (t.get('tags') or []) for tg in tags_to_match)]
+
         # Generate report
-        report_data = data_manager.generate_report(report_type, filtered_tasks, **parameters)
+        report_data = data_manager.generate_report(report_type, raw_tasks, **parameters)
         
         return jsonify({
             'success': True,
@@ -1062,10 +1752,225 @@ def api_generate_report():
             'message': f'Report {report_type} generated successfully'
         })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'message': f'Error generating report: {str(e)}'
         }), 500
+
+
+@api.route('/reports/export', methods=['POST'])
+def api_export_report():
+    """Export a generated report to csv, json, or txt"""
+    data = request.get_json() or {}
+    report_type = data.get('report_type')
+    report_data = data.get('report_data', {})
+    export_format = data.get('format', 'txt').lower()
+    filename = data.get('filename') or f"{report_type}_report.{export_format}"
+
+    if not report_type or not report_data:
+        return jsonify({
+            'success': False,
+            'message': 'report_type and report_data are required'
+        }), 400
+
+    try:
+        content = data_manager.export_report(report_type, report_data, format=export_format)
+        
+        mimetypes = {
+            'csv': 'text/csv',
+            'json': 'application/json',
+            'txt': 'text/plain'
+        }
+        mimetype = mimetypes.get(export_format, 'text/plain')
+        
+        return Response(
+            content,
+            mimetype=mimetype,
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"'
+            }
+        )
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error exporting report: {str(e)}'
+        }), 500
+
+
+@api.route('/reports/email', methods=['POST'])
+def api_email_report():
+    """Send a generated report via email"""
+    data = request.get_json() or {}
+    report_type = data.get('report_type')
+    report_data = data.get('report_data', {})
+    recipients = data.get('recipients', [])
+    cc = data.get('cc', [])
+    bcc = data.get('bcc', [])
+    subject = data.get('subject')
+
+    if not recipients:
+        return jsonify({
+            'success': False,
+            'message': 'At least one recipient email is required'
+        }), 400
+
+    if not report_data:
+        return jsonify({
+            'success': False,
+            'message': 'report_data is required'
+        }), 400
+
+    try:
+        from gtasks_cli.utils.email_sender import EmailSender
+        sender = EmailSender()
+
+        # Format body content: prefer text export of the report
+        body = data_manager.export_report(report_type or 'report', report_data, format='txt')
+
+        if not subject:
+            report_name = report_data.get('report_name') or report_data.get('title') or (report_type.upper() if report_type else 'Report')
+            subject = f"GTasks Report: {report_name}"
+
+        success = sender.send_email(
+            to_emails=recipients,
+            subject=subject,
+            body=body,
+            html=True,
+            cc_emails=cc,
+            bcc_emails=bcc
+        )
+
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f"Report successfully emailed to {', '.join(recipients if isinstance(recipients, list) else [recipients])}"
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to send email. Please check SMTP configuration or credentials (GTASKS_EMAIL_USER / GTASKS_EMAIL_PASSWORD).'
+            }), 500
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error dispatching email: {str(e)}'
+        }), 500
+
+
+# ============================================
+# NOTIFICATIONS ENDPOINTS
+# ============================================
+
+@api.route('/notifications', methods=['GET'])
+def api_list_notifications():
+    """List notifications with unread counts"""
+    try:
+        from gtasks_cli.notifications.manager import NotificationManager
+        account = request.args.get('account') or _dashboard_state.get('current_account')
+        cli_account = _resolve_cli_account(account)
+        
+        unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+        limit = int(request.args.get('limit', 50))
+
+        nm = NotificationManager(account_name=cli_account)
+        items = nm.list_notifications(unread_only=unread_only, limit=limit)
+        unread_count = nm.get_unread_count()
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'notifications': items,
+                'unread_count': unread_count
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@api.route('/notifications/read', methods=['POST'])
+def api_read_notifications():
+    """Mark a notification or all notifications as read"""
+    try:
+        from gtasks_cli.notifications.manager import NotificationManager
+        data = request.get_json() or {}
+        notif_id = data.get('id')  # If None, marks all as read
+        account = data.get('account') or _dashboard_state.get('current_account')
+        cli_account = _resolve_cli_account(account)
+
+        nm = NotificationManager(account_name=cli_account)
+        success = nm.mark_as_read(notif_id=notif_id)
+
+        return jsonify({
+            'success': success,
+            'message': 'Notifications marked as read' if success else 'Failed to mark as read',
+            'unread_count': nm.get_unread_count()
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@api.route('/notifications/clear', methods=['POST'])
+def api_clear_notifications():
+    """Clear a single notification or all notifications"""
+    try:
+        from gtasks_cli.notifications.manager import NotificationManager
+        data = request.get_json() or {}
+        notif_id = data.get('id')
+        account = data.get('account') or _dashboard_state.get('current_account')
+        cli_account = _resolve_cli_account(account)
+
+        nm = NotificationManager(account_name=cli_account)
+        success = nm.clear(notif_id=notif_id)
+
+        return jsonify({
+            'success': success,
+            'message': 'Notifications cleared' if success else 'Failed to clear notifications',
+            'unread_count': nm.get_unread_count()
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@api.route('/notifications/check', methods=['POST'])
+def api_check_notifications():
+    """Scan tasks and generate alerts for overdue or upcoming deadlines"""
+    try:
+        from gtasks_cli.notifications.manager import NotificationManager
+        data = request.get_json() or {}
+        account = data.get('account') or _dashboard_state.get('current_account')
+        cli_account = _resolve_cli_account(account)
+
+        tasks = []
+        if cli_account and cli_account in _dashboard_state.get('tasks', {}):
+            tasks = _dashboard_state['tasks'][cli_account]
+        else:
+            for acc_tasks in _dashboard_state.get('tasks', {}).values():
+                tasks.extend(acc_tasks)
+
+        if not tasks:
+            tasks_objs = data_manager.load_tasks_for_account(account or 'default')
+            tasks = [t.to_dict() for t in tasks_objs]
+
+        nm = NotificationManager(account_name=cli_account)
+        new_alerts = nm.evaluate_task_alerts(tasks)
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'new_alerts': new_alerts,
+                'unread_count': nm.get_unread_count()
+            },
+            'message': f"Scan completed. Generated {len(new_alerts)} alert(s)."
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 
 @api.route('/filter-tasks', methods=['POST'])
@@ -1157,6 +2062,8 @@ def api_complete_task(task_id):
                         ))
                         conn.commit()
                         conn.close()
+                        if db_path.exists():
+                            _last_db_mtimes[acc_id or '__default__'] = os.path.getmtime(db_path)
                         print(f'[API] Task {task_id} updated in local database')
                 except Exception as e:
                     print(f'[API] Error updating local database: {e}')
@@ -1950,3 +2857,54 @@ def api_remote_load_tasks():
             'success': False,
             'message': f'Error loading tasks from remote: {str(e)}'
         }), 500
+
+
+@api.route('/openapi.json', methods=['GET'])
+def get_openapi_spec():
+    """Serve the OpenAPI 3.0 specification JSON"""
+    import os
+    spec_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'openapi.json')
+    if os.path.exists(spec_path):
+        with open(spec_path, 'r') as f:
+            return Response(f.read(), mimetype='application/json')
+    return jsonify({'error': 'OpenAPI spec not found'}), 404
+
+
+@api.route('/docs', methods=['GET'])
+def swagger_ui():
+    """Interactive Swagger UI Documentation"""
+    swagger_html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GTasks API Documentation (Swagger UI)</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
+    <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.11.0/favicon-32x32.png" sizes="32x32" />
+    <style>
+        html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+        *, *:before, *:after { box-sizing: inherit; }
+        body { margin:0; background: #fafafa; }
+        .topbar { display: none; }
+    </style>
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-standalone-preset.js"></script>
+    <script>
+    window.onload = function() {
+        window.ui = SwaggerUIBundle({
+            url: "/api/openapi.json",
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+            presets: [
+                SwaggerUIBundle.presets.apis,
+                SwaggerUIStandalonePreset
+            ],
+            layout: "StandaloneLayout"
+        });
+    };
+    </script>
+</body>
+</html>"""
+    return Response(swagger_html, mimetype='text/html')

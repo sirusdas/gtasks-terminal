@@ -88,6 +88,7 @@ class Task:
     notes: Optional[str] = None
     created_at: Optional[str] = None
     modified_at: Optional[str] = None
+    completed_at: Optional[str] = None
     hybrid_tags: Optional[HybridTags] = None
     calculated_priority: Optional[str] = None
     project: Optional[str] = None
@@ -133,6 +134,7 @@ class Task:
             notes=data.get('notes'),
             created_at=data.get('created_at'),
             modified_at=data.get('modified_at'),
+            completed_at=data.get('completed_at'),
             hybrid_tags=hybrid,
             calculated_priority=data.get('calculated_priority'),
             project=data.get('project'),
@@ -167,6 +169,7 @@ class Task:
             'notes': self.notes,
             'created_at': self.created_at,
             'modified_at': self.modified_at,
+            'completed_at': self.completed_at,
             'hybrid_tags': hybrid_dict,
             'calculated_priority': self.calculated_priority,
             'project': self.project,

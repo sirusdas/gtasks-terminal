@@ -1,0 +1,1102 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "GTasks Terminal & Dashboard API",
+    "version": "2.0.0",
+    "description": "REST API for GTasks Terminal: Multi-account Task Management, Google Sync, Tags, and Analytics Reports"
+  },
+  "servers": [
+    {
+      "url": "http://gtasks.com",
+      "description": "Portless loopback server"
+    },
+    {
+      "url": "http://localhost:48275",
+      "description": "Direct local dashboard port"
+    }
+  ],
+  "paths": {
+    "/api/data": {
+      "get": {
+        "summary": "GET /api/data",
+        "operationId": "get_api_data_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/refresh": {
+      "post": {
+        "summary": "POST /api/refresh",
+        "operationId": "post_api_refresh_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks": {
+      "get": {
+        "summary": "GET /api/tasks",
+        "operationId": "get_api_tasks_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      },
+      "post": {
+        "summary": "POST /api/tasks",
+        "operationId": "post_api_tasks_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}": {
+      "get": {
+        "summary": "GET /api/tasks/{task_id}",
+        "operationId": "get_get_task_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "summary": "PUT /api/tasks/{task_id}",
+        "operationId": "put_api_get_or_update_task_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts": {
+      "get": {
+        "summary": "GET /api/accounts",
+        "operationId": "get_api_accounts_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/accounts/{account_id}/switch": {
+      "post": {
+        "summary": "POST /api/accounts/{account_id}/switch",
+        "operationId": "post_switch_account_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "summary": "GET /api/stats",
+        "operationId": "get_api_stats_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/hierarchy": {
+      "get": {
+        "summary": "GET /api/hierarchy",
+        "operationId": "get_api_hierarchy_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/hierarchy/filtered": {
+      "get": {
+        "summary": "GET /api/hierarchy/filtered",
+        "operationId": "get_api_hierarchy_filtered_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "GET /api/health",
+        "operationId": "get_api_health_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/complete": {
+      "post": {
+        "summary": "POST /api/tasks/{task_id}/complete",
+        "operationId": "post_api_complete_task_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync/advanced": {
+      "post": {
+        "summary": "POST /api/sync/advanced",
+        "operationId": "post_api_advanced_sync_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync/progress": {
+      "get": {
+        "summary": "GET /api/sync/progress",
+        "operationId": "get_api_sync_progress_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/sync/complete": {
+      "post": {
+        "summary": "POST /api/sync/complete",
+        "operationId": "post_api_sync_complete_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync/cancel": {
+      "post": {
+        "summary": "POST /api/sync/cancel",
+        "operationId": "post_api_sync_cancel_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync/status": {
+      "get": {
+        "summary": "GET /api/sync/status",
+        "operationId": "get_api_sync_status_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/remote/status": {
+      "get": {
+        "summary": "GET /api/remote/status",
+        "operationId": "get_api_remote_status_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/remote/databases": {
+      "get": {
+        "summary": "GET /api/remote/databases",
+        "operationId": "get_api_remote_databases_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      },
+      "post": {
+        "summary": "POST /api/remote/databases",
+        "operationId": "post_api_add_remote_database_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/remote/databases/{db_id}": {
+      "delete": {
+        "summary": "DELETE /api/remote/databases/{db_id}",
+        "operationId": "delete_api_remove_remote_database_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "db_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/remote/sync": {
+      "post": {
+        "summary": "POST /api/remote/sync",
+        "operationId": "post_api_remote_sync_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/remote/push": {
+      "post": {
+        "summary": "POST /api/remote/push",
+        "operationId": "post_api_remote_push_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/remote/pull": {
+      "post": {
+        "summary": "POST /api/remote/pull",
+        "operationId": "post_api_remote_pull_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/remote/sync-command": {
+      "post": {
+        "summary": "POST /api/remote/sync-command",
+        "operationId": "post_api_remote_sync_command_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/remote/tasks": {
+      "get": {
+        "summary": "GET /api/remote/tasks",
+        "operationId": "get_api_remote_load_tasks_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/account-types": {
+      "get": {
+        "summary": "GET /api/account-types",
+        "operationId": "get_api_account_types_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/available-tags": {
+      "get": {
+        "summary": "GET /api/available-tags",
+        "operationId": "get_api_available_tags_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/priority-stats": {
+      "get": {
+        "summary": "GET /api/priority-stats",
+        "operationId": "get_api_priority_stats_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/tags/parse-filter": {
+      "post": {
+        "summary": "POST /api/tags/parse-filter",
+        "operationId": "post_api_parse_tag_filter_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/due-today": {
+      "get": {
+        "summary": "GET /api/tasks/due-today",
+        "operationId": "get_api_tasks_due_today_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "summary": "GET /api/settings",
+        "operationId": "get_api_get_settings_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      },
+      "post": {
+        "summary": "POST /api/settings",
+        "operationId": "post_api_update_settings_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/delete": {
+      "post": {
+        "summary": "POST /api/tasks/{task_id}/delete",
+        "operationId": "post_api_delete_task_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/restore": {
+      "post": {
+        "summary": "POST /api/tasks/{task_id}/restore",
+        "operationId": "post_api_restore_task_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/deleted-tasks": {
+      "get": {
+        "summary": "GET /api/deleted-tasks",
+        "operationId": "get_api_deleted_tasks_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/reports/types": {
+      "get": {
+        "summary": "GET /api/reports/types",
+        "operationId": "get_api_report_types_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/reports/generate": {
+      "post": {
+        "summary": "POST /api/reports/generate",
+        "operationId": "post_api_generate_report_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/export": {
+      "post": {
+        "summary": "POST /api/reports/export",
+        "operationId": "post_api_export_report_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/filter-tasks": {
+      "post": {
+        "summary": "POST /api/filter-tasks",
+        "operationId": "post_api_filter_tasks_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/updates/last": {
+      "get": {
+        "summary": "GET /api/updates/last",
+        "operationId": "get_api_last_update_root",
+        "tags": [
+          "default"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request / validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    }
+  }
+}

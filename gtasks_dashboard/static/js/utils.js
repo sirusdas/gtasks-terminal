@@ -160,16 +160,124 @@ export function getCompactDateDisplay(task) {
 }
 
 /**
+ * Splits raw task notes/description into clean human notes and tags array.
+ * Looks for the divider:
+ * ---
+ * [tag1][tag2]...
+ * at the bottom of the notes.
+ * @param {string} rawText
+ * @returns {{ cleanNotes: string, tags: string[] }}
+ */
+export function splitNotesAndTags(rawText) {
+    if (!rawText) return { cleanNotes: '', tags: [] };
+    const str = String(rawText);
+    
+    // Helper to extract clean unique valid bracket tags from a text chunk
+    const extractTags = (chunk) => {
+        const bracketRegex = /\[([^\]\r\n]+)\]/g;
+        const result = [];
+        let m;
+        while ((m = bracketRegex.exec(chunk)) !== null) {
+            const tag = m[1].trim();
+            if (tag && !result.includes(tag) && isValidTag(tag)) {
+                result.push(tag);
+            }
+        }
+        return result;
+    };
+
+    // Case 1: Divider format (--- followed strictly by bracket tags at the end)
+    const dividerRegex = /(?:^|\r?\n)[ \t]*---[ \t]*(?:\r?\n)((?:[ \t]*(?:\[[^\]\r\n]+\])[\s]*)+)$/;
+    const dividerMatch = str.match(dividerRegex);
+    if (dividerMatch) {
+        const extractedTags = extractTags(dividerMatch[1]);
+        if (extractedTags.length > 0) {
+            const clean = str.substring(0, dividerMatch.index).replace(/[\r\n]+$/, '');
+            return {
+                cleanNotes: clean,
+                tags: extractedTags
+            };
+        }
+    }
+
+    // Case 2: Legacy record where the entire notes text is solely bracket tags (e.g. "[my][p1]")
+    const pureTagsRegex = /^(?:[ \t]*(?:\[[^\]\r\n]+\])[ \t]*)+$/;
+    if (pureTagsRegex.test(str.trim())) {
+        const extractedTags = extractTags(str);
+        if (extractedTags.length > 0) {
+            return {
+                cleanNotes: '',
+                tags: extractedTags
+            };
+        }
+    }
+
+    // Case 3: Legacy record where notes end with a trailing block of bracket tags preceded by newline(s)
+    const trailingTagsRegex = /(?:\r?\n)+((?:[ \t]*(?:\[[^\]\r\n]+\])[ \t]*)+)$/;
+    const trailingMatch = str.match(trailingTagsRegex);
+    if (trailingMatch) {
+        const extractedTags = extractTags(trailingMatch[1]);
+        if (extractedTags.length > 0) {
+            const clean = str.substring(0, trailingMatch.index).replace(/[\r\n]+$/, '');
+            return {
+                cleanNotes: clean,
+                tags: extractedTags
+            };
+        }
+    }
+    
+    return {
+        cleanNotes: str,
+        tags: []
+    };
+}
+
+/**
+ * Combines clean notes and tags with a trailing '---' divider.
+ * Format:
+ * <cleanNotes>
+ *
+ * ---
+ * [tag1][tag2]
+ *
+ * @param {string} cleanNotes
+ * @param {string[]} tags
+ * @returns {string}
+ */
+export function combineNotesAndTags(cleanNotes, tags = []) {
+    const clean = (cleanNotes || '').trim();
+    const cleanTags = (tags || [])
+        .map(t => String(t).trim().replace(/^\[|\]$/g, '').replace(/^#/, ''))
+        .filter(t => t.length > 0 && isValidTag(t));
+    const uniqueTags = Array.from(new Set(cleanTags));
+    
+    if (uniqueTags.length === 0) {
+        return clean;
+    }
+    
+    const tagsLine = uniqueTags.map(t => `[${t}]`).join('');
+    
+    if (!clean) {
+        return `---\n${tagsLine}`;
+    }
+    
+    return `${clean}\n\n---\n${tagsLine}`;
+}
+
+/**
  * Generate notes section HTML for a task
  * @param {Object} task - The task object
  * @returns {string} - The notes section HTML
  */
 export function getNotesSection(task) {
-    const notes = task.notes || task.description || '';
-    if (!notes) return '';
+    const rawNotes = task.notes || task.description || '';
+    if (!rawNotes) return '';
     
-    const truncated = notes.length > 100;
-    const fullContent = notes.split('\n').map(line => line.trim()).filter(line => line).join('<br>');
+    const { cleanNotes } = splitNotesAndTags(rawNotes);
+    if (!cleanNotes || !cleanNotes.trim()) return '';
+    
+    const truncated = cleanNotes.length > 100;
+    const fullContent = cleanNotes.split('\n').map(line => line.trim()).filter(line => line).join('<br>');
     
     // Only show toggle button when notes are truncated
     if (!truncated) {
@@ -213,7 +321,7 @@ export function isValidTag(tag) {
 export function getTagsDisplay(task) {
     const rawTags = [];
     
-    // Add bracket tags
+    // Add bracket tags from hybrid_tags
     if (task.hybrid_tags && task.hybrid_tags.bracket) {
         rawTags.push(...task.hybrid_tags.bracket);
     }
@@ -232,11 +340,19 @@ export function getTagsDisplay(task) {
     if (task.tags) {
         rawTags.push(...task.tags);
     }
+
+    // Extract any footer tags from notes
+    const rawNotes = task.notes || task.description || '';
+    if (rawNotes) {
+        const { tags: footerTags } = splitNotesAndTags(rawNotes);
+        rawTags.push(...footerTags);
+    }
     
-    const tags = rawTags.filter(isValidTag);
-    if (tags.length === 0) return '';
+    // Deduplicate and filter
+    const uniqueTags = Array.from(new Set(rawTags.filter(isValidTag)));
+    if (uniqueTags.length === 0) return '';
     
-    const tagsHtml = tags.map(tag => `<span class="task-tag">[${tag}]</span>`).join(' ');
+    const tagsHtml = uniqueTags.map(tag => `<span class="task-tag">[${tag}]</span>`).join(' ');
     return `<div class="task-tags">${tagsHtml}</div>`;
 }
 
@@ -257,8 +373,14 @@ export function getAllTags(task) {
     if (task.tags) {
         rawTags.push(...task.tags);
     }
+
+    const rawNotes = task.notes || task.description || '';
+    if (rawNotes) {
+        const { tags: footerTags } = splitNotesAndTags(rawNotes);
+        rawTags.push(...footerTags);
+    }
     
-    return rawTags.filter(isValidTag);
+    return Array.from(new Set(rawTags.filter(isValidTag)));
 }
 
 /**

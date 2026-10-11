@@ -236,6 +236,14 @@ export const stateManager = {
     setCurrentSection(section) {
         state.currentSection = section;
     },
+
+    /**
+     * Get current section
+     * @returns {string} - The current section name
+     */
+    getCurrentSection() {
+        return state.currentSection;
+    },
     
     /**
      * Set dashboard data
