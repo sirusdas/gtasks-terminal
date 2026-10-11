@@ -856,11 +856,22 @@ class DataManager:
         """Enhanced account detection with type categorization and default account selection"""
         accounts = []
         
+        deleted_accounts = set()
+        if self.gtasks_path:
+            deleted_file = self.gtasks_path / '.deleted_accounts'
+            if deleted_file.exists():
+                try:
+                    deleted_accounts = set(line.strip().lower() for line in deleted_file.read_text().splitlines() if line.strip())
+                except Exception:
+                    pass
+        
         if self.gtasks_path and self.gtasks_path.exists():
             if self.gtasks_path.is_dir():
                 for item in self.gtasks_path.iterdir():
-                    # Skip excluded folders, 'default', and non-account folders
-                    if item.is_dir() and item.name != 'default' and item.name.lower() not in self.EXCLUDED_FOLDERS:
+                    # Skip excluded folders, 'default', deleted accounts, and non-account folders
+                    if (item.is_dir() and item.name != 'default' 
+                            and item.name.lower() not in self.EXCLUDED_FOLDERS
+                            and item.name.lower() not in deleted_accounts):
                         account_type = self._categorize_account_type(item.name)
                         accounts.append(Account(
                             id=item.name,
@@ -870,24 +881,20 @@ class DataManager:
                             is_active=True
                         ))
         
-        # If tasks.db exists at root ~/.gtasks/tasks.db, always include default/Personal account
-        if self.gtasks_path and (self.gtasks_path / 'tasks.db').exists():
-            if not any(a.id == 'default' for a in accounts):
-                accounts.append(Account(
-                    id='default',
-                    name='Personal',
-                    email='default@example.com',
-                    account_type='General',
-                    is_active=True
-                ))
+        # If tasks.db exists at root ~/.gtasks/tasks.db, include default/Personal account UNLESS deleted
+        if 'default' not in deleted_accounts and 'personal' not in deleted_accounts:
+            if self.gtasks_path and (self.gtasks_path / 'tasks.db').exists():
+                if not any(a.id == 'default' for a in accounts):
+                    accounts.append(Account(
+                        id='default',
+                        name='Personal',
+                        email='default@example.com',
+                        account_type='General',
+                        is_active=True
+                    ))
         elif not accounts:
-            accounts.append(Account(
-                id='demo',
-                name='Demo Account',
-                email='demo@example.com',
-                account_type='Testing',
-                is_active=True
-            ))
+            accounts = []
+
         
         self.dashboard_state['accounts'] = accounts
         self._generate_account_types()

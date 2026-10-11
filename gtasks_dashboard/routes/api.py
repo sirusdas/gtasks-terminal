@@ -507,6 +507,16 @@ def api_create_account():
         result = account_manager.create_account(account_name)
         
         if result.get('success'):
+            deleted_file = Path.home() / '.gtasks' / '.deleted_accounts'
+            if deleted_file.exists():
+                try:
+                    deleted_set = set(line.strip().lower() for line in deleted_file.read_text().splitlines() if line.strip())
+                    new_acc_id = (account_name or 'personal').lower().replace(' ', '_')
+                    deleted_set.discard(new_acc_id)
+                    deleted_file.write_text('\n'.join(deleted_set))
+                except Exception:
+                    pass
+
             # Refresh dashboard cache to include new account
             refresh_dashboard_cache()
             
@@ -541,6 +551,19 @@ def api_delete_account(account_id):
         return jsonify({'success': False, 'error': 'account_id required'}), 400
 
     try:
+        deleted_file = Path.home() / '.gtasks' / '.deleted_accounts'
+        deleted_set = set()
+        if deleted_file.exists():
+            try:
+                deleted_set = set(line.strip().lower() for line in deleted_file.read_text().splitlines() if line.strip())
+            except Exception:
+                pass
+        deleted_set.add(account_id.lower())
+        if account_id.lower() in ('default', 'personal'):
+            deleted_set.add('default')
+            deleted_set.add('personal')
+        deleted_file.write_text('\n'.join(deleted_set))
+
         if account_id in ('default', 'personal'):
             db_path = Path.home() / '.gtasks' / 'tasks.db'
             if db_path.exists():
@@ -560,9 +583,9 @@ def api_delete_account(account_id):
         _dashboard_state['accounts'] = [a for a in _dashboard_state.get('accounts', []) if a.id != account_id]
 
         if _dashboard_state.get('current_account') == account_id:
-            _dashboard_state['current_account'] = _dashboard_state['accounts'][0].id if _dashboard_state.get('accounts') else 'default'
+            _dashboard_state['current_account'] = _dashboard_state['accounts'][0].id if _dashboard_state.get('accounts') else None
             try:
-                (Path.home() / '.gtasks' / '.current_account').write_text(_dashboard_state['current_account'])
+                (Path.home() / '.gtasks' / '.current_account').write_text(_dashboard_state['current_account'] or '')
             except Exception:
                 pass
 
@@ -933,6 +956,15 @@ def api_auth_google_submit_code():
 
         # Create account folder
         account_id = account_name.lower().replace(' ', '_')
+        deleted_file = Path.home() / '.gtasks' / '.deleted_accounts'
+        if deleted_file.exists():
+            try:
+                deleted_set = set(line.strip().lower() for line in deleted_file.read_text().splitlines() if line.strip())
+                deleted_set.discard(account_id.lower())
+                deleted_file.write_text('\n'.join(deleted_set))
+            except Exception:
+                pass
+
         acc_dir = Path.home() / '.gtasks' / (account_id if account_id != 'default' else '')
         acc_dir.mkdir(parents=True, exist_ok=True)
 

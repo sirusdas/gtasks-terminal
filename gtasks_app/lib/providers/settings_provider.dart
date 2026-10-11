@@ -42,10 +42,13 @@ class SettingsProvider with ChangeNotifier {
   }
 
   static const String _keyAccounts = 'gtasks_accounts_list'; // JSON map of accounts
+  static const String _keyDeletedAccounts = 'gtasks_deleted_accounts'; // List of account IDs deleted by user
 
   Map<String, Map<String, dynamic>> _storedAccounts = {};
+  Set<String> _deletedAccounts = {};
 
   Map<String, Map<String, dynamic>> get storedAccounts => _storedAccounts;
+  Set<String> get deletedAccounts => _deletedAccounts;
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -62,6 +65,11 @@ class SettingsProvider with ChangeNotifier {
     _googleAccessToken = prefs.getString(_keyGoogleAccessToken);
     _googleRefreshToken = prefs.getString(_keyGoogleRefreshToken);
 
+    final rawDeleted = prefs.getStringList(_keyDeletedAccounts);
+    if (rawDeleted != null) {
+      _deletedAccounts = rawDeleted.toSet();
+    }
+
     final rawAccounts = prefs.getString(_keyAccounts);
     if (rawAccounts != null) {
       try {
@@ -70,8 +78,8 @@ class SettingsProvider with ChangeNotifier {
       } catch (_) {}
     }
 
-    // Default account if none exists
-    if (_storedAccounts.isEmpty && _googleAccessToken != null) {
+    // Default account if none exists and not deleted
+    if (_storedAccounts.isEmpty && _googleAccessToken != null && !_deletedAccounts.contains('default')) {
       _storedAccounts['default'] = {
         'id': 'default',
         'name': 'Personal (Google)',
@@ -88,6 +96,7 @@ class SettingsProvider with ChangeNotifier {
     String? accessToken,
     String? refreshToken,
   }) async {
+    _deletedAccounts.remove(id);
     _storedAccounts[id] = {
       'id': id,
       'name': name,
@@ -96,6 +105,7 @@ class SettingsProvider with ChangeNotifier {
     };
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAccounts, json.encode(_storedAccounts));
+    await prefs.setStringList(_keyDeletedAccounts, _deletedAccounts.toList());
     // If it's the first or active, update current tokens
     if (accessToken != null && accessToken.isNotEmpty) {
       if (_googleAccessToken == null || id == 'default') {
@@ -107,8 +117,14 @@ class SettingsProvider with ChangeNotifier {
 
   Future<void> removeAccount(String id) async {
     _storedAccounts.remove(id);
+    _deletedAccounts.add(id);
+    if (id == 'default' || id == 'personal') {
+      _deletedAccounts.add('default');
+      _deletedAccounts.add('personal');
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAccounts, json.encode(_storedAccounts));
+    await prefs.setStringList(_keyDeletedAccounts, _deletedAccounts.toList());
     if (_storedAccounts.isEmpty) {
       await clearGoogleTokens();
     } else {

@@ -41,12 +41,14 @@ class TaskProvider with ChangeNotifier {
   }
 
   Map<String, Map<String, dynamic>> _standaloneAccounts = {};
+  Set<String> _deletedAccounts = {};
 
   void updateConfig({
     required String newUrl,
     required bool isStandalone,
     String? googleAccessToken,
     Map<String, Map<String, dynamic>>? standaloneAccounts,
+    Set<String>? deletedAccounts,
   }) {
     bool needsReload = false;
     if (apiClient.baseUrl != newUrl) {
@@ -63,6 +65,12 @@ class TaskProvider with ChangeNotifier {
         needsReload = true;
       }
     }
+    if (deletedAccounts != null) {
+      if (_deletedAccounts.toString() != deletedAccounts.toString()) {
+        _deletedAccounts = deletedAccounts;
+        needsReload = true;
+      }
+    }
     if (googleAccessToken != null && googleAccessToken.isNotEmpty) {
       _googleClient = GoogleTasksDirectClient(accessToken: googleAccessToken);
     } else {
@@ -72,6 +80,17 @@ class TaskProvider with ChangeNotifier {
     if (needsReload) {
       loadInitialData();
     }
+  }
+
+  Future<void> removeAccount(String accountId) async {
+    _deletedAccounts.add(accountId);
+    _accounts.removeWhere((a) => a.id == accountId);
+    if (_selectedAccount == accountId) {
+      _selectedAccount = 'all';
+    }
+    await localDb.clearAllTasks(account: accountId);
+    await refreshTasks();
+    notifyListeners();
   }
 
   void updateBaseUrl(String newUrl) {
@@ -305,12 +324,12 @@ class TaskProvider with ChangeNotifier {
             _accounts = [];
           }
         }
-        await refreshTasks();
       } else {
         final accountsList = await apiClient.fetchAccounts();
         _accounts = accountsList;
-        await refreshTasks();
       }
+      _accounts = _accounts.where((a) => !_deletedAccounts.contains(a.id)).toList();
+      await refreshTasks();
     } catch (e) {
       _errorMessage = e.toString();
     } finally {

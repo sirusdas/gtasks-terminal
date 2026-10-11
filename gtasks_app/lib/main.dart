@@ -36,6 +36,7 @@ class GTasksApp extends StatelessWidget {
               isStandalone: settings.isStandalone,
               googleAccessToken: settings.googleAccessToken,
               standaloneAccounts: settings.storedAccounts,
+              deletedAccounts: settings.deletedAccounts,
             );
             return provider;
           },
