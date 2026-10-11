@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="{{ base_path }}/static/css/dashboard.css?v=36">
     <link rel="stylesheet" href="{{ base_path }}/static/css/dark-mode.css?v=36">
     <link rel="stylesheet" href="{{ base_path }}/static/css/components.css?v=36">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=36">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=37">
     <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=36">
     <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=36">
     <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=36">
@@ -1185,7 +1185,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary-modal" onclick="closeEditModal()">Cancel</button>
-                <button class="btn-primary-modal" onclick="saveTaskEdit()"><i class="fas fa-save"></i> Save Changes</button>
+                <button class="btn-primary-modal" id="edit-task-save-btn" onclick="saveTaskEdit()"><i class="fas fa-save"></i> <span>Save Changes</span></button>
             </div>
         </div>
     </div>
@@ -1273,7 +1273,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary-modal" onclick="closeAddModal()">Cancel</button>
-                <button class="btn-primary-modal" onclick="saveNewTask()"><i class="fas fa-plus"></i> Create Task</button>
+                <button class="btn-primary-modal" id="add-task-save-btn" onclick="saveNewTask()"><i class="fas fa-plus"></i> <span>Create Task</span></button>
             </div>
         </div>
     </div>

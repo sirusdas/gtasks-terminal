@@ -414,6 +414,12 @@
     gap: 6px;
 }
 
+.btn-primary-modal:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .task-complete-btn {
     cursor: pointer;
     font-size: 1.2rem;

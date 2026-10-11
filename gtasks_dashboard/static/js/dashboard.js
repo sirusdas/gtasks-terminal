@@ -2796,6 +2796,14 @@ async function saveNewTask() {
         return;
     }
 
+    const saveBtn = document.getElementById('add-task-save-btn');
+    const originalBtnHtml = saveBtn ? saveBtn.innerHTML : '<i class="fas fa-plus"></i> <span>Create Task</span>';
+
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Creating...</span>';
+    }
+
     const cleanNotesInput = document.getElementById('add-task-notes').value;
     const selectedTags = addTaskTagsMultiselect ? addTaskTagsMultiselect.getSelectedValues() : [];
     const finalNotes = combineNotesAndTags(cleanNotesInput, selectedTags);
@@ -2842,6 +2850,11 @@ async function saveNewTask() {
     } catch (error) {
         console.error('Error creating task:', error);
         showNotification('Error creating task', 'error');
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = originalBtnHtml;
+        }
     }
 }
 
@@ -2926,6 +2939,14 @@ async function saveTaskEdit() {
     const taskId = window.editingTaskId;
     if (!taskId) return;
 
+    const saveBtn = document.getElementById('edit-task-save-btn');
+    const originalBtnHtml = saveBtn ? saveBtn.innerHTML : '<i class="fas fa-save"></i> <span>Save Changes</span>';
+
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Saving...</span>';
+    }
+
     const cleanNotesInput = document.getElementById('edit-task-notes').value;
     const selectedTags = editTaskTagsMultiselect ? editTaskTagsMultiselect.getSelectedValues() : [];
     const finalNotes = combineNotesAndTags(cleanNotesInput, selectedTags);
@@ -2973,6 +2994,11 @@ async function saveTaskEdit() {
     } catch (error) {
         console.error('Error updating task:', error);
         showNotification('Error updating task', 'error');
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = originalBtnHtml;
+        }
     }
 }
 
