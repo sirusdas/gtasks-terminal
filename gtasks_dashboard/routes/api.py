@@ -1035,20 +1035,22 @@ def api_auth_google_submit_code():
 
 
 def _sync_initial_pull(account_name: str):
-    """Background helper to pull initial tasks for new account"""
+    """Background helper to pull initial tasks for new account matching CLI advanced-sync"""
     try:
         import sys
         from pathlib import Path
         gtasks_cli_path = Path(__file__).parent.parent.parent / 'gtasks_cli' / 'src'
         if str(gtasks_cli_path) not in sys.path:
             sys.path.insert(0, str(gtasks_cli_path))
-        from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
+        from gtasks_cli.core.task_manager import TaskManager
+        from gtasks_cli.integrations.advanced_sync_manager import AdvancedSyncManager
+
         cli_acc = None if account_name in ('default', 'personal') else account_name
-        client = GoogleTasksClient(account_name=cli_acc)
-        if client.connect(interactive=False):
-            client.sync_tasks()
-            refresh_dashboard_cache()
-            print(f"[OAuth Onboarding] Initial task sync completed for {account_name}")
+        task_manager = TaskManager(use_google_tasks=True, storage_backend='sqlite', account_name=cli_acc)
+        sync_manager = AdvancedSyncManager(task_manager.storage, task_manager.google_client)
+        sync_manager.pull_from_google()
+        refresh_dashboard_cache()
+        print(f"[OAuth Onboarding] Initial task sync completed for {account_name}")
     except Exception as e:
         print(f"[OAuth Onboarding] Initial pull warning: {e}")
 

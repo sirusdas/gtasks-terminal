@@ -412,33 +412,79 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> syncGoogleTasks() async {
-    if (!_isStandalone || _googleClient == null) {
-      return await apiClient.triggerGoogleSync();
+  Future<bool> syncGoogleTasks({String? account}) async {
+    final targetAccount = account ?? _selectedAccount;
+
+    if (!_isStandalone) {
+      if (targetAccount == 'all') {
+        // Sync all accounts
+        bool allSuccess = true;
+        for (final acc in _accounts) {
+          final ok = await apiClient.triggerGoogleSync(account: acc.id);
+          if (!ok) allSuccess = false;
+        }
+        await refreshTasks();
+        return allSuccess;
+      } else {
+        final ok = await apiClient.triggerGoogleSync(account: targetAccount);
+        await refreshTasks();
+        return ok;
+      }
     }
 
+    // Standalone direct Google Tasks mode
     try {
       _isLoading = true;
       notifyListeners();
 
-      final lists = await _googleClient!.fetchTaskLists();
-      List<TaskItem> allFetched = [];
-
-      for (final list in lists) {
-        final listId = list['id'].toString();
-        final listTitle = list['title']?.toString() ?? 'Default List';
-        final tasks = await _googleClient!.fetchTasks(
-          listId: listId,
-          listTitle: listTitle,
-          account: 'default',
-        );
-        allFetched.addAll(tasks);
+      List<GTasksAccount> accountsToSync = [];
+      if (targetAccount == 'all') {
+        accountsToSync = List.from(_accounts);
+      } else {
+        accountsToSync = _accounts.where((a) => a.id == targetAccount).toList();
+        if (accountsToSync.isEmpty && targetAccount.isNotEmpty) {
+          accountsToSync = [GTasksAccount(id: targetAccount, name: targetAccount)];
+        }
       }
 
-      // Upsert into local SQLite with Last-Write-Wins and zero duplicates
-      await localDb.upsertTasks(allFetched);
+      bool anySynced = false;
+
+      for (final acc in accountsToSync) {
+        // Retrieve access token for this account
+        String? token;
+        if (_standaloneAccounts.containsKey(acc.id)) {
+          token = _standaloneAccounts[acc.id]?['access_token']?.toString();
+        }
+        if ((token == null || token.isEmpty) && _googleClient != null) {
+          token = _googleClient!.accessToken;
+        }
+
+        if (token == null || token.isEmpty) {
+          continue;
+        }
+
+        final client = GoogleTasksDirectClient(accessToken: token);
+        final lists = await client.fetchTaskLists();
+        List<TaskItem> accFetchedTasks = [];
+
+        for (final list in lists) {
+          final listId = list['id'].toString();
+          final listTitle = list['title']?.toString() ?? 'Default List';
+          final tasks = await client.fetchTasks(
+            listId: listId,
+            listTitle: listTitle,
+            account: acc.id,
+          );
+          accFetchedTasks.addAll(tasks);
+        }
+
+        // Upsert into local SQLite with Last-Write-Wins
+        await localDb.upsertTasks(accFetchedTasks);
+        anySynced = true;
+      }
+
       await refreshTasks();
-      return true;
+      return anySynced;
     } catch (e) {
       _errorMessage = 'Standalone Google Sync failed: $e';
       return false;
@@ -634,6 +680,9 @@ class TaskProvider with ChangeNotifier {
     List<String>? tags,
   }) async {
     if (_isStandalone) {
+      final acc = (_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
+          ? _selectedAccount
+          : (_accounts.isNotEmpty ? _accounts.first.id : 'default');
       final newTask = TaskItem(
         id: 'local_${DateTime.now().millisecondsSinceEpoch}',
         title: title,
@@ -641,6 +690,7 @@ class TaskProvider with ChangeNotifier {
         status: 'pending',
         due: due,
         tags: tags ?? [],
+        account: acc,
         createdAt: DateTime.now().toUtc().toIso8601String(),
       );
       await localDb.upsertTask(newTask, syncStatus: 'pending_insert');

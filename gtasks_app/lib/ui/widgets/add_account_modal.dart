@@ -275,12 +275,16 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             standaloneAccounts: settings.storedAccounts,
           );
           await taskProvider.loadInitialData();
+          await taskProvider.setAccount(accId);
+
+          // Trigger immediate initial task pull from Google Tasks
+          taskProvider.syncGoogleTasks(account: accId);
 
           if (!mounted) return;
           Navigator.pop(context, true);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Account "$accName" connected successfully!'),
+              content: Text('Account "$accName" connected and syncing tasks!'),
               backgroundColor: Colors.green,
             ),
           );
@@ -328,10 +332,15 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
 
                 if (!mounted) return;
                 await taskProvider.loadInitialData();
+                await taskProvider.setAccount(accId);
+
+                // Trigger sync for this account
+                taskProvider.syncGoogleTasks(account: accId);
+
                 if (!mounted) return;
                 Navigator.pop(context, true);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Account "$accName" connected via server!')),
+                  SnackBar(content: Text('Account "$accName" connected and syncing via server!')),
                 );
                 return;
               }
@@ -373,10 +382,15 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
 
         if (!mounted) return;
         await taskProvider.loadInitialData();
+        await taskProvider.setAccount(accId);
+
+        // Trigger sync for newly added account on server
+        taskProvider.syncGoogleTasks(account: accId);
+
         if (!mounted) return;
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Account "$accName" connected successfully!')),
+          SnackBar(content: Text('Account "$accName" connected and syncing tasks!')),
         );
       } else {
         setState(() => _error = 'Authorization failed. Please verify the code.');

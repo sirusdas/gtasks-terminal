@@ -154,12 +154,16 @@ class ApiClient {
     return response.statusCode == 200;
   }
 
-  Future<bool> triggerGoogleSync() async {
+  Future<bool> triggerGoogleSync({String? account}) async {
     final uri = Uri.parse('$baseUrl/api/sync/advanced');
+    final Map<String, dynamic> body = {'sync_type': 'both'};
+    if (account != null && account != 'all') {
+      body['account'] = account;
+    }
     final response = await http.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({'sync_type': 'both'}),
+      body: json.encode(body),
     );
     return response.statusCode == 200;
   }

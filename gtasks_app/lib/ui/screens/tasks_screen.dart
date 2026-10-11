@@ -169,17 +169,26 @@ class _TasksScreenState extends State<TasksScreen> {
             tooltip: 'Google Sync',
             onPressed: () async {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Starting Google Sync...')),
+                SnackBar(
+                  content: Text(
+                    provider.selectedAccount == 'all'
+                        ? 'Starting Google Sync for all accounts...'
+                        : 'Starting Google Sync for "${provider.selectedAccount}"...',
+                  ),
+                ),
               );
-              final success = await provider.apiClient.triggerGoogleSync();
+              final success = await provider.syncGoogleTasks(account: provider.selectedAccount);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     backgroundColor: success ? Colors.green.shade700 : Colors.red.shade700,
-                    content: Text(success ? '✅ Google Tasks Sync initiated successfully!' : '❌ Sync failed. Check credentials/network.'),
+                    content: Text(
+                      success
+                          ? '✅ Google Tasks Sync completed successfully!'
+                          : '❌ Sync failed. Check credentials/network.',
+                    ),
                   ),
                 );
-                provider.refreshTasks();
               }
             },
           ),

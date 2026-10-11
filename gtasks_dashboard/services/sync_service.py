@@ -97,9 +97,10 @@ class SyncService:
             gtasks_home = Path.home() / '.gtasks'
             
             account_name = None
-            if account and account not in ('demo', 'default') and (gtasks_home / account / 'tasks.db').exists():
-                account_name = account
-                print(f"[SyncService] Using account: {account_name}")
+            if account and account not in ('demo', 'default'):
+                if (gtasks_home / account).exists() or (gtasks_home / account / 'tasks.db').exists():
+                    account_name = account
+                    print(f"[SyncService] Using account: {account_name}")
             else:
                 import os
                 env_acc = os.environ.get('GTASKS_DEFAULT_ACCOUNT')
