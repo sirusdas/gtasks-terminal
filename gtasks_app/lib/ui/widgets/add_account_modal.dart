@@ -85,7 +85,6 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           // Bind loopback HTTP server on Android device (port 48275 to match loopback redirect)
           _stopLocalAuthServer();
           
-          // Use port 48275 or find an available port
           int localPort = 48275;
           try {
             _localAuthServer = await HttpServer.bind(InternetAddress.loopbackIPv4, localPort);
@@ -94,6 +93,9 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             localPort = _localAuthServer!.port;
           }
 
+          // Note: In Google Cloud Console for Installed Apps, the registered redirect URI is http://localhost (or with port)
+          // Google allows dynamic loopback ports for client_type: installed, BUT redirect_uri in authorization request
+          // MUST match the redirect_uri in the token request exactly!
           final redirectUri = 'http://localhost:$localPort';
 
           final queryParams = {
@@ -215,19 +217,40 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
       if (taskProvider.isStandalone) {
         // Exchange code for tokens directly with Google OAuth2 token endpoint
         final tokenUri = Uri.parse('https://oauth2.googleapis.com/token');
-        final response = await http.post(
-          tokenUri,
-          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-          body: {
-            'code': code,
-            'client_id': _defaultGoogleClientId,
-            'client_secret': _defaultGoogleClientSecret,
-            'redirect_uri': redirectUri,
-            'grant_type': 'authorization_code',
-          },
-        );
+        http.Response? response;
+        dynamic lastEx;
 
-        if (response.statusCode == 200) {
+        // Try with current redirectUri (e.g. http://localhost:port or http://localhost)
+        final candidates = [
+          redirectUri,
+          if (redirectUri.contains(':')) 'http://localhost',
+          'http://localhost:48275',
+          'urn:ietf:wg:oauth:2.0:oob',
+        ];
+
+        for (final candidateUri in candidates) {
+          try {
+            response = await http.post(
+              tokenUri,
+              headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+              body: {
+                'code': code,
+                'client_id': _defaultGoogleClientId,
+                'client_secret': _defaultGoogleClientSecret,
+                'redirect_uri': candidateUri,
+                'grant_type': 'authorization_code',
+              },
+            );
+
+            if (response.statusCode == 200) {
+              break;
+            }
+          } catch (e) {
+            lastEx = e;
+          }
+        }
+
+        if (response != null && response.statusCode == 200) {
           final data = jsonDecode(response.body);
           final accessToken = data['access_token'] as String;
           final refreshToken = data['refresh_token'] as String?;
@@ -258,9 +281,34 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             ),
           );
           return;
-        } else {
+        } else if (response != null) {
           setState(() {
-            _error = 'Failed to exchange authorization code: ${response.statusCode}\n${response.body}';
+            _error = 'Failed to exchange authorization code: ${response!.statusCode}\n${response!.body}';
+          });
+          return;
+        } else {
+          // If network direct request failed (e.g. DNS / socket issue on device), try exchanging via PC server proxy
+          try {
+            final baseUrl = settings.baseUrl.replaceAll(RegExp(r'/+$'), '');
+            final success = await taskProvider.apiClient.submitAuthCode(
+              _accountNameController.text.trim(),
+              code,
+              redirectUri: redirectUri,
+            );
+            if (success) {
+              if (!mounted) return;
+              await taskProvider.loadInitialData();
+              if (!mounted) return;
+              Navigator.pop(context, true);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Account "${_accountNameController.text.trim()}" connected via server!')),
+              );
+              return;
+            }
+          } catch (_) {}
+
+          setState(() {
+            _error = 'Network error connecting to Google: $lastEx\nPlease ensure internet is active on phone.';
           });
           return;
         }
