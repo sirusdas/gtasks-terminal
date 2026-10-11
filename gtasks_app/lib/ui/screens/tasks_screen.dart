@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
-import '../../utils/notes_parser.dart';
 import '../widgets/task_card.dart';
 import '../widgets/developer_settings_modal.dart';
 import '../widgets/add_account_modal.dart';
+import '../widgets/tasks_sidebar_drawer.dart';
+import '../widgets/task_filter_modal.dart';
+import '../widgets/task_editor_dialog.dart';
 import 'reports_screen.dart';
 
 class TasksScreen extends StatefulWidget {
@@ -32,176 +34,16 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   void _showAddTaskSheet(BuildContext context) {
-    final titleController = TextEditingController();
-    final notesController = TextEditingController();
-    final tagsController = TextEditingController();
-
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-          left: 20,
-          right: 20,
-          top: 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Create Task', style: Theme.of(ctx).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            TextField(
-              controller: titleController,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Task title',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: notesController,
-              decoration: const InputDecoration(
-                labelText: 'Notes / description',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 2,
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: tagsController,
-              decoration: const InputDecoration(
-                labelText: 'Tags (comma separated, e.g. urgent, work)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.add_task),
-              label: const Text('Save Task'),
-              onPressed: () {
-                final title = titleController.text.trim();
-                if (title.isNotEmpty) {
-                  final tags = tagsController.text
-                      .split(',')
-                      .map((t) => t.trim())
-                      .where((t) => t.isNotEmpty)
-                      .toList();
-                  final combinedNotes = NotesParser.combineNotesAndTags(
-                    notesController.text.trim(),
-                    tags,
-                  );
-                  context.read<TaskProvider>().addTask(
-                    title: title,
-                    description: combinedNotes,
-                    tags: tags,
-                  );
-                  Navigator.pop(ctx);
-                }
-              },
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => const TaskEditorDialog(),
     );
   }
 
-  void _showEditTaskSheet(BuildContext context, task) {
-    // Show only the clean user notes in the notes input box
-    final titleController = TextEditingController(text: task.title);
-    final notesController = TextEditingController(text: task.cleanNotes);
-    final tagsController = TextEditingController(text: task.allTags.join(', '));
-
-    showModalBottomSheet(
+  void _showEditTaskSheet(BuildContext context, dynamic task) {
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-          left: 20,
-          right: 20,
-          top: 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Edit Task', style: Theme.of(ctx).textTheme.titleLarge),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                  tooltip: 'Delete Task',
-                  onPressed: () {
-                    context.read<TaskProvider>().deleteTask(task.id);
-                    Navigator.pop(ctx);
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(
-                labelText: 'Task title',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: notesController,
-              decoration: const InputDecoration(
-                labelText: 'Notes / description (tags separated automatically)',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 4,
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: tagsController,
-              decoration: const InputDecoration(
-                labelText: 'Tags (comma separated, e.g. work, p1)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.check),
-              label: const Text('Update Task'),
-              onPressed: () {
-                final title = titleController.text.trim();
-                if (title.isNotEmpty) {
-                  final tags = tagsController.text
-                      .split(',')
-                      .map((t) => t.trim())
-                      .where((t) => t.isNotEmpty)
-                      .toList();
-                  final combinedNotes = NotesParser.combineNotesAndTags(
-                    notesController.text.trim(),
-                    tags,
-                  );
-                  context.read<TaskProvider>().updateTask(
-                    taskId: task.id,
-                    title: title,
-                    description: combinedNotes,
-                    tags: tags,
-                  );
-                  Navigator.pop(ctx);
-                }
-              },
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => TaskEditorDialog(task: task),
     );
   }
 
@@ -211,34 +53,46 @@ class _TasksScreenState extends State<TasksScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      drawer: const TasksSidebarDrawer(),
       appBar: AppBar(
-        title: const Row(
-          children: [
-            Icon(Icons.check_box_outlined, color: Colors.blueAccent),
-            SizedBox(width: 8),
-            Text('GTasks App', style: TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
+        title: const Text('GTasks', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.tune, color: Colors.amber),
-            tooltip: 'Developer Settings (Backend Endpoint)',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => const DeveloperSettingsModal(),
-              );
-            },
+          // Filter drawer toggle button with active badge
+          Badge(
+            isLabelVisible: provider.activeFilterCount > 0,
+            label: Text('${provider.activeFilterCount}'),
+            child: IconButton(
+              icon: const Icon(Icons.filter_list),
+              tooltip: 'Filters & Sort',
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => const TaskFilterModal(),
+                );
+              },
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.analytics_outlined),
-            tooltip: 'Reports & Velocity',
+            tooltip: 'Reports & Analytics',
             onPressed: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => ReportsScreen(apiClient: provider.apiClient),
                 ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.tune, color: Colors.amber),
+            tooltip: 'Developer Settings',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const DeveloperSettingsModal(),
               );
             },
           ),
@@ -253,7 +107,8 @@ class _TasksScreenState extends State<TasksScreen> {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(success ? 'Sync initiated successfully' : 'Sync error'),
+                    backgroundColor: success ? Colors.green.shade700 : Colors.red.shade700,
+                    content: Text(success ? '✅ Google Tasks Sync initiated successfully!' : '❌ Sync failed. Check credentials/network.'),
                   ),
                 );
                 provider.refreshTasks();
@@ -267,8 +122,9 @@ class _TasksScreenState extends State<TasksScreen> {
           ),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(105),
+          preferredSize: const Size.fromHeight(102),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -301,8 +157,8 @@ class _TasksScreenState extends State<TasksScreen> {
                   children: [
                     FilterChip(
                       label: const Text('Pending'),
-                      selected: provider.statusFilter == 'needsAction',
-                      onSelected: (_) => provider.setStatusFilter('needsAction'),
+                      selected: provider.statusFilter == 'pending',
+                      onSelected: (_) => provider.setStatusFilter('pending'),
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
@@ -366,50 +222,156 @@ class _TasksScreenState extends State<TasksScreen> {
           ),
         ),
       ),
-      body: provider.isLoading && provider.tasks.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : provider.errorMessage != null && provider.tasks.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.cloud_off, size: 48, color: Colors.orange),
-                      const SizedBox(height: 12),
-                      Text('Error: ${provider.errorMessage}'),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: () => provider.loadInitialData(),
-                        child: const Text('Retry'),
-                      ),
-                    ],
+      body: Column(
+        children: [
+          // Active Filters Strip (Lists / Tags / Priority / Recurring / Hidden Lists & Tags / Date Range)
+          if (provider.hasActiveFilters)
+            Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                border: Border(
+                  bottom: BorderSide(
+                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
                   ),
-                )
-              : provider.tasks.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.inbox_outlined, size: 54, color: theme.disabledColor),
-                          const SizedBox(height: 8),
-                          Text('No tasks match your criteria', style: theme.textTheme.titleMedium),
-                        ],
+                ),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Row(
+                  children: [
+                    ...provider.selectedLists.map((l) => Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Chip(
+                            avatar: const Icon(Icons.folder, size: 14),
+                            label: Text('List: $l', style: const TextStyle(fontSize: 12)),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            onDeleted: () => provider.toggleSelectedList(l),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        )),
+                    ...provider.selectedTags.map((t) => Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Chip(
+                            avatar: const Icon(Icons.tag, size: 14, color: Colors.teal),
+                            label: Text('Tag: #$t', style: const TextStyle(fontSize: 12)),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            onDeleted: () => provider.toggleSelectedTag(t),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        )),
+                    if (provider.selectedPriority != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Chip(
+                          avatar: const Icon(Icons.flag, size: 14),
+                          label: Text('Priority: ${provider.selectedPriority}', style: const TextStyle(fontSize: 12)),
+                          deleteIcon: const Icon(Icons.close, size: 14),
+                          onDeleted: () => provider.setPriorityFilter(null),
+                          visualDensity: VisualDensity.compact,
+                        ),
                       ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: () => provider.refreshTasks(),
-                      child: ListView.builder(
-                        itemCount: provider.tasks.length,
-                        itemBuilder: (ctx, index) {
-                          final task = provider.tasks[index];
-                          return TaskCard(
-                            task: task,
-                            onToggleComplete: () => provider.completeTask(task.id),
-                            onEdit: () => _showEditTaskSheet(context, task),
-                            onDelete: () => provider.deleteTask(task.id),
-                          );
-                        },
+                    if (provider.hideRecurring)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Chip(
+                          avatar: const Icon(Icons.redo_outlined, size: 14, color: Colors.orange),
+                          label: const Text('Hide Recurring', style: TextStyle(fontSize: 12, color: Colors.orange)),
+                          deleteIcon: const Icon(Icons.close, size: 14),
+                          onDeleted: () => provider.setHideRecurring(false),
+                          visualDensity: VisualDensity.compact,
+                        ),
                       ),
+                    ...provider.hiddenLists.map((hl) => Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Chip(
+                            avatar: const Icon(Icons.visibility_off, size: 14, color: Colors.red),
+                            label: Text('Hide: $hl', style: const TextStyle(fontSize: 12, color: Colors.red)),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            onDeleted: () => provider.toggleHiddenList(hl),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        )),
+                    ...provider.hiddenTags.map((ht) => Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Chip(
+                            avatar: const Icon(Icons.visibility_off, size: 14, color: Colors.red),
+                            label: Text('Hide: #$ht', style: const TextStyle(fontSize: 12, color: Colors.red)),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            onDeleted: () => provider.toggleHiddenTag(ht),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        )),
+                    if (provider.dateRange != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Chip(
+                          avatar: const Icon(Icons.date_range, size: 14),
+                          label: Text(
+                            '${provider.dateField}: ${provider.dateRange!.start.month}/${provider.dateRange!.start.day} - ${provider.dateRange!.end.month}/${provider.dateRange!.end.day}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          deleteIcon: const Icon(Icons.close, size: 14),
+                          onDeleted: () => provider.setDateFilter(provider.dateField, null),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    TextButton(
+                      onPressed: () => provider.clearAllFilters(),
+                      child: const Text('Clear All', style: TextStyle(fontSize: 12)),
                     ),
+                  ],
+                ),
+              ),
+            ),
+          Expanded(
+            child: provider.isLoading && provider.tasks.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : provider.errorMessage != null && provider.tasks.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.cloud_off, size: 48, color: Colors.orange),
+                            const SizedBox(height: 12),
+                            Text('Error: ${provider.errorMessage}'),
+                            const SizedBox(height: 12),
+                            ElevatedButton(
+                              onPressed: () => provider.loadInitialData(),
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : provider.tasks.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.inbox_outlined, size: 54, color: theme.disabledColor),
+                                const SizedBox(height: 8),
+                                Text('No tasks match your criteria', style: theme.textTheme.titleMedium),
+                              ],
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: () => provider.refreshTasks(),
+                            child: ListView.builder(
+                              itemCount: provider.tasks.length,
+                              itemBuilder: (ctx, index) {
+                                final task = provider.tasks[index];
+                                return TaskCard(
+                                  task: task,
+                                  onToggleComplete: () => provider.completeTask(task.id),
+                                  onEdit: () => _showEditTaskSheet(context, task),
+                                  onDelete: () => provider.deleteTask(task.id),
+                                );
+                              },
+                            ),
+                          ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
         label: const Text('New Task'),

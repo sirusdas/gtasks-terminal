@@ -145,7 +145,11 @@ class ApiClient {
 
   Future<bool> triggerGoogleSync() async {
     final uri = Uri.parse('$baseUrl/api/sync/advanced');
-    final response = await http.post(uri);
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'sync_type': 'both'}),
+    );
     return response.statusCode == 200;
   }
 

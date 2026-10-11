@@ -38,6 +38,8 @@ class GoogleAuthManager:
                 config_dir = os.path.join(os.path.expanduser("~"), ".gtasks")
             
         def find_creds(directory):
+            if not os.path.exists(directory) or not os.path.isdir(directory):
+                return None
             c = os.path.join(directory, "credentials.json")
             if os.path.exists(c):
                 return c

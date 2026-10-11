@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import '../api/api_client.dart';
 import '../models/task_item.dart';
 import '../models/account.dart';
@@ -9,8 +9,18 @@ class TaskProvider with ChangeNotifier {
   List<TaskItem> _tasks = [];
   List<GTasksAccount> _accounts = [];
   String _selectedAccount = 'all';
-  String _statusFilter = 'needsAction'; // 'needsAction', 'completed', 'all'
+  String _statusFilter = 'pending'; // 'pending', 'completed', 'all'
   String _searchQuery = '';
+  Set<String> _selectedLists = {};
+  Set<String> _selectedTags = {};
+  String? _selectedPriority; // 'critical', 'high', 'medium', 'low'
+  Set<String> _hiddenLists = {};
+  Set<String> _hiddenTags = {};
+  bool _hideRecurring = false;
+  String _sortField = 'modified_at'; // 'modified_at', 'due', 'created_at', 'priority', 'title'
+  bool _sortAscending = false;
+  DateTimeRange? _dateRange;
+  String _dateField = 'modified_at'; // 'modified_at', 'created_at', 'due'
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -24,33 +34,195 @@ class TaskProvider with ChangeNotifier {
   }
 
   List<TaskItem> get tasks => _filteredTasks();
+  List<TaskItem> get allTasksUnfiltered => _tasks;
   List<GTasksAccount> get accounts => _accounts;
   String get selectedAccount => _selectedAccount;
   String get statusFilter => _statusFilter;
   String get searchQuery => _searchQuery;
+  Set<String> get selectedLists => _selectedLists;
+  Set<String> get selectedTags => _selectedTags;
+  String? get selectedList => _selectedLists.isNotEmpty ? _selectedLists.first : null;
+  String? get selectedTag => _selectedTags.isNotEmpty ? _selectedTags.first : null;
+  String? get selectedPriority => _selectedPriority;
+  Set<String> get hiddenLists => _hiddenLists;
+  Set<String> get hiddenTags => _hiddenTags;
+  bool get hideRecurring => _hideRecurring;
+  String get sortField => _sortField;
+  bool get sortAscending => _sortAscending;
+  DateTimeRange? get dateRange => _dateRange;
+  String get dateField => _dateField;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
+  bool get hasActiveFilters {
+    return _selectedLists.isNotEmpty ||
+        _selectedTags.isNotEmpty ||
+        _selectedPriority != null ||
+        _hiddenLists.isNotEmpty ||
+        _hiddenTags.isNotEmpty ||
+        _hideRecurring ||
+        _dateRange != null;
+  }
+
+  // Active filter count for badge
+  int get activeFilterCount {
+    int count = 0;
+    if (_selectedLists.isNotEmpty) count += _selectedLists.length;
+    if (_selectedTags.isNotEmpty) count += _selectedTags.length;
+    if (_selectedPriority != null) count++;
+    if (_hiddenLists.isNotEmpty) count += _hiddenLists.length;
+    if (_hiddenTags.isNotEmpty) count += _hiddenTags.length;
+    if (_hideRecurring) count++;
+    if (_dateRange != null) count++;
+    if (_statusFilter != 'pending') count++;
+    return count;
+  }
+
+  int get pendingTasksCount {
+    return _tasks.where((t) {
+      if (_selectedAccount != 'all' && t.account != _selectedAccount) return false;
+      return !t.isCompleted;
+    }).length;
+  }
+
+  // Lists with pending task counts based on current account
+  Map<String, int> get listsWithCounts {
+    final Map<String, int> map = {};
+    for (final task in _tasks) {
+      if (_selectedAccount != 'all' && task.account != _selectedAccount) continue;
+      if (task.isCompleted) continue; // Only count pending tasks
+      final list = (task.listTitle != null && task.listTitle!.isNotEmpty)
+          ? task.listTitle!
+          : 'Default List';
+      map[list] = (map[list] ?? 0) + 1;
+    }
+    return map;
+  }
+
+  // Tags with pending task counts based on current account
+  Map<String, int> get tagsWithCounts {
+    final Map<String, int> map = {};
+    for (final task in _tasks) {
+      if (_selectedAccount != 'all' && task.account != _selectedAccount) continue;
+      if (task.isCompleted) continue; // Only count pending tasks
+      for (final tag in task.allTags) {
+        if (tag.trim().isNotEmpty) {
+          map[tag] = (map[tag] ?? 0) + 1;
+        }
+      }
+    }
+    return map;
+  }
+
   List<TaskItem> _filteredTasks() {
-    return _tasks.where((task) {
+    var result = _tasks.where((task) {
       if (_selectedAccount != 'all' && task.account != _selectedAccount) {
         return false;
       }
-      if (_statusFilter == 'needsAction' && task.isCompleted) {
+      if (_statusFilter == 'pending' && task.isCompleted) {
         return false;
       }
       if (_statusFilter == 'completed' && !task.isCompleted) {
         return false;
       }
+      final taskListTitle = (task.listTitle != null && task.listTitle!.isNotEmpty)
+          ? task.listTitle!
+          : 'Default List';
+
+      // Hide lists exclusion
+      if (_hiddenLists.contains(taskListTitle)) {
+        return false;
+      }
+
+      // Hide tags exclusion
+      if (_hiddenTags.isNotEmpty && task.allTags.any((t) => _hiddenTags.contains(t))) {
+        return false;
+      }
+
+      // Hide recurring tasks exclusion
+      if (_hideRecurring && task.isRecurring) {
+        return false;
+      }
+
+      if (_selectedLists.isNotEmpty) {
+        if (!_selectedLists.contains(taskListTitle)) return false;
+      }
+      if (_selectedTags.isNotEmpty) {
+        if (!task.allTags.any((t) => _selectedTags.contains(t))) return false;
+      }
+      if (_selectedPriority != null) {
+        if (task.calculatedPriority.toLowerCase() != _selectedPriority!.toLowerCase()) {
+          return false;
+        }
+      }
+      if (_dateRange != null) {
+        String? targetDateStr;
+        if (_dateField == 'due') {
+          targetDateStr = task.due;
+        } else if (_dateField == 'created_at') {
+          targetDateStr = task.createdAt;
+        } else {
+          targetDateStr = task.createdAt; // fallback to created
+        }
+
+        if (targetDateStr == null) return false;
+        try {
+          final dt = DateTime.parse(targetDateStr);
+          if (dt.isBefore(_dateRange!.start) || dt.isAfter(_dateRange!.end.add(const Duration(days: 1)))) {
+            return false;
+          }
+        } catch (_) {}
+      }
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
         final matchTitle = task.title.toLowerCase().contains(query);
         final matchNotes = task.description.toLowerCase().contains(query);
-        final matchTags = task.tags.any((t) => t.toLowerCase().contains(query));
+        final matchTags = task.allTags.any((t) => t.toLowerCase().contains(query));
         return matchTitle || matchNotes || matchTags;
       }
       return true;
     }).toList();
+
+    // Sorting
+    result.sort((a, b) {
+      int comparison = 0;
+      switch (_sortField) {
+        case 'title':
+          comparison = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          break;
+        case 'due':
+          if (a.due == null && b.due == null) {
+            comparison = 0;
+          } else if (a.due == null) {
+            comparison = 1;
+          } else if (b.due == null) {
+            comparison = -1;
+          } else {
+            comparison = a.due!.compareTo(b.due!);
+          }
+          break;
+        case 'created_at':
+          final aDate = a.createdAt ?? '';
+          final bDate = b.createdAt ?? '';
+          comparison = aDate.compareTo(bDate);
+          break;
+        case 'priority':
+          final pMap = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1};
+          final ap = pMap[a.calculatedPriority.toLowerCase()] ?? 0;
+          final bp = pMap[b.calculatedPriority.toLowerCase()] ?? 0;
+          comparison = ap.compareTo(bp);
+          break;
+        case 'modified_at':
+        default:
+          final aDate = a.createdAt ?? '';
+          final bDate = b.createdAt ?? '';
+          comparison = aDate.compareTo(bDate);
+          break;
+      }
+      return _sortAscending ? comparison : -comparison;
+    });
+
+    return result;
   }
 
   Future<void> loadInitialData() async {
@@ -74,7 +246,8 @@ class TaskProvider with ChangeNotifier {
     try {
       final taskList = await apiClient.fetchTasks(
         account: _selectedAccount == 'all' ? null : _selectedAccount,
-        status: _statusFilter == 'all' ? null : _statusFilter,
+        // We load all tasks for the selected account to allow instant local filtering across lists & tags
+        status: null,
       );
       _tasks = taskList;
       _errorMessage = null;
@@ -96,11 +269,122 @@ class TaskProvider with ChangeNotifier {
 
   void setStatusFilter(String status) {
     _statusFilter = status;
-    refreshTasks();
+    notifyListeners();
   }
 
   void setSearchQuery(String query) {
     _searchQuery = query;
+    notifyListeners();
+  }
+
+  void selectList(String? list) {
+    if (list == null) {
+      _selectedLists.clear();
+    } else {
+      _selectedLists = {list};
+    }
+    notifyListeners();
+  }
+
+  void selectTag(String? tag) {
+    if (tag == null) {
+      _selectedTags.clear();
+    } else {
+      _selectedTags = {tag};
+    }
+    notifyListeners();
+  }
+
+  void setSelectedLists(Set<String> lists) {
+    _selectedLists = Set.from(lists);
+    notifyListeners();
+  }
+
+  void setSelectedTags(Set<String> tags) {
+    _selectedTags = Set.from(tags);
+    notifyListeners();
+  }
+
+  void toggleSelectedList(String list) {
+    if (_selectedLists.contains(list)) {
+      _selectedLists.remove(list);
+    } else {
+      _selectedLists.add(list);
+    }
+    notifyListeners();
+  }
+
+  void toggleSelectedTag(String tag) {
+    if (_selectedTags.contains(tag)) {
+      _selectedTags.remove(tag);
+    } else {
+      _selectedTags.add(tag);
+    }
+    notifyListeners();
+  }
+
+  void setPriorityFilter(String? priority) {
+    _selectedPriority = priority;
+    notifyListeners();
+  }
+
+  void toggleHiddenList(String list) {
+    if (_hiddenLists.contains(list)) {
+      _hiddenLists.remove(list);
+    } else {
+      _hiddenLists.add(list);
+    }
+    notifyListeners();
+  }
+
+  void toggleHiddenTag(String tag) {
+    if (_hiddenTags.contains(tag)) {
+      _hiddenTags.remove(tag);
+    } else {
+      _hiddenTags.add(tag);
+    }
+    notifyListeners();
+  }
+
+  void setHideRecurring(bool hide) {
+    _hideRecurring = hide;
+    notifyListeners();
+  }
+
+  void setHiddenLists(Set<String> lists) {
+    _hiddenLists = Set.from(lists);
+    notifyListeners();
+  }
+
+  void setHiddenTags(Set<String> tags) {
+    _hiddenTags = Set.from(tags);
+    notifyListeners();
+  }
+
+  void setSort(String field, bool ascending) {
+    _sortField = field;
+    _sortAscending = ascending;
+    notifyListeners();
+  }
+
+  void setDateFilter(String field, DateTimeRange? range) {
+    _dateField = field;
+    _dateRange = range;
+    notifyListeners();
+  }
+
+  void clearAllFilters() {
+    _statusFilter = 'pending';
+    _searchQuery = '';
+    _selectedLists.clear();
+    _selectedTags.clear();
+    _selectedPriority = null;
+    _hiddenLists.clear();
+    _hiddenTags.clear();
+    _hideRecurring = false;
+    _dateRange = null;
+    _sortField = 'modified_at';
+    _sortAscending = false;
     notifyListeners();
   }
 
