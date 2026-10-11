@@ -23,9 +23,76 @@ class _TasksScreenState extends State<TasksScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<TaskProvider>().loadInitialData();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final provider = context.read<TaskProvider>();
+      await provider.loadInitialData();
+      if (!mounted) return;
+      _checkAccountStatusAtStartup(provider);
     });
+  }
+
+  void _checkAccountStatusAtStartup(TaskProvider provider) {
+    if (provider.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade800,
+          duration: const Duration(seconds: 5),
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Connection error: ${provider.errorMessage}',
+                  style: const TextStyle(fontSize: 12),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          action: SnackBarAction(
+            label: 'Settings',
+            textColor: Colors.amberAccent,
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const SettingsModal(),
+              );
+            },
+          ),
+        ),
+      );
+    } else if (provider.accounts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.amber.shade900,
+          duration: const Duration(seconds: 5),
+          content: const Row(
+            children: [
+              Icon(Icons.account_circle_outlined, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'No accounts configured. Tap to connect Google account.',
+                  style: TextStyle(fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          action: SnackBarAction(
+            label: 'Add Account',
+            textColor: Colors.white,
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const AddGoogleAccountModal(),
+              );
+            },
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -182,7 +249,9 @@ class _TasksScreenState extends State<TasksScreen> {
                       ),
                       const SizedBox(width: 12),
                       DropdownButton<String>(
-                        value: provider.selectedAccount,
+                        value: provider.accounts.any((a) => a.id == provider.selectedAccount) || provider.selectedAccount == 'all'
+                            ? provider.selectedAccount
+                            : 'all',
                         underline: const SizedBox(),
                         items: [
                           const DropdownMenuItem(value: 'all', child: Text('All Accounts')),
@@ -212,6 +281,18 @@ class _TasksScreenState extends State<TasksScreen> {
                           } else if (val != null) {
                             provider.setAccount(val);
                           }
+                        },
+                      ),
+                    ] else ...[
+                      const SizedBox(width: 12),
+                      ActionChip(
+                        avatar: const Icon(Icons.add, size: 16, color: Colors.amber),
+                        label: const Text('Add Account', style: TextStyle(fontSize: 12)),
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => const AddGoogleAccountModal(),
+                          );
                         },
                       ),
                     ],

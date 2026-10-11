@@ -89,6 +89,9 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
               final taskProvider = context.read<TaskProvider>();
               await settings.removeAccount(accountId);
               await taskProvider.localDb.clearAllTasks(account: accountId);
+              try {
+                await taskProvider.apiClient.deleteAccount(accountId);
+              } catch (_) {}
               await taskProvider.loadInitialData();
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(

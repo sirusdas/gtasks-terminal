@@ -23,6 +23,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
   bool _loading = false;
   String? _authUrl;
   String? _error;
+  String? _lastGeneratedRedirectUri;
   int _selectedMethod = 0; // 0: Direct Web Browser, 1: Paste Code / URL
   HttpServer? _localAuthServer;
 
@@ -71,6 +72,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         ].join(' ');
 
         if (useOob) {
+          _lastGeneratedRedirectUri = 'urn:ietf:wg:oauth:2.0:oob';
           final queryParams = {
             'client_id': _defaultGoogleClientId,
             'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob',
@@ -93,10 +95,8 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             localPort = _localAuthServer!.port;
           }
 
-          // Note: In Google Cloud Console for Installed Apps, the registered redirect URI is http://localhost (or with port)
-          // Google allows dynamic loopback ports for client_type: installed, BUT redirect_uri in authorization request
-          // MUST match the redirect_uri in the token request exactly!
           final redirectUri = 'http://localhost:$localPort';
+          _lastGeneratedRedirectUri = redirectUri;
 
           final queryParams = {
             'client_id': _defaultGoogleClientId,
@@ -117,6 +117,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         // PC Server flow
         final baseUrl = settings.baseUrl.replaceAll(RegExp(r'/+$'), '');
         final redirect = useOob ? 'oob' : '$baseUrl/api/auth/google/callback';
+        _lastGeneratedRedirectUri = redirect;
 
         final res = await taskProvider.apiClient.startGoogleAuth(
           _accountNameController.text.trim(),
@@ -220,11 +221,13 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         http.Response? response;
         dynamic lastEx;
 
-        // Try with current redirectUri (e.g. http://localhost:port or http://localhost)
+        // Try with current redirectUri and candidate fallbacks
         final candidates = [
           redirectUri,
-          if (redirectUri.contains(':')) 'http://localhost',
+          if (_lastGeneratedRedirectUri != null) _lastGeneratedRedirectUri!,
           'http://localhost:48275',
+          'http://127.0.0.1:48275',
+          'http://localhost',
           'urn:ietf:wg:oauth:2.0:oob',
         ];
 
@@ -269,6 +272,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             newUrl: settings.baseUrl,
             isStandalone: true,
             googleAccessToken: accessToken,
+            standaloneAccounts: settings.storedAccounts,
           );
           await taskProvider.loadInitialData();
 
@@ -276,7 +280,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           Navigator.pop(context, true);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Account "${_accountNameController.text.trim()}" connected successfully!'),
+              content: Text('Account "$accName" connected successfully!'),
               backgroundColor: Colors.green,
             ),
           );
@@ -289,9 +293,9 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         } else {
           // If network direct request failed (e.g. DNS / socket issue on device), try exchanging via PC server proxy
           final fallbackUrls = [
-            settings.baseUrl,
             'http://127.0.0.1:48275',
             'http://localhost:48275',
+            settings.baseUrl,
           ];
 
           for (final serverUrl in fallbackUrls) {
@@ -304,12 +308,30 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
                 redirectUri: redirectUri,
               );
               if (success) {
+                await settings.setBaseUrl(serverUrl);
+                final accName = _accountNameController.text.trim().isEmpty ? 'Personal' : _accountNameController.text.trim();
+                final accId = accName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
+                await settings.saveAccount(id: accId, name: accName);
+
+                try {
+                  final serverAccs = await taskProvider.apiClient.fetchAccounts();
+                  for (final sa in serverAccs) {
+                    await settings.saveAccount(id: sa.id, name: sa.name);
+                  }
+                } catch (_) {}
+
+                taskProvider.updateConfig(
+                  newUrl: serverUrl,
+                  isStandalone: settings.isStandalone,
+                  standaloneAccounts: settings.storedAccounts,
+                );
+
                 if (!mounted) return;
                 await taskProvider.loadInitialData();
                 if (!mounted) return;
                 Navigator.pop(context, true);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Account "${_accountNameController.text.trim()}" connected via server!')),
+                  SnackBar(content: Text('Account "$accName" connected via server!')),
                 );
                 return;
               }
@@ -325,7 +347,6 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
       }
 
       // PC Server flow
-      final baseUrl = settings.baseUrl.replaceAll(RegExp(r'/+$'), '');
       final success = await taskProvider.apiClient.submitAuthCode(
         _accountNameController.text.trim(),
         code,
@@ -333,12 +354,29 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
       );
 
       if (success) {
+        final accName = _accountNameController.text.trim().isEmpty ? 'Personal' : _accountNameController.text.trim();
+        final accId = accName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
+        await settings.saveAccount(id: accId, name: accName);
+
+        try {
+          final serverAccs = await taskProvider.apiClient.fetchAccounts();
+          for (final sa in serverAccs) {
+            await settings.saveAccount(id: sa.id, name: sa.name);
+          }
+        } catch (_) {}
+
+        taskProvider.updateConfig(
+          newUrl: settings.baseUrl,
+          isStandalone: settings.isStandalone,
+          standaloneAccounts: settings.storedAccounts,
+        );
+
         if (!mounted) return;
         await taskProvider.loadInitialData();
         if (!mounted) return;
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Account "${_accountNameController.text.trim()}" connected successfully!')),
+          SnackBar(content: Text('Account "$accName" connected successfully!')),
         );
       } else {
         setState(() => _error = 'Authorization failed. Please verify the code.');
@@ -358,7 +396,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
     }
 
     String code = input;
-    String redirectUri = _selectedMethod == 1 ? 'urn:ietf:wg:oauth:2.0:oob' : 'http://localhost';
+    String redirectUri = _lastGeneratedRedirectUri ?? (_selectedMethod == 1 ? 'urn:ietf:wg:oauth:2.0:oob' : 'http://localhost:48275');
 
     // If user pasted full redirected URL (e.g. http://localhost:48275/?code=4/0A...&scope=...)
     if (input.startsWith('http://') || input.startsWith('https://')) {

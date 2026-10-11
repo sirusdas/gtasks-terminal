@@ -58,7 +58,10 @@ class TaskProvider with ChangeNotifier {
       needsReload = true;
     }
     if (standaloneAccounts != null) {
-      _standaloneAccounts = standaloneAccounts;
+      if (_standaloneAccounts.toString() != standaloneAccounts.toString()) {
+        _standaloneAccounts = standaloneAccounts;
+        needsReload = true;
+      }
     }
     if (googleAccessToken != null && googleAccessToken.isNotEmpty) {
       _googleClient = GoogleTasksDirectClient(accessToken: googleAccessToken);
@@ -290,7 +293,17 @@ class TaskProvider with ChangeNotifier {
         } else if (_googleClient != null) {
           _accounts = [GTasksAccount(id: 'default', name: 'Personal (Google)')];
         } else {
-          _accounts = [];
+          // Check if server accounts can be discovered
+          try {
+            final serverAccs = await apiClient.fetchAccounts();
+            if (serverAccs.isNotEmpty) {
+              _accounts = serverAccs;
+            } else {
+              _accounts = [];
+            }
+          } catch (_) {
+            _accounts = [];
+          }
         }
         await refreshTasks();
       } else {
@@ -312,6 +325,20 @@ class TaskProvider with ChangeNotifier {
         final localTasks = await localDb.getAllTasks(
           account: _selectedAccount == 'all' ? null : _selectedAccount,
         );
+        if (localTasks.isEmpty) {
+          try {
+            final serverTasks = await apiClient.fetchTasks(
+              account: _selectedAccount == 'all' ? null : _selectedAccount,
+            );
+            if (serverTasks.isNotEmpty) {
+              await localDb.upsertTasks(serverTasks);
+              _tasks = serverTasks;
+              _errorMessage = null;
+              notifyListeners();
+              return;
+            }
+          } catch (_) {}
+        }
         _tasks = localTasks;
         _errorMessage = null;
       } else {

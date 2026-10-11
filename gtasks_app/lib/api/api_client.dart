@@ -6,7 +6,7 @@ import '../models/account.dart';
 class ApiClient {
   String baseUrl;
 
-  ApiClient({this.baseUrl = 'http://gtasks.com'});
+  ApiClient({this.baseUrl = 'http://127.0.0.1:48275'});
 
   Future<List<TaskItem>> fetchTasks({String? account, String? status}) async {
     final queryParams = <String, String>{};
@@ -47,6 +47,17 @@ class ApiClient {
     final response = await http.post(uri);
     return response.statusCode == 200;
   }
+
+  Future<bool> deleteAccount(String accountId) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/accounts/$accountId');
+      final response = await http.delete(uri);
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
 
   Future<Map<String, dynamic>> startGoogleAuth(String accountName, {String redirectUri = 'http://localhost:48275/api/auth/google/callback'}) async {
     final uri = Uri.parse('$baseUrl/api/auth/google/start');

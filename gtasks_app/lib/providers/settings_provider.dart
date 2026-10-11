@@ -13,13 +13,14 @@ class SettingsProvider with ChangeNotifier {
 
   // Common quick presets
   static const List<String> presetUrls = [
-    'http://gtasks.com',
+    'http://127.0.0.1:48275',     // Direct reverse port loopback (Android & PC)
+    'http://localhost:48275',     // Local loopback
+    'http://gtasks.com',          // Loopback DNS (if /etc/hosts exists)
     'http://10.0.2.2:48275',      // Android Emulator host loopback
-    'http://localhost:48275',     // Local Linux / Desktop
     'http://192.168.1.100:48275', // Typical local Wi-Fi LAN
   ];
 
-  String _baseUrl = 'http://gtasks.com';
+  String _baseUrl = 'http://127.0.0.1:48275';
   bool _isDevMode = true; // Enabled by default for easy configuration
   String _themeMode = 'system'; // 'system', 'light', 'dark'
   String _appMode = 'pc_server'; // 'pc_server' or 'standalone'
@@ -48,7 +49,12 @@ class SettingsProvider with ChangeNotifier {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    _baseUrl = prefs.getString(_keyBaseUrl) ?? 'http://gtasks.com';
+    final savedUrl = prefs.getString(_keyBaseUrl);
+    if (savedUrl == null || savedUrl.isEmpty || savedUrl == 'http://gtasks.com') {
+      _baseUrl = 'http://127.0.0.1:48275';
+    } else {
+      _baseUrl = savedUrl;
+    }
     _isDevMode = prefs.getBool(_keyDevMode) ?? true;
     _themeMode = prefs.getString(_keyThemeMode) ?? 'system';
     _appMode = prefs.getString(_keyAppMode) ?? 'pc_server';
@@ -79,20 +85,22 @@ class SettingsProvider with ChangeNotifier {
   Future<void> saveAccount({
     required String id,
     required String name,
-    required String accessToken,
+    String? accessToken,
     String? refreshToken,
   }) async {
     _storedAccounts[id] = {
       'id': id,
       'name': name,
-      'access_token': accessToken,
-      'refresh_token': refreshToken,
+      if (accessToken != null) 'access_token': accessToken,
+      if (refreshToken != null) 'refresh_token': refreshToken,
     };
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAccounts, json.encode(_storedAccounts));
     // If it's the first or active, update current tokens
-    if (_googleAccessToken == null || id == 'default') {
-      await setGoogleTokens(accessToken: accessToken, refreshToken: refreshToken);
+    if (accessToken != null && accessToken.isNotEmpty) {
+      if (_googleAccessToken == null || id == 'default') {
+        await setGoogleTokens(accessToken: accessToken, refreshToken: refreshToken);
+      }
     }
     notifyListeners();
   }

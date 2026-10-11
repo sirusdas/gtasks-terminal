@@ -870,15 +870,16 @@ class DataManager:
                             is_active=True
                         ))
         
-        # If no subfolder accounts found, but tasks.db exists at root, create default account
-        if not accounts and self.gtasks_path and (self.gtasks_path / 'tasks.db').exists():
-            accounts.append(Account(
-                id='default',
-                name='Personal',
-                email='default@example.com',
-                account_type='General',
-                is_active=True
-            ))
+        # If tasks.db exists at root ~/.gtasks/tasks.db, always include default/Personal account
+        if self.gtasks_path and (self.gtasks_path / 'tasks.db').exists():
+            if not any(a.id == 'default' for a in accounts):
+                accounts.append(Account(
+                    id='default',
+                    name='Personal',
+                    email='default@example.com',
+                    account_type='General',
+                    is_active=True
+                ))
         elif not accounts:
             accounts.append(Account(
                 id='demo',

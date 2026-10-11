@@ -530,6 +530,49 @@ def api_create_account():
         }), 500
 
 
+@api.route('/accounts/<account_id>', methods=['DELETE'])
+def api_delete_account(account_id):
+    """Delete an account and its associated tasks/credentials"""
+    import shutil
+    import sqlite3
+    from pathlib import Path
+
+    if not account_id:
+        return jsonify({'success': False, 'error': 'account_id required'}), 400
+
+    try:
+        if account_id in ('default', 'personal'):
+            db_path = Path.home() / '.gtasks' / 'tasks.db'
+            if db_path.exists():
+                conn = sqlite3.connect(str(db_path))
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM tasks")
+                conn.commit()
+                conn.close()
+        else:
+            acc_dir = Path.home() / '.gtasks' / account_id
+            if acc_dir.exists() and acc_dir.is_dir():
+                shutil.rmtree(acc_dir)
+
+        if account_id in _dashboard_state.get('tasks', {}):
+            del _dashboard_state['tasks'][account_id]
+
+        _dashboard_state['accounts'] = [a for a in _dashboard_state.get('accounts', []) if a.id != account_id]
+
+        if _dashboard_state.get('current_account') == account_id:
+            _dashboard_state['current_account'] = _dashboard_state['accounts'][0].id if _dashboard_state.get('accounts') else 'default'
+            try:
+                (Path.home() / '.gtasks' / '.current_account').write_text(_dashboard_state['current_account'])
+            except Exception:
+                pass
+
+        refresh_dashboard_cache()
+        return jsonify({'success': True, 'message': f'Account {account_id} deleted successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+
 @api.route('/auth/google/start', methods=['GET', 'POST'])
 def api_auth_google_start():
     """
@@ -860,16 +903,31 @@ def api_auth_google_submit_code():
         client_id = client_info.get('client_id')
         client_secret = client_info.get('client_secret')
 
-        # Exchange code for tokens
-        token_res = requests.post('https://oauth2.googleapis.com/token', data={
-            'code': code,
-            'client_id': client_id,
-            'client_secret': client_secret,
-            'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob' if redirect_uri == 'oob' else redirect_uri,
-            'grant_type': 'authorization_code'
-        })
+        # Exchange code for tokens with candidate redirect URIs
+        candidate_uris = [
+            'urn:ietf:wg:oauth:2.0:oob' if redirect_uri == 'oob' else redirect_uri,
+            'http://localhost:48275',
+            'http://127.0.0.1:48275',
+            'http://localhost',
+            f"{base_host}/api/auth/google/callback",
+            'urn:ietf:wg:oauth:2.0:oob',
+        ]
 
-        token_json = token_res.json()
+        token_json = {}
+        for cand_uri in candidate_uris:
+            token_res = requests.post('https://oauth2.googleapis.com/token', data={
+                'code': code,
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'redirect_uri': cand_uri,
+                'grant_type': 'authorization_code'
+            })
+            token_json = token_res.json()
+            if 'error' not in token_json:
+                break
+            if token_json.get('error') != 'redirect_uri_mismatch':
+                break
+
         if 'error' in token_json:
             return jsonify({'success': False, 'error': token_json.get('error_description', token_json['error'])}), 400
 

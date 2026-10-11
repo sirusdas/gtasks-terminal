@@ -163,6 +163,13 @@ def switch_account_local(account_id):
     from routes.api import switch_account
     return switch_account(account_id)
 
+@app.route(f'{BASE_PATH}/api/accounts/<account_id>', methods=['DELETE'])
+def delete_account_local(account_id):
+    """Delete an account"""
+    from routes.api import api_delete_account
+    return api_delete_account(account_id)
+
+
 @app.route(f'{BASE_PATH}/api/stats')
 def api_stats_local():
     """Get dashboard statistics"""
@@ -332,6 +339,13 @@ def switch_account_root(account_id):
     """Switch to a different account (local development)"""
     from routes.api import switch_account
     return switch_account(account_id)
+
+@app.route('/api/accounts/<account_id>', methods=['DELETE'])
+def delete_account_root(account_id):
+    """Delete an account (local development)"""
+    from routes.api import api_delete_account
+    return api_delete_account(account_id)
+
 
 @app.route('/api/stats')
 def api_stats_root():
