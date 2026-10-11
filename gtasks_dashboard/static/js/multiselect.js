@@ -682,24 +682,30 @@ export function getTagsWithCounts(tasks) {
     if (!tasks || !Array.isArray(tasks)) return [];
     
     const tagCounts = {};
-    const countTag = (t) => {
-        if (isValidTag(t)) {
-            const clean = t.trim().toLowerCase();
-            tagCounts[clean] = (tagCounts[clean] || 0) + 1;
-        }
-    };
     
     tasks.forEach(task => {
         // Only count pending tasks (status === 'pending')
-        if (task.status === 'pending') {
+        if (task.status === 'pending' && !task.is_deleted) {
+            const taskTags = new Set();
+            const addTag = (t) => {
+                if (isValidTag(t)) {
+                    taskTags.add(t.trim().toLowerCase());
+                }
+            };
+
             // Collect all tags from hybrid_tags
             if (task.hybrid_tags) {
-                task.hybrid_tags.bracket?.forEach(countTag);
-                task.hybrid_tags.hash?.forEach(countTag);
-                task.hybrid_tags.user?.forEach(countTag);
+                task.hybrid_tags.bracket?.forEach(addTag);
+                task.hybrid_tags.hash?.forEach(addTag);
+                task.hybrid_tags.user?.forEach(addTag);
             }
             // Also check regular tags
-            task.tags?.forEach(countTag);
+            task.tags?.forEach(addTag);
+
+            // Increment count once per tag for this task
+            taskTags.forEach(tag => {
+                tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+            });
         }
     });
     
