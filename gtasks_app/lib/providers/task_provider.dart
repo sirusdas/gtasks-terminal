@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import '../api/api_client.dart';
+import '../api/google_tasks_direct_client.dart';
 import '../models/task_item.dart';
 import '../models/account.dart';
+import '../storage/local_database.dart';
 
 class TaskProvider with ChangeNotifier {
   final ApiClient apiClient;
+  final LocalDatabase localDb = LocalDatabase.instance;
+  GoogleTasksDirectClient? _googleClient;
+  bool _isStandalone = false;
 
   List<TaskItem> _tasks = [];
   List<GTasksAccount> _accounts = [];
@@ -24,14 +29,51 @@ class TaskProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
 
-  TaskProvider({required this.apiClient});
+  TaskProvider({
+    required this.apiClient,
+    bool isStandalone = false,
+    String? googleAccessToken,
+  }) {
+    _isStandalone = isStandalone;
+    if (googleAccessToken != null && googleAccessToken.isNotEmpty) {
+      _googleClient = GoogleTasksDirectClient(accessToken: googleAccessToken);
+    }
+  }
 
-  void updateBaseUrl(String newUrl) {
+  void updateConfig({
+    required String newUrl,
+    required bool isStandalone,
+    String? googleAccessToken,
+  }) {
+    bool needsReload = false;
     if (apiClient.baseUrl != newUrl) {
       apiClient.baseUrl = newUrl;
+      needsReload = true;
+    }
+    if (_isStandalone != isStandalone) {
+      _isStandalone = isStandalone;
+      needsReload = true;
+    }
+    if (googleAccessToken != null && googleAccessToken.isNotEmpty) {
+      _googleClient = GoogleTasksDirectClient(accessToken: googleAccessToken);
+    } else {
+      _googleClient = null;
+    }
+
+    if (needsReload) {
       loadInitialData();
     }
   }
+
+  void updateBaseUrl(String newUrl) {
+    updateConfig(
+      newUrl: newUrl,
+      isStandalone: _isStandalone,
+      googleAccessToken: _googleClient?.accessToken,
+    );
+  }
+
+  bool get isStandalone => _isStandalone;
 
   List<TaskItem> get tasks => _filteredTasks();
   List<TaskItem> get allTasksUnfiltered => _tasks;
@@ -231,9 +273,14 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final accountsList = await apiClient.fetchAccounts();
-      _accounts = accountsList;
-      await refreshTasks();
+      if (_isStandalone) {
+        _accounts = [GTasksAccount(id: 'default', name: 'Personal (Google)')];
+        await refreshTasks();
+      } else {
+        final accountsList = await apiClient.fetchAccounts();
+        _accounts = accountsList;
+        await refreshTasks();
+      }
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -244,22 +291,65 @@ class TaskProvider with ChangeNotifier {
 
   Future<void> refreshTasks() async {
     try {
-      final taskList = await apiClient.fetchTasks(
-        account: _selectedAccount == 'all' ? null : _selectedAccount,
-        // We load all tasks for the selected account to allow instant local filtering across lists & tags
-        status: null,
-      );
-      _tasks = taskList;
-      _errorMessage = null;
+      if (_isStandalone) {
+        final localTasks = await localDb.getAllTasks(
+          account: _selectedAccount == 'all' ? null : _selectedAccount,
+        );
+        _tasks = localTasks;
+        _errorMessage = null;
+      } else {
+        final taskList = await apiClient.fetchTasks(
+          account: _selectedAccount == 'all' ? null : _selectedAccount,
+          status: null,
+        );
+        _tasks = taskList;
+        _errorMessage = null;
+      }
     } catch (e) {
       _errorMessage = e.toString();
     }
     notifyListeners();
   }
 
+  Future<bool> syncGoogleTasks() async {
+    if (!_isStandalone || _googleClient == null) {
+      return await apiClient.triggerGoogleSync();
+    }
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final lists = await _googleClient!.fetchTaskLists();
+      List<TaskItem> allFetched = [];
+
+      for (final list in lists) {
+        final listId = list['id'].toString();
+        final listTitle = list['title']?.toString() ?? 'Default List';
+        final tasks = await _googleClient!.fetchTasks(
+          listId: listId,
+          listTitle: listTitle,
+          account: 'default',
+        );
+        allFetched.addAll(tasks);
+      }
+
+      // Upsert into local SQLite with Last-Write-Wins and zero duplicates
+      await localDb.upsertTasks(allFetched);
+      await refreshTasks();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Standalone Google Sync failed: $e';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> setAccount(String accountId) async {
     _selectedAccount = accountId;
-    if (accountId != 'all') {
+    if (!_isStandalone && accountId != 'all') {
       try {
         await apiClient.switchAccount(accountId);
       } catch (_) {}
@@ -389,9 +479,31 @@ class TaskProvider with ChangeNotifier {
   }
 
   Future<bool> completeTask(String taskId) async {
+    if (_isStandalone) {
+      await localDb.markTaskCompleted(taskId);
+      final index = _tasks.indexWhere((t) => t.id == taskId);
+      if (index != -1) {
+        _tasks[index] = TaskItem(
+          id: _tasks[index].id,
+          title: _tasks[index].title,
+          description: _tasks[index].description,
+          status: 'completed',
+          due: _tasks[index].due,
+          listId: _tasks[index].listId,
+          listTitle: _tasks[index].listTitle,
+          account: _tasks[index].account,
+          tags: _tasks[index].tags,
+          calculatedPriority: _tasks[index].calculatedPriority,
+          createdAt: _tasks[index].createdAt,
+          completedAt: DateTime.now().toIso8601String(),
+        );
+        notifyListeners();
+      }
+      return true;
+    }
+
     final success = await apiClient.completeTask(taskId, account: _selectedAccount);
     if (success) {
-      // Optimistic update
       final index = _tasks.indexWhere((t) => t.id == taskId);
       if (index != -1) {
         _tasks[index] = TaskItem(
@@ -420,6 +532,21 @@ class TaskProvider with ChangeNotifier {
     String? due,
     List<String>? tags,
   }) async {
+    if (_isStandalone) {
+      final newTask = TaskItem(
+        id: 'local_${DateTime.now().millisecondsSinceEpoch}',
+        title: title,
+        description: description ?? '',
+        status: 'pending',
+        due: due,
+        tags: tags ?? [],
+        createdAt: DateTime.now().toUtc().toIso8601String(),
+      );
+      await localDb.upsertTask(newTask, syncStatus: 'pending_insert');
+      await refreshTasks();
+      return true;
+    }
+
     final success = await apiClient.createTask(
       title: title,
       description: description,
@@ -440,6 +567,28 @@ class TaskProvider with ChangeNotifier {
     String? due,
     List<String>? tags,
   }) async {
+    if (_isStandalone) {
+      final existing = await localDb.getTaskById(taskId);
+      if (existing != null) {
+        final updated = TaskItem(
+          id: taskId,
+          title: title,
+          description: description ?? existing.description,
+          due: due ?? existing.due,
+          status: existing.status,
+          tags: tags ?? existing.tags,
+          listId: existing.listId,
+          listTitle: existing.listTitle,
+          account: existing.account,
+          createdAt: existing.createdAt,
+        );
+        await localDb.upsertTask(updated, syncStatus: 'pending_update');
+        await refreshTasks();
+        return true;
+      }
+      return false;
+    }
+
     final success = await apiClient.updateTask(
       taskId: taskId,
       title: title,
@@ -455,6 +604,13 @@ class TaskProvider with ChangeNotifier {
   }
 
   Future<bool> deleteTask(String taskId) async {
+    if (_isStandalone) {
+      await localDb.deleteTask(taskId);
+      _tasks.removeWhere((t) => t.id == taskId);
+      notifyListeners();
+      return true;
+    }
+
     final success = await apiClient.deleteTask(taskId, account: _selectedAccount);
     if (success) {
       _tasks.removeWhere((t) => t.id == taskId);

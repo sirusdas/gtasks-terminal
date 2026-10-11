@@ -4,6 +4,7 @@ import 'api/api_client.dart';
 import 'providers/task_provider.dart';
 import 'providers/settings_provider.dart';
 import 'services/notification_service.dart';
+import 'ui/screens/onboarding_screen.dart';
 import 'ui/screens/tasks_screen.dart';
 
 void main() async {
@@ -27,10 +28,14 @@ class GTasksApp extends StatelessWidget {
           update: (ctx, settings, taskProvider) {
             final provider = taskProvider ?? TaskProvider(
               apiClient: ApiClient(baseUrl: settings.baseUrl),
+              isStandalone: settings.isStandalone,
+              googleAccessToken: settings.googleAccessToken,
             );
-            if (provider.apiClient.baseUrl != settings.baseUrl) {
-              provider.updateBaseUrl(settings.baseUrl);
-            }
+            provider.updateConfig(
+              newUrl: settings.baseUrl,
+              isStandalone: settings.isStandalone,
+              googleAccessToken: settings.googleAccessToken,
+            );
             return provider;
           },
         ),
@@ -62,7 +67,9 @@ class GTasksApp extends StatelessWidget {
                 brightness: Brightness.dark,
               ),
             ),
-            home: const TasksScreen(),
+            home: settings.isOnboardingCompleted
+                ? const TasksScreen()
+                : const OnboardingScreen(),
           );
         },
       ),

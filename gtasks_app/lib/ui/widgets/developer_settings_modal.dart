@@ -78,14 +78,69 @@ class _DeveloperSettingsModalState extends State<DeveloperSettingsModal> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Configure Backend Endpoint',
+              'Architecture Mode:',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Switch between local, loopback, or custom remote server URL.',
-              style: theme.textTheme.bodySmall,
+            const SizedBox(height: 6),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'standalone',
+                  icon: Icon(Icons.phone_android, size: 16),
+                  label: Text('Standalone (No PC)'),
+                ),
+                ButtonSegment(
+                  value: 'pc_server',
+                  icon: Icon(Icons.computer, size: 16),
+                  label: Text('PC Server'),
+                ),
+              ],
+              selected: {settings.appMode},
+              onSelectionChanged: (newSelection) async {
+                final newMode = newSelection.first;
+                await settings.setAppMode(newMode);
+                taskProvider.updateConfig(
+                  newUrl: settings.baseUrl,
+                  isStandalone: newMode == 'standalone',
+                  googleAccessToken: settings.googleAccessToken,
+                );
+              },
             ),
+            const SizedBox(height: 14),
+            if (!settings.isStandalone) ...[
+              const Text(
+                'Configure Backend Endpoint',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Switch between local, loopback, or custom remote server URL.',
+                style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Running in Standalone Mode with on-device SQLite database.',
+                        style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: _urlController,
@@ -173,9 +228,19 @@ class _DeveloperSettingsModalState extends State<DeveloperSettingsModal> {
       ),
       actions: [
         TextButton(
-          onPressed: () => _testConnection(_urlController.text.trim()),
-          child: const Text('Test Connection'),
+          onPressed: () async {
+            await settings.setOnboardingCompleted(false);
+            if (context.mounted) {
+              Navigator.pop(context);
+            }
+          },
+          child: const Text('Reset Onboarding', style: TextStyle(color: Colors.orange)),
         ),
+        if (!settings.isStandalone)
+          TextButton(
+            onPressed: () => _testConnection(_urlController.text.trim()),
+            child: const Text('Test Connection'),
+          ),
         ElevatedButton(
           onPressed: () {
             settings.setBaseUrl(_urlController.text);
