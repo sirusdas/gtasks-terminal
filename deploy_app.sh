@@ -69,10 +69,8 @@ echo "[+] Setting up reverse port ${REVERSE_PORT} -> ${REVERSE_PORT} on ${DEVICE
 adb -s "${DEVICE}" reverse "tcp:${REVERSE_PORT}" "tcp:${REVERSE_PORT}" || true
 
 # 4. Install & Launch
-echo "[4/4] Pushing APK to device and installing..."
-adb -s "${DEVICE}" push "${APK_PATH}" /data/local/tmp/gtasks-debug.apk
-adb -s "${DEVICE}" shell pm install -r --user 0 /data/local/tmp/gtasks-debug.apk
-adb -s "${DEVICE}" shell rm -f /data/local/tmp/gtasks-debug.apk
+echo "[4/4] Installing APK directly to device via streamed install..."
+adb -s "${DEVICE}" install -r "${APK_PATH}"
 
 echo "[+] Restarting ${PACKAGE_NAME}..."
 adb -s "${DEVICE}" shell am force-stop "${PACKAGE_NAME}" || true
