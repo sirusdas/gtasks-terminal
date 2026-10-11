@@ -18,9 +18,11 @@ import {
     getAllTags,
     isValidTag,
     getTaskDate,
-    getDefaultDateRange
+    getDefaultDateRange,
+    splitNotesAndTags,
+    combineNotesAndTags
 } from './utils.js';
-import { createTaskCard, renderTasksGrid } from './task-card.js?v=38';
+import { createTaskCard, renderTasksGrid } from './task-card.js?v=39';
 import { createMultiselect, getUniqueLists, getUniqueTags, getListsWithCounts, getTagsWithCounts, getStatusWithCounts, getFilteredTagsByLists, getFilteredListsByTags, getFilteredTasksBySearchAndDate, getFilteredListsByTagsAndCriteria, getFilteredTagsByListsAndCriteria } from './multiselect.js';
 import { 
     renderHierarchy,
@@ -2658,6 +2660,45 @@ window.saveNewTask = saveNewTask;
 window.onAddAccountChange = onAddAccountChange;
 window.switchAddNotesTab = switchAddNotesTab;
 
+// Tag Multiselect instances for Add and Edit modals
+let addTaskTagsMultiselect = null;
+let editTaskTagsMultiselect = null;
+
+export function initModalTagSelectors() {
+    const tasks = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
+    const allTags = getTagsWithCounts(tasks);
+
+    const addContainer = document.getElementById('add-task-tags-container');
+    if (addContainer && !addTaskTagsMultiselect) {
+        addContainer.innerHTML = '';
+        addTaskTagsMultiselect = createMultiselect({
+            id: 'add-task-tags',
+            placeholder: 'Type tag & press Enter, or browse...',
+            options: allTags,
+            initialValues: [],
+            allowAddNew: true,
+            tagFormat: 'bracket',
+            showCounts: true
+        });
+        addContainer.appendChild(addTaskTagsMultiselect);
+    }
+
+    const editContainer = document.getElementById('edit-task-tags-container');
+    if (editContainer && !editTaskTagsMultiselect) {
+        editContainer.innerHTML = '';
+        editTaskTagsMultiselect = createMultiselect({
+            id: 'edit-task-tags',
+            placeholder: 'Type tag & press Enter, or browse...',
+            options: allTags,
+            initialValues: [],
+            allowAddNew: true,
+            tagFormat: 'bracket',
+            showCounts: true
+        });
+        editContainer.appendChild(editTaskTagsMultiselect);
+    }
+}
+
 function openAddModal() {
     // Reset form fields
     document.getElementById('add-task-title').value = '';
@@ -2665,6 +2706,14 @@ function openAddModal() {
     document.getElementById('add-task-status').value = 'pending';
     document.getElementById('add-task-due').value = '';
     document.getElementById('add-task-notes').value = '';
+
+    // Initialize or refresh tags multiselect
+    initModalTagSelectors();
+    if (addTaskTagsMultiselect) {
+        const tasks = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
+        addTaskTagsMultiselect.setOptions(getTagsWithCounts(tasks));
+        addTaskTagsMultiselect.clear();
+    }
 
     // Populate Account select
     const accountSelect = document.getElementById('add-task-account');
@@ -2747,6 +2796,10 @@ async function saveNewTask() {
         return;
     }
 
+    const cleanNotesInput = document.getElementById('add-task-notes').value;
+    const selectedTags = addTaskTagsMultiselect ? addTaskTagsMultiselect.getSelectedValues() : [];
+    const finalNotes = combineNotesAndTags(cleanNotesInput, selectedTags);
+
     const payload = {
         title: title,
         account_id: document.getElementById('add-task-account').value,
@@ -2754,7 +2807,7 @@ async function saveNewTask() {
         priority: document.getElementById('add-task-priority').value,
         status: document.getElementById('add-task-status').value,
         due: document.getElementById('add-task-due').value || null,
-        notes: document.getElementById('add-task-notes').value
+        notes: finalNotes
     };
 
     try {
@@ -2802,10 +2855,32 @@ function openEditModal(taskId) {
 
     window.editingTaskId = taskId;
 
+    // Parse raw notes to extract cleanNotes and any footer tags below '---'
+    const rawNotes = task.notes || task.description || '';
+    const { cleanNotes, tags: footerTags } = splitNotesAndTags(rawNotes);
+
     document.getElementById('edit-task-title').value = task.title || '';
     document.getElementById('edit-task-priority').value = task.calculated_priority || task.priority || 'medium';
     document.getElementById('edit-task-status').value = task.status || 'pending';
-    document.getElementById('edit-task-notes').value = task.notes || task.description || '';
+    document.getElementById('edit-task-notes').value = cleanNotes;
+
+    // Initialize or refresh tags multiselect for Edit modal
+    initModalTagSelectors();
+    const activeTags = new Set(footerTags);
+    if (task.tags && Array.isArray(task.tags)) {
+        task.tags.forEach(t => { if (isValidTag(t)) activeTags.add(t); });
+    }
+    if (task.hybrid_tags) {
+        (task.hybrid_tags.bracket || []).forEach(t => { if (isValidTag(t)) activeTags.add(t); });
+        (task.hybrid_tags.hash || []).forEach(t => { if (isValidTag(t)) activeTags.add(t); });
+        (task.hybrid_tags.user || []).forEach(t => { if (isValidTag(t)) activeTags.add(t); });
+    }
+
+    if (editTaskTagsMultiselect) {
+        const allTags = getTagsWithCounts(tasks);
+        editTaskTagsMultiselect.setOptions(allTags);
+        editTaskTagsMultiselect.setSelectedValues(Array.from(activeTags));
+    }
 
     // Populate list dropdown with all available lists
     const listSelect = document.getElementById('edit-task-list');
@@ -2851,11 +2926,15 @@ async function saveTaskEdit() {
     const taskId = window.editingTaskId;
     if (!taskId) return;
 
+    const cleanNotesInput = document.getElementById('edit-task-notes').value;
+    const selectedTags = editTaskTagsMultiselect ? editTaskTagsMultiselect.getSelectedValues() : [];
+    const finalNotes = combineNotesAndTags(cleanNotesInput, selectedTags);
+
     const payload = {
         title: document.getElementById('edit-task-title').value,
         priority: document.getElementById('edit-task-priority').value,
         status: document.getElementById('edit-task-status').value,
-        notes: document.getElementById('edit-task-notes').value,
+        notes: finalNotes,
         list_title: document.getElementById('edit-task-list').value
     };
 
@@ -3140,7 +3219,9 @@ export function openQuickView(taskId) {
     }
 
     // Notes / Details Section
-    const notesContent = task.notes || task.description || '';
+    const rawNotes = task.notes || task.description || '';
+    const { cleanNotes } = splitNotesAndTags(rawNotes);
+    const notesContent = cleanNotes;
     const notesBody = document.getElementById('quick-view-notes-body');
     const formatBadge = document.getElementById('quick-view-format-badge');
     const copyBtn = document.getElementById('quick-view-copy-btn');

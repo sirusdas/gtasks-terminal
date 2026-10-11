@@ -239,6 +239,83 @@
     flex: 1;
 }
 
+.edit-tags-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.edit-tags-header label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+}
+
+.tags-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted, #94a3b8);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.task-tags-selector-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.task-tags-selector-wrapper .multiselect-container {
+    margin-bottom: 0;
+}
+
+.task-tags-selector-wrapper .multiselect-search {
+    border-radius: 8px;
+    padding: 8px 36px 8px 12px;
+    font-size: 0.88rem;
+}
+
+.task-tags-selector-wrapper .multiselect-selection {
+    margin-bottom: 6px;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.task-tags-selector-wrapper .multiselect-tag {
+    background: #e0e7ff;
+    color: #4338ca;
+    border: 1px solid #c7d2fe;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 0.8rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.dark-mode .task-tags-selector-wrapper .multiselect-tag {
+    background: rgba(99, 102, 241, 0.22);
+    color: #c7d2fe;
+    border-color: rgba(99, 102, 241, 0.4);
+}
+
+.task-tags-selector-wrapper .multiselect-tag .multiselect-remove {
+    color: #6366f1;
+    font-weight: 700;
+    margin-left: 4px;
+}
+
+.dark-mode .task-tags-selector-wrapper .multiselect-tag .multiselect-remove {
+    color: #a5b4fc;
+}
+
 .edit-notes-header {
     display: flex;
     justify-content: space-between;

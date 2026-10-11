@@ -11,7 +11,8 @@ import {
     getTagsDisplay,
     getPriorityClass,
     getPriorityIcon,
-    getStatusClass
+    getStatusClass,
+    splitNotesAndTags
 } from './utils.js';
 
 /**
@@ -33,6 +34,10 @@ export function createTaskCard(task, options = {}) {
     const dateStatus = getDateStatus(task.due);
     const dateStatusBadge = getDateStatusBadge(dateStatus);
     
+    // Clean notes without trailing tags divider
+    const rawNotes = task.notes || task.description || '';
+    const { cleanNotes } = splitNotesAndTags(rawNotes);
+
     // Compact date display
     const compactDates = getCompactDateDisplay(task);
     
@@ -105,7 +110,7 @@ export function createTaskCard(task, options = {}) {
                 ${dateStatusBadge}
             </div>
             <div class="node-task-dates">${compactDates}</div>
-            ${task.description ? `<p style="color: #6b7280; font-size: 0.875rem; margin: 0.5rem 0;">${task.description}</p>` : ''}
+            ${cleanNotes ? `<p style="color: #6b7280; font-size: 0.875rem; margin: 0.5rem 0;">${cleanNotes}</p>` : ''}
             <div class="node-task-meta">
                 <span class="node-task-priority ${priorityClass}">
                     ${priorityIcon} ${task.calculated_priority || 'medium'}
@@ -135,11 +140,11 @@ export function createTaskCard(task, options = {}) {
                     ${task.due ? `<span class="compact-due ${dateStatus}"><i class="fas fa-calendar-alt"></i> ${task.due}</span>` : ''}
                     ${task.list_title ? `<span class="compact-list"><i class="fas fa-list"></i> ${task.list_title}</span>` : ''}
                     <span class="compact-status-badge ${statusClass}">${task.status}</span>
-                    ${task.notes || task.description ? `<span class="compact-has-notes" title="Has notes/description"><i class="fas fa-sticky-note"></i></span>` : ''}
+                    ${cleanNotes ? `<span class="compact-has-notes" title="Has notes/description"><i class="fas fa-sticky-note"></i></span>` : ''}
                     ${task.tags && task.tags.length ? `<span class="compact-tag-count"><i class="fas fa-tag"></i> ${task.tags.length}</span>` : ''}
                 </div>
                 <div class="compact-details" id="compact-details-${task.id}" style="display: none;">
-                    ${task.description ? `<p class="compact-desc">${task.description}</p>` : ''}
+                    ${cleanNotes ? `<p class="compact-desc">${cleanNotes}</p>` : ''}
                     ${tagsDisplay}
                     ${notesSection}
                     <div class="compact-expanded-footer">
@@ -173,7 +178,7 @@ export function createTaskCard(task, options = {}) {
             </div>
             <h4 class="task-card-title" onclick="openQuickView('${task.id}')" style="cursor: pointer;" title="Quick view details">${task.title}</h4>
             <div class="task-card-dates">${compactDates}</div>
-            ${task.description ? `<p class="task-card-description">${task.description}</p>` : ''}
+            ${cleanNotes ? `<p class="task-card-description">${cleanNotes}</p>` : ''}
             ${tagsDisplay}
             ${notesSection}
             <div class="task-card-footer">

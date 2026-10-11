@@ -1156,6 +1156,13 @@
                         </select>
                     </div>
                 </div>
+                <div class="edit-form-group edit-tags-group">
+                    <div class="edit-tags-header">
+                        <label><i class="fas fa-tags" style="color: #6366f1;"></i> Tags</label>
+                        <span class="tags-hint">Search, select, or type new tags (saved as [tag])</span>
+                    </div>
+                    <div id="edit-task-tags-container" class="task-tags-selector-wrapper"></div>
+                </div>
                 <div class="edit-form-group edit-notes-group">
                     <div class="edit-notes-header">
                         <label>Notes <span class="markdown-hint">— Markdown & JSON supported</span></label>
@@ -1236,6 +1243,13 @@
                         <label>Due Date</label>
                         <input type="date" id="add-task-due" class="filter-input">
                     </div>
+                </div>
+                <div class="edit-form-group edit-tags-group">
+                    <div class="edit-tags-header">
+                        <label><i class="fas fa-tags" style="color: #6366f1;"></i> Tags</label>
+                        <span class="tags-hint">Search, select, or type new tags (saved as [tag])</span>
+                    </div>
+                    <div id="add-task-tags-container" class="task-tags-selector-wrapper"></div>
                 </div>
                 <div class="edit-form-group edit-notes-group">
                     <div class="edit-notes-header">
@@ -1486,10 +1500,10 @@
         <p>Loading...</p>
     </div>
 
-    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=38"></script>
-    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=38"></script>
-    <script type="module" src="{{ base_path }}/static/js/reports.js?v=38"></script>
-    <script type="module" src="{{ base_path }}/static/js/notifications.js?v=38"></script>
-    <script type="module" src="{{ base_path }}/static/js/debugger.js?v=38"></script>
+    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=40"></script>
+    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=40"></script>
+    <script type="module" src="{{ base_path }}/static/js/reports.js?v=40"></script>
+    <script type="module" src="{{ base_path }}/static/js/notifications.js?v=40"></script>
+    <script type="module" src="{{ base_path }}/static/js/debugger.js?v=40"></script>
 </body>
 </html>

@@ -26,7 +26,9 @@ export function createMultiselect(config) {
         onChange = () => {},
         searchMinChars = 0,
         showCounts = false,
-        title = ''
+        title = '',
+        allowAddNew = false,
+        tagFormat = 'hash' // 'hash' for #tag or 'bracket' for [tag]
     } = config;
 
     // Filter metadata mapping for rich headers, icons, and subtitles
@@ -60,14 +62,26 @@ export function createMultiselect(config) {
             subtitle: 'Select tags to include in tasks view',
             icon: 'fas fa-tags',
             type: 'tag'
+        },
+        'add-task-tags': {
+            title: 'Task Tags',
+            subtitle: 'Select existing tags or create new tags',
+            icon: 'fas fa-tags',
+            type: 'tag'
+        },
+        'edit-task-tags': {
+            title: 'Task Tags',
+            subtitle: 'Select existing tags or create new tags',
+            icon: 'fas fa-tags',
+            type: 'tag'
         }
     };
 
     const meta = filterMeta[id] || {
         title: title || placeholder.replace('Filter by ', 'Select ').replace('...', ''),
-        subtitle: 'Select options to filter tasks',
-        icon: 'fas fa-filter',
-        type: 'general'
+        subtitle: 'Select options or type to add new',
+        icon: 'fas fa-tags',
+        type: 'tag'
     };
 
     // Container in the filter form/drawer
@@ -149,9 +163,10 @@ export function createMultiselect(config) {
                 const tag = document.createElement('span');
                 tag.className = 'multiselect-tag';
                 const displayLabel = getOptionLabel(value);
-                const prefix = meta.type === 'tag' ? '#' : '';
+                const prefix = tagFormat === 'bracket' ? '[' : (meta.type === 'tag' ? '#' : '');
+                const suffix = tagFormat === 'bracket' ? ']' : '';
                 tag.innerHTML = `
-                    <span class="multiselect-tag-label">${prefix}${escapeHtml(displayLabel)}</span>
+                    <span class="multiselect-tag-label">${prefix}${escapeHtml(displayLabel)}${suffix}</span>
                     <button type="button" class="multiselect-remove" data-value="${escapeHtml(String(value))}" title="Remove">&times;</button>
                 `;
                 selectionArea.appendChild(tag);
@@ -281,10 +296,49 @@ export function createMultiselect(config) {
         }
     }
 
+    // Helper to add a new custom tag
+    function addNewTag(newTag) {
+        const clean = newTag.trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/^#/, '');
+        if (!clean) return;
+        if (!currentOptions.some(opt => (typeof opt === 'object' ? opt.value || opt.label : opt).toLowerCase() === clean)) {
+            currentOptions.unshift({ label: clean, value: clean, count: 0 });
+        }
+        pendingSelections.add(clean);
+        modalSearchInput.value = '';
+        if (modalSearchClear) modalSearchClear.style.display = 'none';
+        renderCards('');
+    }
+
     // Render option cards in multi-column grid
     function renderCards(searchTerm = '') {
         const term = searchTerm.toLowerCase().trim();
         modalGrid.innerHTML = '';
+
+        const cleanTerm = term.replace(/^\[|\]$/g, '').replace(/^#/, '').trim();
+        const exists = currentOptions.some(opt => {
+            const l = (typeof opt === 'object' ? opt.value || opt.label : opt).toLowerCase();
+            return l === cleanTerm;
+        });
+
+        // Add custom new tag card if allowAddNew is enabled and term is not empty and doesn't match an existing option
+        if (allowAddNew && cleanTerm && !exists) {
+            const addCard = document.createElement('div');
+            addCard.className = 'multiselect-grid-card multiselect-card-add-new';
+            addCard.style.cssText = 'border: 2px dashed #6366f1; background: rgba(99, 102, 241, 0.08); cursor: pointer; grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 10px; margin-bottom: 6px;';
+            addCard.innerHTML = `
+                <div style="width: 28px; height: 28px; border-radius: 50%; background: #6366f1; color: white; display: flex; align-items: center; justify-content: center; font-size: 0.85rem;">
+                    <i class="fas fa-plus"></i>
+                </div>
+                <div style="flex: 1;">
+                    <span style="color: #4f46e5; font-weight: 600; font-size: 0.92rem;">Add new tag: </span>
+                    <span style="background: rgba(99,102,241,0.18); color: #4338ca; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-family: monospace;">[${escapeHtml(cleanTerm)}]</span>
+                </div>
+            `;
+            addCard.addEventListener('click', () => {
+                addNewTag(cleanTerm);
+            });
+            modalGrid.appendChild(addCard);
+        }
 
         const filtered = currentOptions.filter(opt => {
             const optLabel = typeof opt === 'object' ? opt.label : String(opt);
@@ -293,7 +347,7 @@ export function createMultiselect(config) {
 
         updateModalStats(filtered.length, currentOptions.length);
 
-        if (filtered.length === 0) {
+        if (filtered.length === 0 && (!allowAddNew || !cleanTerm || exists)) {
             modalGrid.style.display = 'none';
             modalEmpty.style.display = 'block';
             return;
@@ -311,7 +365,9 @@ export function createMultiselect(config) {
 
             // Prefix icon / symbol
             let prefixHtml = '';
-            if (meta.type === 'tag') {
+            if (tagFormat === 'bracket') {
+                prefixHtml = '<span class="multiselect-card-prefix tag-bracket-prefix" style="color:#6366f1;font-weight:700;font-family:monospace;font-size:0.85rem;">[ ]</span>';
+            } else if (meta.type === 'tag') {
                 prefixHtml = '<span class="multiselect-card-prefix hash-prefix">#</span>';
             } else if (meta.type === 'list') {
                 prefixHtml = '<i class="fas fa-folder multiselect-card-prefix list-ico"></i>';
@@ -449,13 +505,51 @@ export function createMultiselect(config) {
             applyAndClose();
         } else if (e.key === 'Enter' && e.target === modalSearchInput) {
             e.preventDefault();
-            applyAndClose();
+            const term = modalSearchInput.value.trim();
+            const cleanTerm = term.replace(/^\[|\]$/g, '').replace(/^#/, '').trim();
+            if (allowAddNew && cleanTerm) {
+                addNewTag(cleanTerm);
+            } else {
+                applyAndClose();
+            }
         }
     });
+
+    // Inline typing and browse button handling
+    if (allowAddNew) {
+        triggerInput.readOnly = false;
+        triggerInput.placeholder = placeholder || 'Search or add tags...';
+        triggerInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                const term = triggerInput.value.trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/^#/, '');
+                if (term) {
+                    if (!selectedValues.includes(term)) {
+                        selectedValues.push(term);
+                        pendingSelections.add(term);
+                        if (!currentOptions.some(opt => (typeof opt === 'object' ? opt.value || opt.label : opt).toLowerCase() === term)) {
+                            currentOptions.unshift({ label: term, value: term, count: 0 });
+                        }
+                        updateDisplay();
+                        onChange(selectedValues);
+                    }
+                    triggerInput.value = '';
+                }
+            }
+        });
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openModal();
+        });
+    }
 
     // Form/drawer trigger clicks
     inputWrapper.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (allowAddNew && e.target === triggerInput) {
+            return;
+        }
         openModal();
     });
 
