@@ -288,24 +288,34 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           return;
         } else {
           // If network direct request failed (e.g. DNS / socket issue on device), try exchanging via PC server proxy
-          try {
-            final baseUrl = settings.baseUrl.replaceAll(RegExp(r'/+$'), '');
-            final success = await taskProvider.apiClient.submitAuthCode(
-              _accountNameController.text.trim(),
-              code,
-              redirectUri: redirectUri,
-            );
-            if (success) {
-              if (!mounted) return;
-              await taskProvider.loadInitialData();
-              if (!mounted) return;
-              Navigator.pop(context, true);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Account "${_accountNameController.text.trim()}" connected via server!')),
+          final fallbackUrls = [
+            settings.baseUrl,
+            'http://127.0.0.1:48275',
+            'http://localhost:48275',
+          ];
+
+          for (final serverUrl in fallbackUrls) {
+            try {
+              final oldUrl = taskProvider.apiClient.baseUrl;
+              taskProvider.apiClient.baseUrl = serverUrl;
+              final success = await taskProvider.apiClient.submitAuthCode(
+                _accountNameController.text.trim(),
+                code,
+                redirectUri: redirectUri,
               );
-              return;
-            }
-          } catch (_) {}
+              if (success) {
+                if (!mounted) return;
+                await taskProvider.loadInitialData();
+                if (!mounted) return;
+                Navigator.pop(context, true);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Account "${_accountNameController.text.trim()}" connected via server!')),
+                );
+                return;
+              }
+              taskProvider.apiClient.baseUrl = oldUrl;
+            } catch (_) {}
+          }
 
           setState(() {
             _error = 'Network error connecting to Google: $lastEx\nPlease ensure internet is active on phone.';
