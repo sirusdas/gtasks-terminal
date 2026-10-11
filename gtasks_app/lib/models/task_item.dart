@@ -1,3 +1,5 @@
+import '../utils/notes_parser.dart';
+
 class TaskItem {
   final String id;
   final String title;
@@ -28,6 +30,14 @@ class TaskItem {
   });
 
   bool get isCompleted => status.toLowerCase() == 'completed';
+
+  String get cleanNotes => NotesParser.splitNotesAndTags(description).cleanNotes;
+
+  List<String> get allTags {
+    final extracted = NotesParser.splitNotesAndTags(description).tags;
+    final set = <String>{...tags, ...extracted};
+    return set.toList();
+  }
 
   factory TaskItem.fromJson(Map<String, dynamic> json) {
     List<String> parsedTags = [];

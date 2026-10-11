@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
+import '../../utils/notes_parser.dart';
 import '../widgets/task_card.dart';
 import '../widgets/developer_settings_modal.dart';
 import '../widgets/add_account_modal.dart';
@@ -91,9 +92,13 @@ class _TasksScreenState extends State<TasksScreen> {
                       .map((t) => t.trim())
                       .where((t) => t.isNotEmpty)
                       .toList();
+                  final combinedNotes = NotesParser.combineNotesAndTags(
+                    notesController.text.trim(),
+                    tags,
+                  );
                   context.read<TaskProvider>().addTask(
                     title: title,
-                    description: notesController.text.trim(),
+                    description: combinedNotes,
                     tags: tags,
                   );
                   Navigator.pop(ctx);
@@ -107,9 +112,10 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   void _showEditTaskSheet(BuildContext context, task) {
+    // Show only the clean user notes in the notes input box
     final titleController = TextEditingController(text: task.title);
-    final notesController = TextEditingController(text: task.description);
-    final tagsController = TextEditingController(text: task.tags.join(', '));
+    final notesController = TextEditingController(text: task.cleanNotes);
+    final tagsController = TextEditingController(text: task.allTags.join(', '));
 
     showModalBottomSheet(
       context: context,
@@ -154,16 +160,16 @@ class _TasksScreenState extends State<TasksScreen> {
             TextField(
               controller: notesController,
               decoration: const InputDecoration(
-                labelText: 'Notes / description',
+                labelText: 'Notes / description (tags separated automatically)',
                 border: OutlineInputBorder(),
               ),
-              maxLines: 3,
+              maxLines: 4,
             ),
             const SizedBox(height: 10),
             TextField(
               controller: tagsController,
               decoration: const InputDecoration(
-                labelText: 'Tags (comma separated)',
+                labelText: 'Tags (comma separated, e.g. work, p1)',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -179,10 +185,14 @@ class _TasksScreenState extends State<TasksScreen> {
                       .map((t) => t.trim())
                       .where((t) => t.isNotEmpty)
                       .toList();
+                  final combinedNotes = NotesParser.combineNotesAndTags(
+                    notesController.text.trim(),
+                    tags,
+                  );
                   context.read<TaskProvider>().updateTask(
                     taskId: task.id,
                     title: title,
-                    description: notesController.text.trim(),
+                    description: combinedNotes,
                     tags: tags,
                   );
                   Navigator.pop(ctx);

@@ -35,7 +35,8 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
 
     try {
       final taskProvider = context.read<TaskProvider>();
-      final redirect = useOob ? 'oob' : 'http://localhost:48275/api/auth/google/callback';
+      final baseUrl = taskProvider.apiClient.baseUrl.replaceAll(RegExp(r'/+$'), '');
+      final redirect = useOob ? 'oob' : '$baseUrl/api/auth/google/callback';
 
       final res = await taskProvider.apiClient.startGoogleAuth(
         _accountNameController.text.trim(),
@@ -74,10 +75,11 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
 
     try {
       final taskProvider = context.read<TaskProvider>();
+      final baseUrl = taskProvider.apiClient.baseUrl.replaceAll(RegExp(r'/+$'), '');
       final success = await taskProvider.apiClient.submitAuthCode(
         _accountNameController.text.trim(),
         code,
-        redirectUri: _selectedMethod == 1 ? 'oob' : 'http://localhost:48275/api/auth/google/callback',
+        redirectUri: _selectedMethod == 1 ? 'oob' : '$baseUrl/api/auth/google/callback',
       );
 
       if (success) {
