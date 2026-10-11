@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/task_provider.dart';
+import '../widgets/add_account_modal.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -352,13 +353,31 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     children: [
                       Icon(Icons.check_circle_outline, color: Colors.green, size: 20),
                       SizedBox(width: 8),
-                      Text('Ready to Start Offline', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text('Offline SQLite Database Initialized', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Text(
-                    'Your local SQLite database is ready. You can start creating tasks right now, or link Google Tasks in Settings anytime.',
+                    'Link your Google Account now to enable automatic background sync with Google Tasks, or continue as a local offline task manager.',
                     style: TextStyle(fontSize: 12, color: theme.hintColor, height: 1.4),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.account_circle, color: Colors.blueAccent),
+                      label: const Text('Link Google Account (Optional)'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (_) => AddGoogleAccountModal(),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),

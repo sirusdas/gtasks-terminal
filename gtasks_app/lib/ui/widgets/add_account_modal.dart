@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
+import '../../providers/settings_provider.dart';
 
 class AddGoogleAccountModal extends StatefulWidget {
   const AddGoogleAccountModal({super.key});
@@ -18,7 +21,11 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
   bool _loading = false;
   String? _authUrl;
   String? _error;
-  int _selectedMethod = 0; // 0: Web Redirect / One-click, 1: Copy-Paste Code (OOB)
+  int _selectedMethod = 0; // 0: Direct Web Browser, 1: Copy-Paste Auth Code
+
+  // Fallback direct Google OAuth Client ID when in standalone mode without PC server
+  static const String _defaultGoogleClientId =
+      '1083428062171-vdlvakfkt2kvo4ncchvkt4m1hefnpqmg.apps.googleusercontent.com';
 
   @override
   void dispose() {
@@ -35,27 +42,61 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
 
     try {
       final taskProvider = context.read<TaskProvider>();
-      final baseUrl = taskProvider.apiClient.baseUrl.replaceAll(RegExp(r'/+$'), '');
-      final redirect = useOob ? 'oob' : '$baseUrl/api/auth/google/callback';
+      final settings = context.read<SettingsProvider>();
 
-      final res = await taskProvider.apiClient.startGoogleAuth(
-        _accountNameController.text.trim(),
-        redirectUri: redirect,
-      );
+      String targetAuthUrl;
 
-      final urlString = res['auth_url'] as String;
+      if (taskProvider.isStandalone) {
+        // Direct Google OAuth URL for standalone client
+        final scopes = [
+          'https://www.googleapis.com/auth/tasks',
+          'openid',
+          'email',
+          'profile',
+        ].join(' ');
+
+        final redirect = useOob ? 'urn:ietf:wg:oauth:2.0:oob' : 'http://localhost';
+        final queryParams = {
+          'client_id': _defaultGoogleClientId,
+          'redirect_uri': redirect,
+          'response_type': 'code',
+          'scope': scopes,
+          'access_type': 'offline',
+          'prompt': 'consent',
+          'state': _accountNameController.text.trim(),
+        };
+
+        final uri = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', queryParams);
+        targetAuthUrl = uri.toString();
+      } else {
+        // PC Server flow
+        final baseUrl = settings.baseUrl.replaceAll(RegExp(r'/+$'), '');
+        final redirect = useOob ? 'oob' : '$baseUrl/api/auth/google/callback';
+
+        final res = await taskProvider.apiClient.startGoogleAuth(
+          _accountNameController.text.trim(),
+          redirectUri: redirect,
+        );
+        targetAuthUrl = res['auth_url'] as String;
+      }
+
       setState(() {
-        _authUrl = urlString;
+        _authUrl = targetAuthUrl;
       });
 
-      final uri = Uri.parse(urlString);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        setState(() => _error = 'Could not open browser. Please use the link below.');
+      final parsedUri = Uri.parse(targetAuthUrl);
+      final launched = await launchUrl(
+        parsedUri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        setState(() {
+          _error = 'Could not open browser automatically. Please tap the button below to copy the link.';
+        });
       }
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = 'Error launching Google Sign-in: $e');
     } finally {
       setState(() => _loading = false);
     }
@@ -75,7 +116,26 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
 
     try {
       final taskProvider = context.read<TaskProvider>();
-      final baseUrl = taskProvider.apiClient.baseUrl.replaceAll(RegExp(r'/+$'), '');
+      final settings = context.read<SettingsProvider>();
+
+      if (taskProvider.isStandalone) {
+        // Standalone mode: save code and complete
+        await settings.setGoogleTokens(accessToken: code);
+        taskProvider.updateConfig(
+          newUrl: settings.baseUrl,
+          isStandalone: true,
+          googleAccessToken: code,
+        );
+        if (!mounted) return;
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Account "${_accountNameController.text.trim()}" linked in standalone mode!')),
+        );
+        return;
+      }
+
+      // PC Server mode: submit code to Flask backend
+      final baseUrl = settings.baseUrl.replaceAll(RegExp(r'/+$'), '');
       final success = await taskProvider.apiClient.submitAuthCode(
         _accountNameController.text.trim(),
         code,
@@ -158,8 +218,9 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
                 decoration: BoxDecoration(
                   color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                 ),
-                child: Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                child: SelectableText(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
               ),
             if (_loading)
               const Center(
@@ -179,6 +240,19 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
                 ),
                 onPressed: () => _launchGoogleOAuth(_selectedMethod == 1),
               ),
+              if (_authUrl != null) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: const Text('Copy Google Sign-in URL', style: TextStyle(fontSize: 12)),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: _authUrl!));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Auth URL copied to clipboard! Open in any browser.')),
+                    );
+                  },
+                ),
+              ],
               if (_selectedMethod == 1 || _authUrl != null) ...[
                 const SizedBox(height: 14),
                 TextField(
