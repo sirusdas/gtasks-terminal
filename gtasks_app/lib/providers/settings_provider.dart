@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -39,6 +40,12 @@ class SettingsProvider with ChangeNotifier {
     _loadSettings();
   }
 
+  static const String _keyAccounts = 'gtasks_accounts_list'; // JSON map of accounts
+
+  Map<String, Map<String, dynamic>> _storedAccounts = {};
+
+  Map<String, Map<String, dynamic>> get storedAccounts => _storedAccounts;
+
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _baseUrl = prefs.getString(_keyBaseUrl) ?? 'http://gtasks.com';
@@ -48,6 +55,61 @@ class SettingsProvider with ChangeNotifier {
     _isOnboardingCompleted = prefs.getBool(_keyOnboarded) ?? false;
     _googleAccessToken = prefs.getString(_keyGoogleAccessToken);
     _googleRefreshToken = prefs.getString(_keyGoogleRefreshToken);
+
+    final rawAccounts = prefs.getString(_keyAccounts);
+    if (rawAccounts != null) {
+      try {
+        final decoded = json.decode(rawAccounts) as Map<String, dynamic>;
+        _storedAccounts = decoded.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)));
+      } catch (_) {}
+    }
+
+    // Default account if none exists
+    if (_storedAccounts.isEmpty && _googleAccessToken != null) {
+      _storedAccounts['default'] = {
+        'id': 'default',
+        'name': 'Personal (Google)',
+        'access_token': _googleAccessToken,
+        'refresh_token': _googleRefreshToken,
+      };
+    }
+    notifyListeners();
+  }
+
+  Future<void> saveAccount({
+    required String id,
+    required String name,
+    required String accessToken,
+    String? refreshToken,
+  }) async {
+    _storedAccounts[id] = {
+      'id': id,
+      'name': name,
+      'access_token': accessToken,
+      'refresh_token': refreshToken,
+    };
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyAccounts, json.encode(_storedAccounts));
+    // If it's the first or active, update current tokens
+    if (_googleAccessToken == null || id == 'default') {
+      await setGoogleTokens(accessToken: accessToken, refreshToken: refreshToken);
+    }
+    notifyListeners();
+  }
+
+  Future<void> removeAccount(String id) async {
+    _storedAccounts.remove(id);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyAccounts, json.encode(_storedAccounts));
+    if (_storedAccounts.isEmpty) {
+      await clearGoogleTokens();
+    } else {
+      final next = _storedAccounts.values.first;
+      await setGoogleTokens(
+        accessToken: next['access_token'] ?? '',
+        refreshToken: next['refresh_token'],
+      );
+    }
     notifyListeners();
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/settings_provider.dart';
+import 'settings_modal.dart';
 import 'developer_settings_modal.dart';
 
 class TasksSidebarDrawer extends StatefulWidget {
@@ -81,13 +82,13 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                       ),
                       const Spacer(),
                       IconButton(
-                        icon: const Icon(Icons.tune, color: Colors.amber, size: 20),
-                        tooltip: 'Developer Settings',
+                        icon: const Icon(Icons.settings_outlined, size: 20),
+                        tooltip: 'Settings & Accounts',
                         onPressed: () {
                           Navigator.pop(context);
                           showDialog(
                             context: context,
-                            builder: (_) => const DeveloperSettingsModal(),
+                            builder: (_) => const SettingsModal(),
                           );
                         },
                       ),

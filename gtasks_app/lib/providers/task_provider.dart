@@ -40,10 +40,13 @@ class TaskProvider with ChangeNotifier {
     }
   }
 
+  Map<String, Map<String, dynamic>> _standaloneAccounts = {};
+
   void updateConfig({
     required String newUrl,
     required bool isStandalone,
     String? googleAccessToken,
+    Map<String, Map<String, dynamic>>? standaloneAccounts,
   }) {
     bool needsReload = false;
     if (apiClient.baseUrl != newUrl) {
@@ -53,6 +56,9 @@ class TaskProvider with ChangeNotifier {
     if (_isStandalone != isStandalone) {
       _isStandalone = isStandalone;
       needsReload = true;
+    }
+    if (standaloneAccounts != null) {
+      _standaloneAccounts = standaloneAccounts;
     }
     if (googleAccessToken != null && googleAccessToken.isNotEmpty) {
       _googleClient = GoogleTasksDirectClient(accessToken: googleAccessToken);
@@ -274,7 +280,18 @@ class TaskProvider with ChangeNotifier {
 
     try {
       if (_isStandalone) {
-        _accounts = [GTasksAccount(id: 'default', name: 'Personal (Google)')];
+        if (_standaloneAccounts.isNotEmpty) {
+          _accounts = _standaloneAccounts.values
+              .map((acc) => GTasksAccount(
+                    id: acc['id']?.toString() ?? 'default',
+                    name: acc['name']?.toString() ?? 'Personal',
+                  ))
+              .toList();
+        } else if (_googleClient != null) {
+          _accounts = [GTasksAccount(id: 'default', name: 'Personal (Google)')];
+        } else {
+          _accounts = [];
+        }
         await refreshTasks();
       } else {
         final accountsList = await apiClient.fetchAccounts();

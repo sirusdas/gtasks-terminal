@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
 import '../widgets/task_card.dart';
 import '../widgets/developer_settings_modal.dart';
+import '../widgets/settings_modal.dart';
 import '../widgets/add_account_modal.dart';
 import '../widgets/tasks_sidebar_drawer.dart';
 import '../widgets/task_filter_modal.dart';
@@ -87,12 +88,12 @@ class _TasksScreenState extends State<TasksScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.tune, color: Colors.amber),
-            tooltip: 'Developer Settings',
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings & Accounts',
             onPressed: () {
               showDialog(
                 context: context,
-                builder: (_) => const DeveloperSettingsModal(),
+                builder: (_) => const SettingsModal(),
               );
             },
           ),
@@ -345,13 +346,44 @@ class _TasksScreenState extends State<TasksScreen> {
                       )
                     : provider.tasks.isEmpty
                         ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.inbox_outlined, size: 54, color: theme.disabledColor),
-                                const SizedBox(height: 8),
-                                Text('No tasks match your criteria', style: theme.textTheme.titleMedium),
-                              ],
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (provider.accounts.isEmpty) ...[
+                                    Icon(Icons.no_accounts_outlined, size: 58, color: Colors.amber.shade600),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'No Accounts Configured',
+                                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Connect a Google account to sync your tasks or create a new task locally.',
+                                      textAlign: TextAlign.center,
+                                      style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    ElevatedButton.icon(
+                                      icon: const Icon(Icons.account_circle),
+                                      label: const Text('Add Account'),
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (_) => const AddGoogleAccountModal(),
+                                        );
+                                      },
+                                    ),
+                                  ] else ...[
+                                    Icon(Icons.inbox_outlined, size: 54, color: theme.disabledColor),
+                                    const SizedBox(height: 8),
+                                    Text('No tasks match your criteria', style: theme.textTheme.titleMedium),
+                                    const SizedBox(height: 4),
+                                    Text('Tap + New Task to create one', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
+                                  ],
+                                ],
+                              ),
                             ),
                           )
                         : RefreshIndicator(
