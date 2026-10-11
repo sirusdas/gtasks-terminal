@@ -84,11 +84,29 @@ class TaskProvider with ChangeNotifier {
 
   Future<void> removeAccount(String accountId) async {
     _deletedAccounts.add(accountId);
-    _accounts.removeWhere((a) => a.id == accountId);
-    if (_selectedAccount == accountId) {
-      _selectedAccount = 'all';
+    if (accountId == 'default' || accountId == 'personal') {
+      _deletedAccounts.add('default');
+      _deletedAccounts.add('personal');
     }
+    _accounts.removeWhere((a) =>
+        a.id == accountId ||
+        ((accountId == 'default' || accountId == 'personal') &&
+            (a.id == 'default' || a.id == 'personal')));
+
     await localDb.clearAllTasks(account: accountId);
+    if (accountId == 'default' || accountId == 'personal') {
+      await localDb.clearAllTasks(account: 'default');
+      await localDb.clearAllTasks(account: 'personal');
+    }
+
+    if (_accounts.isEmpty) {
+      await localDb.clearAllTasks();
+      _tasks = [];
+      _selectedAccount = 'all';
+    } else if (_selectedAccount == accountId) {
+      _selectedAccount = _accounts.first.id;
+    }
+
     await refreshTasks();
     notifyListeners();
   }
@@ -185,7 +203,15 @@ class TaskProvider with ChangeNotifier {
   }
 
   List<TaskItem> _filteredTasks() {
+    if (_accounts.isEmpty) {
+      return [];
+    }
+
+    final validAccountIds = _accounts.map((a) => a.id).toSet();
     var result = _tasks.where((task) {
+      if (!validAccountIds.contains(task.account)) {
+        return false;
+      }
       if (_selectedAccount != 'all' && task.account != _selectedAccount) {
         return false;
       }
@@ -340,32 +366,44 @@ class TaskProvider with ChangeNotifier {
 
   Future<void> refreshTasks() async {
     try {
+      if (_accounts.isEmpty) {
+        _tasks = [];
+        _errorMessage = null;
+        notifyListeners();
+        return;
+      }
+
+      final validAccountIds = _accounts.map((a) => a.id).toSet();
+
       if (_isStandalone) {
-        final localTasks = await localDb.getAllTasks(
-          account: _selectedAccount == 'all' ? null : _selectedAccount,
-        );
-        if (localTasks.isEmpty) {
-          try {
-            final serverTasks = await apiClient.fetchTasks(
-              account: _selectedAccount == 'all' ? null : _selectedAccount,
-            );
-            if (serverTasks.isNotEmpty) {
-              await localDb.upsertTasks(serverTasks);
-              _tasks = serverTasks;
-              _errorMessage = null;
-              notifyListeners();
-              return;
-            }
-          } catch (_) {}
+        if (_selectedAccount != 'all' && validAccountIds.contains(_selectedAccount)) {
+          final localTasks = await localDb.getAllTasks(account: _selectedAccount);
+          _tasks = localTasks;
+        } else {
+          // 'all' configured accounts only
+          List<TaskItem> allTasks = [];
+          for (final acc in _accounts) {
+            final accTasks = await localDb.getAllTasks(account: acc.id);
+            allTasks.addAll(accTasks);
+          }
+          _tasks = allTasks;
         }
-        _tasks = localTasks;
         _errorMessage = null;
       } else {
-        final taskList = await apiClient.fetchTasks(
-          account: _selectedAccount == 'all' ? null : _selectedAccount,
-          status: null,
-        );
-        _tasks = taskList;
+        if (_selectedAccount != 'all' && validAccountIds.contains(_selectedAccount)) {
+          final taskList = await apiClient.fetchTasks(account: _selectedAccount);
+          _tasks = taskList;
+        } else {
+          // 'all' configured accounts only
+          List<TaskItem> allTasks = [];
+          for (final acc in _accounts) {
+            try {
+              final accTasks = await apiClient.fetchTasks(account: acc.id);
+              allTasks.addAll(accTasks);
+            } catch (_) {}
+          }
+          _tasks = allTasks;
+        }
         _errorMessage = null;
       }
     } catch (e) {
