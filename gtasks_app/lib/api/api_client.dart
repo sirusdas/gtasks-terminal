@@ -112,6 +112,26 @@ class ApiClient {
     return response.statusCode == 200;
   }
 
+  Future<bool> resolveWorkingHost() async {
+    final candidateHosts = [
+      baseUrl,
+      'http://192.168.1.4:48275',
+      'http://gtasks.com:48275',
+      'http://127.0.0.1:48275',
+    ];
+    for (final host in candidateHosts) {
+      try {
+        final uri = Uri.parse('$host/api/health');
+        final resp = await http.get(uri).timeout(const Duration(milliseconds: 1500));
+        if (resp.statusCode == 200) {
+          baseUrl = host;
+          return true;
+        }
+      } catch (_) {}
+    }
+    return false;
+  }
+
   Future<bool> createTask({
     required String title,
     String? description,
@@ -121,22 +141,40 @@ class ApiClient {
     String? priority,
     List<String>? tags,
   }) async {
-    final uri = Uri.parse('$baseUrl/api/tasks');
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'title': title,
-        'description': description ?? '',
-        'notes': description ?? '',
-        'due': due,
-        'account_id': account ?? 'default',
-        'list_title': listTitle ?? 'My Tasks',
-        'priority': priority ?? 'medium',
-        'tags': tags ?? [],
-      }),
-    );
-    return response.statusCode == 200 || response.statusCode == 201;
+    final payload = json.encode({
+      'title': title,
+      'description': description ?? '',
+      'notes': description ?? '',
+      'due': due,
+      'account_id': account ?? 'default',
+      'list_title': listTitle ?? 'My Tasks',
+      'priority': priority ?? 'medium',
+      'tags': tags ?? [],
+    });
+
+    try {
+      final uri = Uri.parse('$baseUrl/api/tasks');
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: payload,
+      ).timeout(const Duration(seconds: 15));
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      final found = await resolveWorkingHost();
+      if (found) {
+        try {
+          final uri = Uri.parse('$baseUrl/api/tasks');
+          final response = await http.post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: payload,
+          ).timeout(const Duration(seconds: 15));
+          return response.statusCode == 200 || response.statusCode == 201;
+        } catch (_) {}
+      }
+      throw Exception('Server unreachable at $baseUrl: $e');
+    }
   }
 
   Future<bool> updateTask({
@@ -181,7 +219,6 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> triggerGoogleSync({String? account, bool syncAll = false}) async {
-    final uri = Uri.parse('$baseUrl/api/sync/advanced');
     final Map<String, dynamic> body = {
       'sync_type': 'both',
       'sync_all': syncAll,
@@ -189,15 +226,37 @@ class ApiClient {
     if (account != null && account != 'all') {
       body['account'] = account;
     }
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode(body),
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body) as Map<String, dynamic>;
+
+    try {
+      final uri = Uri.parse('$baseUrl/api/sync/advanced');
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(body),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+      return {'success': false, 'message': 'HTTP ${response.statusCode}: ${response.body}'};
+    } catch (e) {
+      final found = await resolveWorkingHost();
+      if (found) {
+        try {
+          final uri = Uri.parse('$baseUrl/api/sync/advanced');
+          final response = await http.post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode(body),
+          ).timeout(const Duration(seconds: 15));
+
+          if (response.statusCode == 200) {
+            return json.decode(response.body) as Map<String, dynamic>;
+          }
+        } catch (_) {}
+      }
+      return {'success': false, 'message': 'Cannot reach server at $baseUrl: $e'};
     }
-    return {'success': false, 'message': 'HTTP ${response.statusCode}'};
   }
 
   Future<Map<String, dynamic>?> getSyncProgress({String? syncId}) async {

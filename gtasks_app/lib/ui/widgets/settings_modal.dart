@@ -4,6 +4,7 @@ import '../../providers/settings_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../services/notification_service.dart';
 import 'add_account_modal.dart';
+import 'sync_progress_dialog.dart';
 
 class SettingsModal extends StatefulWidget {
   const SettingsModal({super.key});
@@ -691,39 +692,15 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
                       backgroundColor: Colors.blueAccent,
                       foregroundColor: Colors.white,
                     ),
-                    onPressed: () async {
-                      final scaffold = ScaffoldMessenger.of(context);
-                      scaffold.showSnackBar(
-                        const SnackBar(content: Text('⚡ Starting Full Sync (--all)...')),
-                      );
-                      final ok = await taskProvider.syncAllGoogleTasks(account: taskProvider.selectedAccount);
-                      scaffold.showSnackBar(
-                        SnackBar(
-                          backgroundColor: ok ? Colors.green.shade700 : Colors.red.shade700,
-                          content: Text(
-                            ok
-                                ? '✅ Full Sync complete! ${taskProvider.allTasksUnfiltered.length} tasks synced.'
-                                : '❌ Full sync failed.',
-                          ),
-                        ),
-                      );
+                    onPressed: () {
+                      SyncProgressDialog.show(context, isFullSync: true);
                     },
                   ),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.sync, size: 16),
                     label: const Text('Quick Sync'),
-                    onPressed: () async {
-                      final scaffold = ScaffoldMessenger.of(context);
-                      scaffold.showSnackBar(
-                        const SnackBar(content: Text('🔄 Running Quick Sync...')),
-                      );
-                      final ok = await taskProvider.syncGoogleTasks(account: taskProvider.selectedAccount);
-                      scaffold.showSnackBar(
-                        SnackBar(
-                          backgroundColor: ok ? Colors.green.shade700 : Colors.red.shade700,
-                          content: Text(ok ? '✅ Quick sync complete!' : '❌ Quick sync failed.'),
-                        ),
-                      );
+                    onPressed: () {
+                      SyncProgressDialog.show(context, isFullSync: false);
                     },
                   ),
                 ],

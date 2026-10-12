@@ -494,20 +494,32 @@ class TaskProvider with ChangeNotifier {
       bool anySynced = false;
 
       for (final acc in accountsToSync) {
-        // Retrieve access token for this account
+        // Retrieve access and refresh token for this account
         String? token;
+        String? refreshToken;
         if (_standaloneAccounts.containsKey(acc.id)) {
           token = _standaloneAccounts[acc.id]?['access_token']?.toString();
+          refreshToken = _standaloneAccounts[acc.id]?['refresh_token']?.toString();
         }
         if ((token == null || token.isEmpty) && _googleClient != null) {
           token = _googleClient!.accessToken;
+          refreshToken = _googleClient!.refreshToken;
         }
 
         if (token == null || token.isEmpty) {
+          _errorMessage = 'No Google token found for account "${acc.name}". Please add or reconnect the account in Settings.';
           continue;
         }
 
-        final client = GoogleTasksDirectClient(accessToken: token);
+        final client = GoogleTasksDirectClient(
+          accessToken: token,
+          refreshToken: refreshToken,
+          onTokenRefreshed: (newTok) {
+            if (_standaloneAccounts.containsKey(acc.id)) {
+              _standaloneAccounts[acc.id]!['access_token'] = newTok;
+            }
+          },
+        );
 
         // 1. Flush offline pending changes first
         try {
@@ -797,24 +809,30 @@ class TaskProvider with ChangeNotifier {
       );
       await localDb.upsertTask(newTask, syncStatus: 'pending_insert');
       await refreshTasks();
-      // Trigger immediate background push to Google
+      // Sync immediately to Google Tasks in background
       _syncStandaloneTaskToGoogle(newTask, isCreate: true);
       return true;
     }
 
-    final success = await apiClient.createTask(
-      title: title,
-      description: description,
-      due: due,
-      account: effectiveAccount,
-      listTitle: effectiveList,
-      priority: priority,
-      tags: tags,
-    );
-    if (success) {
-      await refreshTasks();
+    try {
+      final success = await apiClient.createTask(
+        title: title,
+        description: description,
+        due: due,
+        account: effectiveAccount,
+        listTitle: effectiveList,
+        priority: priority,
+        tags: tags,
+      );
+      if (success) {
+        await refreshTasks();
+        return true;
+      }
+    } catch (e) {
+      _errorMessage = 'Failed to create task on server: $e';
+      notifyListeners();
     }
-    return success;
+    return false;
   }
 
   Future<bool> updateTask({
@@ -905,15 +923,30 @@ class TaskProvider with ChangeNotifier {
     try {
       final accId = task.account.isNotEmpty ? task.account : 'default';
       String? token;
+      String? refreshToken;
       if (_standaloneAccounts.containsKey(accId)) {
         token = _standaloneAccounts[accId]?['access_token']?.toString();
+        refreshToken = _standaloneAccounts[accId]?['refresh_token']?.toString();
       }
       if ((token == null || token.isEmpty) && _googleClient != null) {
         token = _googleClient!.accessToken;
+        refreshToken = _googleClient!.refreshToken;
       }
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) {
+        _errorMessage = 'No Google token for account "$accId"';
+        notifyListeners();
+        return;
+      }
 
-      final client = GoogleTasksDirectClient(accessToken: token);
+      final client = GoogleTasksDirectClient(
+        accessToken: token,
+        refreshToken: refreshToken,
+        onTokenRefreshed: (newTok) {
+          if (_standaloneAccounts.containsKey(accId)) {
+            _standaloneAccounts[accId]!['access_token'] = newTok;
+          }
+        },
+      );
       final lists = await client.fetchTaskLists();
 
       Future<Map<String, dynamic>> findOrCreateList(String title) async {

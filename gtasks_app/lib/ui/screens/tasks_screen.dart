@@ -7,6 +7,7 @@ import '../widgets/add_account_modal.dart';
 import '../widgets/tasks_sidebar_drawer.dart';
 import '../widgets/task_filter_modal.dart';
 import '../widgets/task_editor_dialog.dart';
+import '../widgets/sync_progress_dialog.dart';
 import 'reports_screen.dart';
 
 class TasksScreen extends StatefulWidget {
@@ -172,36 +173,9 @@ class _TasksScreenState extends State<TasksScreen> {
                   )
                 : const Icon(Icons.sync),
             tooltip: 'Google Sync Options',
-            onSelected: (action) async {
+            onSelected: (action) {
               final isAll = action == 'sync_all';
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    isAll
-                        ? '⚡ Running Full Sync (advanced-sync --all)...'
-                        : '🔄 Running Quick Google Sync...',
-                  ),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-              final success = await provider.syncGoogleTasks(
-                account: provider.selectedAccount,
-                syncAll: isAll,
-              );
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: success ? Colors.green.shade700 : Colors.red.shade700,
-                    content: Text(
-                      success
-                          ? (isAll
-                              ? '✅ Full Sync (--all) completed! All tasks updated.'
-                              : '✅ Google Tasks Sync completed successfully!')
-                          : '❌ Sync failed. Check network or credentials.',
-                    ),
-                  ),
-                );
-              }
+              SyncProgressDialog.show(context, isFullSync: isAll);
             },
             itemBuilder: (context) => [
               const PopupMenuItem(
