@@ -19,7 +19,7 @@ class NotificationStorage:
             self.db_path = Path(db_path)
         else:
             base_dir = Path.home() / '.gtasks'
-            if account_name:
+            if account_name and account_name.lower() not in ('default', 'personal'):
                 self.db_path = base_dir / account_name / 'tasks.db'
             else:
                 self.db_path = base_dir / 'tasks.db'

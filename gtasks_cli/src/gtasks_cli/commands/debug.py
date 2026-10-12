@@ -46,7 +46,7 @@ def debug_doctor(ctx, account):
         click.echo(click.style(f"✘ Configuration Error: {e}", fg='red'))
 
     # 3. Database Integrity Check
-    db_path = Path.home() / '.gtasks' / (f"{account_name}/tasks.db" if account_name else "tasks.db")
+    db_path = Path.home() / '.gtasks' / (f"{account_name}/tasks.db" if account_name and account_name.lower() not in ('default', 'personal') else "tasks.db")
     if db_path.exists():
         size_kb = db_path.stat().st_size / 1024
         click.echo(click.style(f"✔ SQLite Database: {db_path} ({size_kb:.1f} KB)", fg='green'))
