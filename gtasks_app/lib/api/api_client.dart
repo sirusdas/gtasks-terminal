@@ -48,10 +48,20 @@ class ApiClient {
     return response.statusCode == 200;
   }
 
-  Future<bool> deleteAccount(String accountId) async {
+  Future<bool> deleteAccount(String accountId, {bool hard = false}) async {
     try {
-      final uri = Uri.parse('$baseUrl/api/accounts/$accountId');
+      final uri = Uri.parse('$baseUrl/api/accounts/$accountId?hard=$hard');
       final response = await http.delete(uri);
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> restoreAccount(String accountId) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/accounts/$accountId/restore');
+      final response = await http.post(uri);
       return response.statusCode == 200;
     } catch (_) {
       return false;

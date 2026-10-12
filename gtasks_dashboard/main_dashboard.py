@@ -346,6 +346,12 @@ def delete_account_root(account_id):
     from routes.api import api_delete_account
     return api_delete_account(account_id)
 
+@app.route('/api/accounts/<account_id>/restore', methods=['POST'])
+def restore_account_root(account_id):
+    """Restore an account (local development)"""
+    from routes.api import api_restore_account
+    return api_restore_account(account_id)
+
 
 @app.route('/api/stats')
 def api_stats_root():

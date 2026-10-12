@@ -542,40 +542,49 @@ def api_create_account():
 
 @api.route('/accounts/<account_id>', methods=['DELETE'])
 def api_delete_account(account_id):
-    """Delete an account and its associated tasks/credentials"""
+    """Delete an account and its associated tasks/credentials with soft/hard option"""
     import shutil
     import sqlite3
+    import time
     from pathlib import Path
 
     if not account_id:
         return jsonify({'success': False, 'error': 'account_id required'}), 400
 
-    try:
-        deleted_file = Path.home() / '.gtasks' / '.deleted_accounts'
-        deleted_set = set()
-        if deleted_file.exists():
-            try:
-                deleted_set = set(line.strip().lower() for line in deleted_file.read_text().splitlines() if line.strip())
-            except Exception:
-                pass
-        deleted_set.add(account_id.lower())
-        if account_id.lower() in ('default', 'personal'):
-            deleted_set.add('default')
-            deleted_set.add('personal')
-        deleted_file.write_text('\n'.join(deleted_set))
+    is_hard = request.args.get('hard', 'true').lower() in ('true', '1')
 
-        if account_id in ('default', 'personal'):
-            db_path = Path.home() / '.gtasks' / 'tasks.db'
-            if db_path.exists():
-                conn = sqlite3.connect(str(db_path))
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM tasks")
-                conn.commit()
-                conn.close()
-        else:
-            acc_dir = Path.home() / '.gtasks' / account_id
-            if acc_dir.exists() and acc_dir.is_dir():
-                shutil.rmtree(acc_dir)
+    try:
+        if is_hard:
+            deleted_file = Path.home() / '.gtasks' / '.deleted_accounts'
+            deleted_set = set()
+            if deleted_file.exists():
+                try:
+                    deleted_set = set(line.strip().lower() for line in deleted_file.read_text().splitlines() if line.strip())
+                except Exception:
+                    pass
+            deleted_set.add(account_id.lower())
+            if account_id.lower() in ('default', 'personal'):
+                deleted_set.add('default')
+                deleted_set.add('personal')
+            deleted_file.write_text('\n'.join(deleted_set))
+
+            if account_id in ('default', 'personal'):
+                db_path = Path.home() / '.gtasks' / 'tasks.db'
+                if db_path.exists():
+                    backup_path = Path.home() / '.gtasks' / f'tasks_backup_{int(time.time())}.db'
+                    try:
+                        shutil.copy2(db_path, backup_path)
+                    except Exception:
+                        pass
+                    conn = sqlite3.connect(str(db_path))
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM tasks")
+                    conn.commit()
+                    conn.close()
+            else:
+                acc_dir = Path.home() / '.gtasks' / account_id
+                if acc_dir.exists() and acc_dir.is_dir():
+                    shutil.rmtree(acc_dir)
 
         if account_id in _dashboard_state.get('tasks', {}):
             del _dashboard_state['tasks'][account_id]
@@ -590,7 +599,58 @@ def api_delete_account(account_id):
                 pass
 
         refresh_dashboard_cache()
-        return jsonify({'success': True, 'message': f'Account {account_id} deleted successfully'})
+        return jsonify({
+            'success': True,
+            'message': f'Account {account_id} {"hard deleted" if is_hard else "soft deleted"} successfully'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/accounts/<account_id>/restore', methods=['POST'])
+def api_restore_account(account_id):
+    """Restore an account from deleted status and restore tasks if backed up"""
+    import shutil
+    import sqlite3
+    import time
+    from pathlib import Path
+
+    try:
+        deleted_file = Path.home() / '.gtasks' / '.deleted_accounts'
+        if deleted_file.exists():
+            try:
+                deleted_set = set(line.strip().lower() for line in deleted_file.read_text().splitlines() if line.strip())
+                deleted_set.discard(account_id.lower())
+                if account_id.lower() in ('default', 'personal'):
+                    deleted_set.discard('default')
+                    deleted_set.discard('personal')
+                deleted_file.write_text('\n'.join(deleted_set))
+            except Exception:
+                pass
+
+        if account_id.lower() in ('default', 'personal'):
+            db_path = Path.home() / '.gtasks' / 'tasks.db'
+            needs_restore = True
+            if db_path.exists():
+                try:
+                    conn = sqlite3.connect(str(db_path))
+                    count = conn.cursor().execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+                    conn.close()
+                    if count > 0:
+                        needs_restore = False
+                except Exception:
+                    pass
+
+            if needs_restore:
+                backups = sorted((Path.home() / '.gtasks').glob('tasks_backup_*.db'), key=lambda p: p.stat().st_mtime, reverse=True)
+                if backups:
+                    shutil.copy2(backups[0], db_path)
+
+        refresh_dashboard_cache()
+        return jsonify({
+            'success': True,
+            'message': f'Account {account_id} restored successfully'
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

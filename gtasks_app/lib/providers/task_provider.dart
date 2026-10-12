@@ -82,11 +82,13 @@ class TaskProvider with ChangeNotifier {
     }
   }
 
-  Future<void> removeAccount(String accountId) async {
-    _deletedAccounts.add(accountId);
-    if (accountId == 'default' || accountId == 'personal') {
-      _deletedAccounts.add('default');
-      _deletedAccounts.add('personal');
+  Future<void> removeAccount(String accountId, {bool isHardDelete = false}) async {
+    if (isHardDelete) {
+      _deletedAccounts.add(accountId);
+      if (accountId == 'default' || accountId == 'personal') {
+        _deletedAccounts.add('default');
+        _deletedAccounts.add('personal');
+      }
     }
     _accounts.removeWhere((a) =>
         a.id == accountId ||
@@ -109,6 +111,26 @@ class TaskProvider with ChangeNotifier {
 
     await refreshTasks();
     notifyListeners();
+  }
+
+  Future<void> restoreAccount(String accountId) async {
+    _deletedAccounts.remove(accountId);
+    if (accountId == 'default' || accountId == 'personal') {
+      _deletedAccounts.remove('default');
+      _deletedAccounts.remove('personal');
+    }
+    try {
+      await apiClient.restoreAccount(accountId);
+    } catch (_) {}
+    await loadInitialData();
+  }
+
+  Future<void> restoreAllAccounts() async {
+    _deletedAccounts.clear();
+    try {
+      await apiClient.restoreAccount('default');
+    } catch (_) {}
+    await loadInitialData();
   }
 
   void updateBaseUrl(String newUrl) {

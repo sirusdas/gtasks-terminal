@@ -67,39 +67,138 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
-            const Icon(Icons.warning_amber_rounded, color: Colors.red),
+            const Icon(Icons.warning_amber_rounded, color: Colors.amber),
             const SizedBox(width: 8),
-            const Text('Delete Account'),
+            Expanded(child: Text('Delete "$accountName"')),
           ],
         ),
-        content: Text(
-          'Are you sure you want to remove account "$accountName"?\n\n'
-          'This will remove account credentials from the app and clear its cached tasks.',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Select how you want to delete this account:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: Colors.blue.withValues(alpha: 0.3)),
+              ),
+              color: Colors.blue.withValues(alpha: 0.05),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.phonelink_erase, size: 18, color: Colors.blue),
+                        SizedBox(width: 6),
+                        Text('Soft Delete (Local Only)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Clears cached data and credentials from this device only. Server tasks and Google account remain untouched. Can be restored anytime.',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.phonelink_erase, size: 14),
+                        label: const Text('Soft Delete'),
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          final settings = context.read<SettingsProvider>();
+                          final taskProvider = context.read<TaskProvider>();
+                          await settings.removeAccount(accountId, isHardDelete: false);
+                          await taskProvider.removeAccount(accountId, isHardDelete: false);
+                          await taskProvider.loadInitialData();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Account "$accountName" soft deleted from device.')),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: Colors.red.withValues(alpha: 0.3)),
+              ),
+              color: Colors.red.withValues(alpha: 0.05),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.delete_forever, size: 18, color: Colors.red),
+                        SizedBox(width: 6),
+                        Text('Hard Delete (Permanent)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Removes account from device and permanently deletes tasks from server. An automatic server backup is saved.',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.delete_forever, size: 14),
+                        label: const Text('Hard Delete'),
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          final settings = context.read<SettingsProvider>();
+                          final taskProvider = context.read<TaskProvider>();
+                          await settings.removeAccount(accountId, isHardDelete: true);
+                          await taskProvider.removeAccount(accountId, isHardDelete: true);
+                          try {
+                            await taskProvider.apiClient.deleteAccount(accountId, hard: true);
+                          } catch (_) {}
+                          await taskProvider.loadInitialData();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Account "$accountName" permanently deleted.')),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final settings = context.read<SettingsProvider>();
-              final taskProvider = context.read<TaskProvider>();
-              await settings.removeAccount(accountId);
-              await taskProvider.removeAccount(accountId);
-              try {
-                await taskProvider.apiClient.deleteAccount(accountId);
-              } catch (_) {}
-              await taskProvider.loadInitialData();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Account "$accountName" removed.')),
-                );
-              }
-            },
-            child: const Text('Delete'),
           ),
         ],
       ),
@@ -348,6 +447,53 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
               ),
             );
           }),
+        ],
+        if (settings.deletedAccounts.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.restore, color: Colors.green),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Restore Personal Account', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      Text(
+                        'You have deleted account(s) on file. Tap to restore.',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.restore, size: 14),
+                  label: const Text('Restore'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: () async {
+                    await settings.restoreAllAccounts();
+                    await taskProvider.restoreAllAccounts();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Personal account restored successfully!')),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
         ],
       ],
     );

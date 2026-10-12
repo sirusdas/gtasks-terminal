@@ -115,12 +115,14 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> removeAccount(String id) async {
+  Future<void> removeAccount(String id, {bool isHardDelete = false}) async {
     _storedAccounts.remove(id);
-    _deletedAccounts.add(id);
-    if (id == 'default' || id == 'personal') {
-      _deletedAccounts.add('default');
-      _deletedAccounts.add('personal');
+    if (isHardDelete) {
+      _deletedAccounts.add(id);
+      if (id == 'default' || id == 'personal') {
+        _deletedAccounts.add('default');
+        _deletedAccounts.add('personal');
+      }
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAccounts, json.encode(_storedAccounts));
@@ -134,6 +136,24 @@ class SettingsProvider with ChangeNotifier {
         refreshToken: next['refresh_token'],
       );
     }
+    notifyListeners();
+  }
+
+  Future<void> restoreAccount(String id) async {
+    _deletedAccounts.remove(id);
+    if (id == 'default' || id == 'personal') {
+      _deletedAccounts.remove('default');
+      _deletedAccounts.remove('personal');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_keyDeletedAccounts, _deletedAccounts.toList());
+    notifyListeners();
+  }
+
+  Future<void> restoreAllAccounts() async {
+    _deletedAccounts.clear();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_keyDeletedAccounts, []);
     notifyListeners();
   }
 
