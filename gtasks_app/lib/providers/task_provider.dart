@@ -34,23 +34,36 @@ class TaskProvider with ChangeNotifier {
     required this.apiClient,
     bool isStandalone = false,
     String? googleAccessToken,
+    String? googleRefreshToken,
+    void Function(String)? onTokenRefreshed,
   }) {
     _isStandalone = isStandalone;
+    _onTokenRefreshed = onTokenRefreshed;
     if (googleAccessToken != null && googleAccessToken.isNotEmpty) {
-      _googleClient = GoogleTasksDirectClient(accessToken: googleAccessToken);
+      _googleClient = GoogleTasksDirectClient(
+        accessToken: googleAccessToken,
+        refreshToken: googleRefreshToken,
+        onTokenRefreshed: onTokenRefreshed,
+      );
     }
   }
 
   Map<String, Map<String, dynamic>> _standaloneAccounts = {};
   Set<String> _deletedAccounts = {};
+  void Function(String)? _onTokenRefreshed;
 
   void updateConfig({
     required String newUrl,
     required bool isStandalone,
     String? googleAccessToken,
+    String? googleRefreshToken,
+    void Function(String)? onTokenRefreshed,
     Map<String, Map<String, dynamic>>? standaloneAccounts,
     Set<String>? deletedAccounts,
   }) {
+    if (onTokenRefreshed != null) {
+      _onTokenRefreshed = onTokenRefreshed;
+    }
     bool needsReload = false;
     if (apiClient.baseUrl != newUrl) {
       apiClient.baseUrl = newUrl;
@@ -73,7 +86,11 @@ class TaskProvider with ChangeNotifier {
       }
     }
     if (googleAccessToken != null && googleAccessToken.isNotEmpty) {
-      _googleClient = GoogleTasksDirectClient(accessToken: googleAccessToken);
+      _googleClient = GoogleTasksDirectClient(
+        accessToken: googleAccessToken,
+        refreshToken: googleRefreshToken,
+        onTokenRefreshed: _onTokenRefreshed,
+      );
     } else {
       _googleClient = null;
     }
@@ -518,6 +535,7 @@ class TaskProvider with ChangeNotifier {
             if (_standaloneAccounts.containsKey(acc.id)) {
               _standaloneAccounts[acc.id]!['access_token'] = newTok;
             }
+            _onTokenRefreshed?.call(newTok);
           },
         );
 
@@ -945,6 +963,7 @@ class TaskProvider with ChangeNotifier {
           if (_standaloneAccounts.containsKey(accId)) {
             _standaloneAccounts[accId]!['access_token'] = newTok;
           }
+          _onTokenRefreshed?.call(newTok);
         },
       );
       final lists = await client.fetchTaskLists();

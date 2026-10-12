@@ -1331,20 +1331,24 @@ def api_create_task():
                 tasklist_id=target_list_id
             )
 
-            from gtasks_cli.utils.task_deduplication import create_task_signature
-            existing_signatures = set()
-            for t in _dashboard_state.get('tasks', {}).get(account_id, []):
-                t_desc = (t.get('description', '') or '') + (t.get('notes', '') or '')
-                existing_signatures.add(create_task_signature(
-                    title=t.get('title', ''),
-                    description=t_desc,
-                    status=t.get('status', 'pending')
-                ))
-
-            created_google_task = google_client.create_task(cli_task, existing_signatures=existing_signatures)
+            created_google_task = google_client.create_task(cli_task, existing_signatures=set())
             if created_google_task:
                 synced_to_google = True
-                print(f"[API] ✅ New task {task_id} synced immediately to Google Tasks list '{list_title}'")
+                print(f"[API] ✅ New task {task_id} synced immediately to Google Tasks list '{list_title}' (Google ID: {created_google_task.id})")
+                if created_google_task.id and created_google_task.id != task_id:
+                    new_gid = created_google_task.id
+                    try:
+                        import sqlite3
+                        db_path = _get_account_db_path(account_id)
+                        if db_path and db_path.exists():
+                            with sqlite3.connect(db_path, timeout=10.0) as conn:
+                                conn.execute("UPDATE tasks SET id = ? WHERE id = ?", (new_gid, task_id))
+                                conn.execute("UPDATE task_lists SET task_id = ? WHERE task_id = ?", (new_gid, task_id))
+                                conn.commit()
+                        new_task['id'] = new_gid
+                        task_id = new_gid
+                    except Exception as id_err:
+                        print(f"[API] Error updating local task ID to Google ID: {id_err}")
     except Exception as e:
         print(f"[API] ❌ Error syncing new task to Google Tasks: {e}")
 

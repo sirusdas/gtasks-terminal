@@ -698,6 +698,15 @@ def get_enabled_features() -> list:
     return features
 
 
+@app.route('/download-apk')
+@app.route('/apk')
+def download_apk():
+    from flask import send_file
+    apk_path = Path(__file__).parent.parent / 'gtasks_app' / 'build' / 'app' / 'outputs' / 'flutter-apk' / 'app-debug.apk'
+    if apk_path.exists():
+        return send_file(str(apk_path), as_attachment=True, download_name='gtasks-app-debug.apk', mimetype='application/vnd.android.package-archive')
+    return "APK not built yet", 404
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 48275))  # Default to 48275 (GTASK)
     host = os.environ.get('HOST', '0.0.0.0')

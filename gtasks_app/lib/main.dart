@@ -30,11 +30,19 @@ class GTasksApp extends StatelessWidget {
               apiClient: ApiClient(baseUrl: settings.baseUrl),
               isStandalone: settings.isStandalone,
               googleAccessToken: settings.googleAccessToken,
+              googleRefreshToken: settings.googleRefreshToken,
+              onTokenRefreshed: (newTok) {
+                settings.setGoogleTokens(accessToken: newTok);
+              },
             );
             provider.updateConfig(
               newUrl: settings.baseUrl,
               isStandalone: settings.isStandalone,
               googleAccessToken: settings.googleAccessToken,
+              googleRefreshToken: settings.googleRefreshToken,
+              onTokenRefreshed: (newTok) {
+                settings.setGoogleTokens(accessToken: newTok);
+              },
               standaloneAccounts: settings.storedAccounts,
               deletedAccounts: settings.deletedAccounts,
             );
