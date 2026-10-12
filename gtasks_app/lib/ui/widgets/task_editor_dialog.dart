@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../models/task_item.dart';
 import '../../providers/task_provider.dart';
 import '../../utils/notes_parser.dart';
+import 'searchable_picker_modal.dart';
 
 class TaskEditorDialog extends StatefulWidget {
   final TaskItem? task; // null when adding a new task
@@ -278,37 +279,45 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        // List Autocomplete / Input
+                        // List Single-Select Picker with Search & Suggest & Add
                         Expanded(
-                          child: Autocomplete<String>(
-                            initialValue: TextEditingValue(text: _listController.text),
-                            optionsBuilder: (TextEditingValue textEditingValue) {
-                              if (textEditingValue.text.isEmpty) {
-                                return availableLists;
-                              }
-                              return availableLists.where((String option) {
-                                return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
-                              });
-                            },
-                            onSelected: (String selection) {
-                              _listController.text = selection;
-                            },
-                            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                              // Sync external controller
-                              controller.addListener(() {
-                                _listController.text = controller.text;
-                              });
-                              return TextField(
-                                controller: controller,
-                                focusNode: focusNode,
-                                decoration: const InputDecoration(
-                                  labelText: 'List / Project',
-                                  prefixIcon: Icon(Icons.list_alt, size: 18),
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                                ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () async {
+                              final listsWithCounts = provider.listsWithCounts;
+                              final initial = _listController.text.trim().isNotEmpty
+                                  ? {_listController.text.trim()}
+                                  : {'My Tasks'};
+                              final result = await SearchablePickerModal.show(
+                                context: context,
+                                title: 'Select Task List',
+                                subtitle: 'Search existing lists or type to create a new one',
+                                icon: Icons.list_alt,
+                                optionsWithCounts: listsWithCounts,
+                                initialSelected: initial,
+                                isMultiSelect: false,
+                                isTag: false,
                               );
+                              if (result != null && result.isNotEmpty) {
+                                setState(() {
+                                  _listController.text = result.first;
+                                });
+                              }
                             },
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'List / Project',
+                                prefixIcon: Icon(Icons.list_alt, size: 18),
+                                suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                              ),
+                              child: Text(
+                                _listController.text.isEmpty ? 'My Tasks' : _listController.text,
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -425,14 +434,80 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                     ),
 
                     const SizedBox(height: 14),
-                    const Text('Tags (Search & Quick Suggestions)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Tags',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        TextButton.icon(
+                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                          icon: const Icon(Icons.search, size: 16),
+                          label: const Text('Search & Select Tags', style: TextStyle(fontSize: 12)),
+                          onPressed: () async {
+                            final currentTags = _tagsController.text
+                                .split(',')
+                                .map((t) => t.trim())
+                                .where((t) => t.isNotEmpty)
+                                .toSet();
+
+                            final result = await SearchablePickerModal.show(
+                              context: context,
+                              title: 'Select Tags',
+                              subtitle: 'Search existing tags or type to create a new one',
+                              icon: Icons.tag,
+                              optionsWithCounts: provider.tagsWithCounts,
+                              initialSelected: currentTags,
+                              isMultiSelect: true,
+                              isTag: true,
+                            );
+
+                            if (result != null) {
+                              setState(() {
+                                _tagsController.text = result.join(', ');
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 4),
                     TextField(
                       controller: _tagsController,
-                      decoration: const InputDecoration(
-                        hintText: 'e.g. urgent, study, dev (comma separated)',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.tag, size: 18),
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. urgent, study, dev (or tap Search & Select)',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.tag, size: 18),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.tune, size: 18),
+                          tooltip: 'Open Tags Search Modal',
+                          onPressed: () async {
+                            final currentTags = _tagsController.text
+                                .split(',')
+                                .map((t) => t.trim())
+                                .where((t) => t.isNotEmpty)
+                                .toSet();
+
+                            final result = await SearchablePickerModal.show(
+                              context: context,
+                              title: 'Select Tags',
+                              subtitle: 'Search existing tags or type to create a new one',
+                              icon: Icons.tag,
+                              optionsWithCounts: provider.tagsWithCounts,
+                              initialSelected: currentTags,
+                              isMultiSelect: true,
+                              isTag: true,
+                            );
+
+                            if (result != null) {
+                              setState(() {
+                                _tagsController.text = result.join(', ');
+                              });
+                            }
+                          },
+                        ),
                       ),
                     ),
                     if (availableTags.isNotEmpty) ...[
@@ -440,7 +515,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                       Wrap(
                         spacing: 6,
                         runSpacing: 4,
-                        children: availableTags.take(8).map((tag) {
+                        children: availableTags.take(10).map((tag) {
                           final currentTags = _tagsController.text
                               .split(',')
                               .map((t) => t.trim().toLowerCase())
@@ -454,12 +529,19 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             onSelected: (selected) {
                               setState(() {
+                                final existing = _tagsController.text
+                                    .split(',')
+                                    .map((t) => t.trim())
+                                    .where((t) => t.isNotEmpty)
+                                    .toList();
                                 if (selected) {
-                                  currentTags.add(tag);
+                                  if (!existing.any((t) => t.toLowerCase() == tag.toLowerCase())) {
+                                    existing.add(tag);
+                                  }
                                 } else {
-                                  currentTags.remove(tag.toLowerCase());
+                                  existing.removeWhere((t) => t.toLowerCase() == tag.toLowerCase());
                                 }
-                                _tagsController.text = currentTags.join(', ');
+                                _tagsController.text = existing.join(', ');
                               });
                             },
                           );

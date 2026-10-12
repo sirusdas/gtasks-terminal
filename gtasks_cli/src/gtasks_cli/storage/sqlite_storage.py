@@ -27,7 +27,7 @@ class SQLiteStorage:
         # Check for GTASKS_CONFIG_DIR environment variable for multi-account support
         config_dir_env = os.environ.get('GTASKS_CONFIG_DIR')
         
-        if account_name:
+        if account_name and account_name.lower() not in ('default', 'personal'):
             # For multi-account support, use account-specific paths
             if config_dir_env:
                 storage_dir = Path(config_dir_env)
@@ -37,7 +37,7 @@ class SQLiteStorage:
             storage_dir.mkdir(parents=True, exist_ok=True)
             self.storage_path = storage_dir / 'tasks.db'
             logger.info(f"Using SQLite storage at: {self.storage_path} for account: {account_name}")
-        elif config_dir_env:
+        elif config_dir_env and (not account_name or account_name.lower() not in ('default', 'personal')):
             # Use custom config directory but default database name
             storage_dir = Path(config_dir_env)
             storage_dir.mkdir(parents=True, exist_ok=True)

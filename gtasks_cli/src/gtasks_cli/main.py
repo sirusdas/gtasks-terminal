@@ -70,7 +70,7 @@ def cli(ctx, google, storage, account, auto_save):
     ctx.obj['account_name'] = account_name
     
     # Set environment variable for account-specific configuration
-    if account_name:
+    if account_name and account_name.lower() not in ('default', 'personal'):
         config_dir = os.path.join(os.path.expanduser("~"), ".gtasks", account_name)
         os.environ['GTASKS_CONFIG_DIR'] = config_dir
         logger.debug(f"Using account '{account_name}' with config directory: {config_dir}")
