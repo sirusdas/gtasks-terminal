@@ -82,6 +82,9 @@ class LocalDatabase {
       if (whereClause.isNotEmpty) whereClause += ' AND ';
       whereClause += 'status = ?';
       whereArgs.add(status);
+    } else if (status != 'all') {
+      if (whereClause.isNotEmpty) whereClause += ' AND ';
+      whereClause += "status != 'deleted'";
     }
 
     final result = await db.query(
@@ -93,6 +96,8 @@ class LocalDatabase {
 
     return result.map((row) => _fromDbRow(row)).toList();
   }
+
+  TaskItem fromDbRow(Map<String, dynamic> row) => _fromDbRow(row);
 
   Future<TaskItem?> getTaskById(String id) async {
     final db = await database;
@@ -141,6 +146,45 @@ class LocalDatabase {
       },
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  Future<int> markTaskPendingDelete(String id) async {
+    final db = await database;
+    return await db.update(
+      'tasks',
+      {
+        'status': 'deleted',
+        'sync_status': 'pending_delete',
+        'modified_at': DateTime.now().toUtc().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> markTaskSynced(String id) async {
+    final db = await database;
+    return await db.update(
+      'tasks',
+      {'sync_status': 'synced'},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingSyncRows({String? account}) async {
+    final db = await database;
+    if (account != null && account != 'all') {
+      return await db.query(
+        'tasks',
+        where: "sync_status != 'synced' AND account = ?",
+        whereArgs: [account],
+      );
+    }
+    return await db.query(
+      'tasks',
+      where: "sync_status != 'synced'",
     );
   }
 

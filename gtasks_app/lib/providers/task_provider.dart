@@ -4,6 +4,7 @@ import '../api/google_tasks_direct_client.dart';
 import '../models/task_item.dart';
 import '../models/account.dart';
 import '../storage/local_database.dart';
+import '../utils/notes_parser.dart';
 
 class TaskProvider with ChangeNotifier {
   final ApiClient apiClient;
@@ -507,8 +508,63 @@ class TaskProvider with ChangeNotifier {
         }
 
         final client = GoogleTasksDirectClient(accessToken: token);
+
+        // 1. Flush offline pending changes first
+        try {
+          final pendingRows = await localDb.getPendingSyncRows(account: acc.id);
+          for (final row in pendingRows) {
+            final syncStatus = row['sync_status']?.toString();
+            final taskId = row['id']?.toString() ?? '';
+            final taskListId = row['list_id']?.toString() ?? '@default';
+
+            if (syncStatus == 'pending_delete') {
+              try {
+                await client.deleteTask(listId: taskListId, taskId: taskId);
+                await localDb.deleteTask(taskId);
+              } catch (_) {}
+            } else if (syncStatus == 'pending_insert') {
+              try {
+                final t = localDb.fromDbRow(row);
+                final combinedNotes = NotesParser.combineNotesAndTags(t.description, t.tags);
+                final created = await client.createTask(
+                  listId: taskListId,
+                  title: t.title,
+                  notes: combinedNotes,
+                  due: t.due,
+                  listTitle: t.listTitle,
+                  account: acc.id,
+                );
+                await localDb.deleteTask(taskId);
+                await localDb.upsertTask(created, syncStatus: 'synced');
+              } catch (_) {}
+            } else if (syncStatus == 'pending_update') {
+              try {
+                final t = localDb.fromDbRow(row);
+                final combinedNotes = NotesParser.combineNotesAndTags(t.description, t.tags);
+                await client.updateTask(
+                  listId: taskListId,
+                  taskId: taskId,
+                  title: t.title,
+                  notes: combinedNotes,
+                  due: t.due,
+                  status: t.status,
+                );
+                await localDb.markTaskSynced(taskId);
+              } catch (_) {}
+            }
+          }
+        } catch (e) {
+          debugPrint('[TaskProvider] Pending sync flush notice: $e');
+        }
+
+        // 2. Fetch remote task lists
         final lists = await client.fetchTaskLists();
         List<TaskItem> accFetchedTasks = [];
+
+        // In advanced-sync: quick sync uses 10-day incremental window; syncAll (--all) fetches all historical tasks
+        final DateTime? updatedMin = syncAll
+            ? null
+            : DateTime.now().toUtc().subtract(const Duration(days: 10));
 
         for (final list in lists) {
           final listId = list['id'].toString();
@@ -517,11 +573,12 @@ class TaskProvider with ChangeNotifier {
             listId: listId,
             listTitle: listTitle,
             account: acc.id,
+            updatedMin: updatedMin,
           );
           accFetchedTasks.addAll(tasks);
         }
 
-        // Upsert into local SQLite with Last-Write-Wins
+        // 3. Upsert into local SQLite with Last-Write-Wins
         await localDb.upsertTasks(accFetchedTasks);
         anySynced = true;
       }
@@ -724,6 +781,8 @@ class TaskProvider with ChangeNotifier {
     final effectiveList = (listTitle != null && listTitle.isNotEmpty) ? listTitle : 'My Tasks';
 
     if (_isStandalone) {
+      final effectiveTags = tags ?? [];
+      final calculatedPriority = priority ?? GoogleTasksDirectClient.calculatePriorityFromTags(effectiveTags);
       final newTask = TaskItem(
         id: 'local_${DateTime.now().millisecondsSinceEpoch}',
         title: title,
@@ -731,8 +790,8 @@ class TaskProvider with ChangeNotifier {
         status: 'pending',
         due: due,
         listTitle: effectiveList,
-        calculatedPriority: priority ?? 'medium',
-        tags: tags ?? [],
+        calculatedPriority: calculatedPriority,
+        tags: effectiveTags,
         account: effectiveAccount,
         createdAt: DateTime.now().toUtc().toIso8601String(),
       );
@@ -776,17 +835,19 @@ class TaskProvider with ChangeNotifier {
     if (_isStandalone) {
       final existing = await localDb.getTaskById(taskId);
       if (existing != null) {
+        final newTags = tags ?? existing.tags;
+        final newPriority = priority ?? GoogleTasksDirectClient.calculatePriorityFromTags(newTags);
         final updated = TaskItem(
           id: taskId,
           title: title,
           description: description ?? existing.description,
           due: due ?? existing.due,
           status: existing.status,
-          tags: tags ?? existing.tags,
+          tags: newTags,
           listId: existing.listId,
           listTitle: listTitle ?? existing.listTitle,
           account: effectiveAccount,
-          calculatedPriority: priority ?? existing.calculatedPriority,
+          calculatedPriority: newPriority,
           createdAt: existing.createdAt,
         );
         await localDb.upsertTask(updated, syncStatus: 'pending_update');
@@ -817,7 +878,7 @@ class TaskProvider with ChangeNotifier {
     final effectiveAccount = account ?? (_selectedAccount == 'all' ? 'default' : _selectedAccount);
     if (_isStandalone) {
       final existing = await localDb.getTaskById(taskId);
-      await localDb.deleteTask(taskId);
+      await localDb.markTaskPendingDelete(taskId);
       _tasks.removeWhere((t) => t.id == taskId);
       notifyListeners();
       if (existing != null) {
@@ -854,40 +915,75 @@ class TaskProvider with ChangeNotifier {
 
       final client = GoogleTasksDirectClient(accessToken: token);
       final lists = await client.fetchTaskLists();
-      final targetList = lists.firstWhere(
-        (l) => l['title'] == (task.listTitle ?? 'My Tasks'),
-        orElse: () => lists.isNotEmpty ? lists.first : {'id': '@default'},
-      );
+
+      Future<Map<String, dynamic>> findOrCreateList(String title) async {
+        final match = lists.firstWhere(
+          (l) => (l['title']?.toString().toLowerCase() == title.toLowerCase()),
+          orElse: () => <String, dynamic>{},
+        );
+        if (match.isNotEmpty) return match;
+        final createdList = await client.createTaskList(title);
+        lists.add(createdList);
+        return createdList;
+      }
+
+      final targetList = await findOrCreateList(task.listTitle ?? 'My Tasks');
       final listId = targetList['id']?.toString() ?? '@default';
+      final combinedNotes = NotesParser.combineNotesAndTags(task.description, task.tags);
 
       if (isCreate) {
         final created = await client.createTask(
           listId: listId,
           title: task.title,
-          notes: task.description,
+          notes: combinedNotes,
           due: task.due,
           listTitle: task.listTitle,
           account: accId,
         );
         // Replace temporary local ID with Google's ID
         await localDb.deleteTask(task.id);
-        await localDb.upsertTask(created);
+        await localDb.upsertTask(created, syncStatus: 'synced');
         await refreshTasks();
       } else if (isComplete) {
         await client.updateTask(
-          listId: listId,
+          listId: task.listId ?? listId,
           taskId: task.id,
           status: 'completed',
         );
+        await localDb.markTaskSynced(task.id);
       } else if (isUpdate) {
-        await client.updateTask(
-          listId: listId,
-          taskId: task.id,
-          title: task.title,
-          notes: task.description,
-        );
+        final oldListId = task.listId;
+        if (oldListId != null && oldListId != listId) {
+          // Re-create in new list, delete from old list
+          final created = await client.createTask(
+            listId: listId,
+            title: task.title,
+            notes: combinedNotes,
+            due: task.due,
+            listTitle: task.listTitle,
+            account: accId,
+          );
+          try {
+            await client.deleteTask(listId: oldListId, taskId: task.id);
+          } catch (_) {}
+          await localDb.deleteTask(task.id);
+          await localDb.upsertTask(created, syncStatus: 'synced');
+          await refreshTasks();
+        } else {
+          await client.updateTask(
+            listId: task.listId ?? listId,
+            taskId: task.id,
+            title: task.title,
+            notes: combinedNotes,
+            due: task.due,
+            status: task.status,
+          );
+          await localDb.markTaskSynced(task.id);
+        }
       } else if (isDelete) {
-        await client.deleteTask(listId: listId, taskId: task.id);
+        final deleteListId = task.listId ?? listId;
+        await client.deleteTask(listId: deleteListId, taskId: task.id);
+        await localDb.deleteTask(task.id);
       }
     } catch (e) {
       debugPrint('[TaskProvider] Standalone immediate Google sync notice: $e');

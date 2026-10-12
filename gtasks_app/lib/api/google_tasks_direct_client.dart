@@ -52,6 +52,21 @@ class GoogleTasksDirectClient {
     return allLists;
   }
 
+  Future<Map<String, dynamic>> createTaskList(String title) async {
+    final uri = Uri.parse('$_tasksBaseUrl/users/@me/lists');
+    final response = await http.post(
+      uri,
+      headers: _headers,
+      body: jsonEncode({'title': title}),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+    } else {
+      throw Exception('Failed to create task list: ${response.statusCode} - ${response.body}');
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Tasks API
   // ---------------------------------------------------------------------------
@@ -61,6 +76,7 @@ class GoogleTasksDirectClient {
     String? listTitle,
     String account = 'default',
     bool showCompleted = true,
+    DateTime? updatedMin,
   }) async {
     final List<TaskItem> allTasks = [];
     String? pageToken;
@@ -70,6 +86,7 @@ class GoogleTasksDirectClient {
         'showCompleted': showCompleted.toString(),
         'showHidden': 'true',
         'maxResults': '100',
+        if (updatedMin != null) 'updatedMin': updatedMin.toUtc().toIso8601String(),
         if (pageToken != null && pageToken.isNotEmpty) 'pageToken': pageToken,
       };
       final uri = Uri.parse('$_tasksBaseUrl/lists/$listId/tasks').replace(queryParameters: queryParams);
@@ -88,14 +105,14 @@ class GoogleTasksDirectClient {
           allTasks.add(TaskItem(
             id: raw['id'].toString(),
             title: raw['title']?.toString() ?? 'Untitled',
-            description: notes,
+            description: split.cleanNotes,
             status: isCompleted ? 'completed' : 'pending',
             due: raw['due']?.toString(),
             listId: listId,
             listTitle: listTitle,
             account: account,
             tags: split.tags,
-            calculatedPriority: _calculatePriorityFromTags(split.tags),
+            calculatedPriority: calculatePriorityFromTags(split.tags),
             createdAt: raw['updated']?.toString(), // Google uses 'updated'
             completedAt: raw['completed']?.toString(),
           ));
@@ -139,14 +156,14 @@ class GoogleTasksDirectClient {
       return TaskItem(
         id: raw['id'].toString(),
         title: raw['title']?.toString() ?? title,
-        description: taskNotes,
+        description: split.cleanNotes,
         status: raw['status']?.toString() ?? 'pending',
         due: raw['due']?.toString(),
         listId: listId,
         listTitle: listTitle,
         account: account,
         tags: split.tags,
-        calculatedPriority: _calculatePriorityFromTags(split.tags),
+        calculatedPriority: calculatePriorityFromTags(split.tags),
         createdAt: raw['updated']?.toString(),
       );
     } else {
@@ -160,11 +177,13 @@ class GoogleTasksDirectClient {
     String? title,
     String? notes,
     String? status,
+    String? due,
   }) async {
     final uri = Uri.parse('$_tasksBaseUrl/lists/$listId/tasks/$taskId');
     final payload = <String, dynamic>{};
     if (title != null) payload['title'] = title;
     if (notes != null) payload['notes'] = notes;
+    if (due != null) payload['due'] = due;
     if (status != null) {
       payload['status'] = status == 'completed' ? 'completed' : 'needsAction';
     }
@@ -191,11 +210,20 @@ class GoogleTasksDirectClient {
   // Priority Helper
   // ---------------------------------------------------------------------------
 
-  String _calculatePriorityFromTags(List<String> tags) {
+  static String calculatePriorityFromTags(List<String> tags) {
     for (final tag in tags) {
-      final t = tag.toLowerCase();
-      if (t == 'critical' || t == 'urgent' || t == 'p0' || t == 'high') return 'critical';
-      if (t == 'medium' || t == 'med' || t == 'p1' || t == 'p2') return 'high';
+      final t = tag.toLowerCase().trim();
+      final asteriskMatch = RegExp(r'^\[?(\*+)\]?$').firstMatch(t);
+      if (asteriskMatch != null) {
+        final count = asteriskMatch.group(1)!.length;
+        if (count >= 6) return 'critical';
+        if (count >= 4) return 'high';
+        if (count == 3) return 'medium';
+        return 'low';
+      }
+      if (t == 'critical' || t == 'urgent' || t == 'p0') return 'critical';
+      if (t == 'high' || t == 'p1') return 'high';
+      if (t == 'medium' || t == 'med' || t == 'p2') return 'medium';
       if (t == 'low' || t == 'p3' || t == 'someday') return 'low';
     }
     return 'medium';
