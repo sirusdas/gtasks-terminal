@@ -626,50 +626,38 @@ class TaskProvider with ChangeNotifier {
   }
 
   Future<bool> completeTask(String taskId) async {
+    TaskItem? targetTask;
+    final index = _tasks.indexWhere((t) => t.id == taskId);
+    if (index != -1) {
+      targetTask = _tasks[index];
+      _tasks[index] = TaskItem(
+        id: targetTask.id,
+        title: targetTask.title,
+        description: targetTask.description,
+        status: 'completed',
+        due: targetTask.due,
+        listId: targetTask.listId,
+        listTitle: targetTask.listTitle,
+        account: targetTask.account,
+        tags: targetTask.tags,
+        calculatedPriority: targetTask.calculatedPriority,
+        createdAt: targetTask.createdAt,
+        completedAt: DateTime.now().toIso8601String(),
+      );
+      notifyListeners();
+    }
+
     if (_isStandalone) {
       await localDb.markTaskCompleted(taskId);
-      final index = _tasks.indexWhere((t) => t.id == taskId);
-      if (index != -1) {
-        _tasks[index] = TaskItem(
-          id: _tasks[index].id,
-          title: _tasks[index].title,
-          description: _tasks[index].description,
-          status: 'completed',
-          due: _tasks[index].due,
-          listId: _tasks[index].listId,
-          listTitle: _tasks[index].listTitle,
-          account: _tasks[index].account,
-          tags: _tasks[index].tags,
-          calculatedPriority: _tasks[index].calculatedPriority,
-          createdAt: _tasks[index].createdAt,
-          completedAt: DateTime.now().toIso8601String(),
-        );
-        notifyListeners();
+      // Trigger background sync to Google
+      if (targetTask != null) {
+        _syncStandaloneTaskToGoogle(targetTask, isComplete: true);
       }
       return true;
     }
 
-    final success = await apiClient.completeTask(taskId, account: _selectedAccount);
-    if (success) {
-      final index = _tasks.indexWhere((t) => t.id == taskId);
-      if (index != -1) {
-        _tasks[index] = TaskItem(
-          id: _tasks[index].id,
-          title: _tasks[index].title,
-          description: _tasks[index].description,
-          status: 'completed',
-          due: _tasks[index].due,
-          listId: _tasks[index].listId,
-          listTitle: _tasks[index].listTitle,
-          account: _tasks[index].account,
-          tags: _tasks[index].tags,
-          calculatedPriority: _tasks[index].calculatedPriority,
-          createdAt: _tasks[index].createdAt,
-          completedAt: DateTime.now().toIso8601String(),
-        );
-        notifyListeners();
-      }
-    }
+    final acc = targetTask?.account ?? (_selectedAccount == 'all' ? 'default' : _selectedAccount);
+    final success = await apiClient.completeTask(taskId, account: acc);
     return success;
   }
 
@@ -677,24 +665,34 @@ class TaskProvider with ChangeNotifier {
     required String title,
     String? description,
     String? due,
+    String? account,
+    String? listTitle,
+    String? priority,
     List<String>? tags,
   }) async {
+    final effectiveAccount = account ??
+        ((_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
+            ? _selectedAccount
+            : (_accounts.isNotEmpty ? _accounts.first.id : 'default'));
+    final effectiveList = (listTitle != null && listTitle.isNotEmpty) ? listTitle : 'My Tasks';
+
     if (_isStandalone) {
-      final acc = (_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
-          ? _selectedAccount
-          : (_accounts.isNotEmpty ? _accounts.first.id : 'default');
       final newTask = TaskItem(
         id: 'local_${DateTime.now().millisecondsSinceEpoch}',
         title: title,
         description: description ?? '',
         status: 'pending',
         due: due,
+        listTitle: effectiveList,
+        calculatedPriority: priority ?? 'medium',
         tags: tags ?? [],
-        account: acc,
+        account: effectiveAccount,
         createdAt: DateTime.now().toUtc().toIso8601String(),
       );
       await localDb.upsertTask(newTask, syncStatus: 'pending_insert');
       await refreshTasks();
+      // Trigger immediate background push to Google
+      _syncStandaloneTaskToGoogle(newTask, isCreate: true);
       return true;
     }
 
@@ -702,7 +700,9 @@ class TaskProvider with ChangeNotifier {
       title: title,
       description: description,
       due: due,
-      account: _selectedAccount == 'all' ? 'default' : _selectedAccount,
+      account: effectiveAccount,
+      listTitle: effectiveList,
+      priority: priority,
       tags: tags,
     );
     if (success) {
@@ -716,8 +716,16 @@ class TaskProvider with ChangeNotifier {
     required String title,
     String? description,
     String? due,
+    String? account,
+    String? listTitle,
+    String? priority,
     List<String>? tags,
   }) async {
+    final effectiveAccount = account ??
+        ((_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
+            ? _selectedAccount
+            : (_accounts.isNotEmpty ? _accounts.first.id : 'default'));
+
     if (_isStandalone) {
       final existing = await localDb.getTaskById(taskId);
       if (existing != null) {
@@ -729,12 +737,14 @@ class TaskProvider with ChangeNotifier {
           status: existing.status,
           tags: tags ?? existing.tags,
           listId: existing.listId,
-          listTitle: existing.listTitle,
-          account: existing.account,
+          listTitle: listTitle ?? existing.listTitle,
+          account: effectiveAccount,
+          calculatedPriority: priority ?? existing.calculatedPriority,
           createdAt: existing.createdAt,
         );
         await localDb.upsertTask(updated, syncStatus: 'pending_update');
         await refreshTasks();
+        _syncStandaloneTaskToGoogle(updated, isUpdate: true);
         return true;
       }
       return false;
@@ -745,7 +755,9 @@ class TaskProvider with ChangeNotifier {
       title: title,
       description: description,
       due: due,
-      account: _selectedAccount == 'all' ? 'default' : _selectedAccount,
+      account: effectiveAccount,
+      listTitle: listTitle,
+      priority: priority,
       tags: tags,
     );
     if (success) {
@@ -754,19 +766,84 @@ class TaskProvider with ChangeNotifier {
     return success;
   }
 
-  Future<bool> deleteTask(String taskId) async {
+  Future<bool> deleteTask(String taskId, {String? account}) async {
+    final effectiveAccount = account ?? (_selectedAccount == 'all' ? 'default' : _selectedAccount);
     if (_isStandalone) {
+      final existing = await localDb.getTaskById(taskId);
       await localDb.deleteTask(taskId);
       _tasks.removeWhere((t) => t.id == taskId);
       notifyListeners();
+      if (existing != null) {
+        _syncStandaloneTaskToGoogle(existing, isDelete: true);
+      }
       return true;
     }
 
-    final success = await apiClient.deleteTask(taskId, account: _selectedAccount);
+    final success = await apiClient.deleteTask(taskId, account: effectiveAccount);
     if (success) {
       _tasks.removeWhere((t) => t.id == taskId);
       notifyListeners();
     }
     return success;
+  }
+
+  void _syncStandaloneTaskToGoogle(
+    TaskItem task, {
+    bool isCreate = false,
+    bool isUpdate = false,
+    bool isComplete = false,
+    bool isDelete = false,
+  }) async {
+    try {
+      final accId = task.account.isNotEmpty ? task.account : 'default';
+      String? token;
+      if (_standaloneAccounts.containsKey(accId)) {
+        token = _standaloneAccounts[accId]?['access_token']?.toString();
+      }
+      if ((token == null || token.isEmpty) && _googleClient != null) {
+        token = _googleClient!.accessToken;
+      }
+      if (token == null || token.isEmpty) return;
+
+      final client = GoogleTasksDirectClient(accessToken: token);
+      final lists = await client.fetchTaskLists();
+      final targetList = lists.firstWhere(
+        (l) => l['title'] == (task.listTitle ?? 'My Tasks'),
+        orElse: () => lists.isNotEmpty ? lists.first : {'id': '@default'},
+      );
+      final listId = targetList['id']?.toString() ?? '@default';
+
+      if (isCreate) {
+        final created = await client.createTask(
+          listId: listId,
+          title: task.title,
+          notes: task.description,
+          due: task.due,
+          listTitle: task.listTitle,
+          account: accId,
+        );
+        // Replace temporary local ID with Google's ID
+        await localDb.deleteTask(task.id);
+        await localDb.upsertTask(created);
+        await refreshTasks();
+      } else if (isComplete) {
+        await client.updateTask(
+          listId: listId,
+          taskId: task.id,
+          status: 'completed',
+        );
+      } else if (isUpdate) {
+        await client.updateTask(
+          listId: listId,
+          taskId: task.id,
+          title: task.title,
+          notes: task.description,
+        );
+      } else if (isDelete) {
+        await client.deleteTask(listId: listId, taskId: task.id);
+      }
+    } catch (e) {
+      debugPrint('[TaskProvider] Standalone immediate Google sync notice: $e');
+    }
   }
 }

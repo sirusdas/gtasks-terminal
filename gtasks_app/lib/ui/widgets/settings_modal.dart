@@ -224,17 +224,19 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
       children: [
         Row(
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Configured Accounts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                Text(
-                  'Manage your connected Google accounts and workspaces.',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
-                ),
-              ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Configured Accounts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(
+                    'Manage your connected Google accounts and workspaces.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                  ),
+                ],
+              ),
             ),
-            const Spacer(),
+            const SizedBox(width: 8),
             ElevatedButton.icon(
               icon: const Icon(Icons.add, size: 16),
               label: const Text('Add Account'),

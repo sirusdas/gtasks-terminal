@@ -17,20 +17,49 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
   late TextEditingController _titleController;
   late TextEditingController _notesController;
   late TextEditingController _tagsController;
+  late TextEditingController _listController;
+  String? _selectedAccount;
+  String _selectedPriority = 'medium';
+  DateTime? _selectedDueDate;
   bool _isFullscreenNotes = false;
   bool _isPreviewMode = false;
 
   @override
   void initState() {
     super.initState();
-    if (widget.task != null) {
-      _titleController = TextEditingController(text: widget.task!.title);
-      _notesController = TextEditingController(text: widget.task!.cleanNotes);
-      _tagsController = TextEditingController(text: widget.task!.allTags.join(', '));
+    final task = widget.task;
+    if (task != null) {
+      _titleController = TextEditingController(text: task.title);
+      _notesController = TextEditingController(text: task.cleanNotes);
+      _tagsController = TextEditingController(text: task.allTags.join(', '));
+      _listController = TextEditingController(text: task.listTitle ?? 'My Tasks');
+      _selectedAccount = task.account;
+      _selectedPriority = task.calculatedPriority.toLowerCase();
+      if (task.due != null && task.due!.isNotEmpty) {
+        try {
+          _selectedDueDate = DateTime.parse(task.due!);
+        } catch (_) {}
+      }
     } else {
       _titleController = TextEditingController();
       _notesController = TextEditingController();
       _tagsController = TextEditingController();
+      _listController = TextEditingController(text: 'My Tasks');
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_selectedAccount == null) {
+      final provider = context.read<TaskProvider>();
+      if (provider.selectedAccount != 'all' && provider.selectedAccount.isNotEmpty) {
+        _selectedAccount = provider.selectedAccount;
+      } else if (provider.accounts.isNotEmpty) {
+        _selectedAccount = provider.accounts.first.id;
+      } else {
+        _selectedAccount = 'default';
+      }
     }
   }
 
@@ -39,6 +68,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     _titleController.dispose();
     _notesController.dispose();
     _tagsController.dispose();
+    _listController.dispose();
     super.dispose();
   }
 
@@ -58,17 +88,28 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     );
 
     final provider = context.read<TaskProvider>();
+    final listTitle = _listController.text.trim().isEmpty ? 'My Tasks' : _listController.text.trim();
+    final dueStr = _selectedDueDate?.toIso8601String();
+
     if (widget.task != null) {
       provider.updateTask(
         taskId: widget.task!.id,
         title: title,
         description: combinedNotes,
+        account: _selectedAccount,
+        listTitle: listTitle,
+        priority: _selectedPriority,
+        due: dueStr,
         tags: tags,
       );
     } else {
       provider.addTask(
         title: title,
         description: combinedNotes,
+        account: _selectedAccount,
+        listTitle: listTitle,
+        priority: _selectedPriority,
+        due: dueStr,
         tags: tags,
       );
     }
@@ -79,6 +120,14 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
   Widget build(BuildContext context) {
     final isEditing = widget.task != null;
     final theme = Theme.of(context);
+    final provider = context.watch<TaskProvider>();
+
+    final availableAccounts = provider.accounts;
+    final availableLists = provider.listsWithCounts.keys.toList();
+    if (!availableLists.contains('My Tasks')) {
+      availableLists.insert(0, 'My Tasks');
+    }
+    final availableTags = provider.tagsWithCounts.keys.toList();
 
     // If notes is expanded to full screen mode:
     if (_isFullscreenNotes) {
@@ -147,7 +196,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
+          maxHeight: MediaQuery.of(context).size.height * 0.90,
           maxWidth: 600,
         ),
         padding: const EdgeInsets.all(20),
@@ -191,10 +240,157 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                       controller: _titleController,
                       autofocus: !isEditing,
                       decoration: const InputDecoration(
-                        labelText: 'Task Title',
+                        labelText: 'Task Title *',
                         hintText: 'What needs to be done?',
                         border: OutlineInputBorder(),
                       ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Account & List Row with Search / Autocomplete
+                    Row(
+                      children: [
+                        // Account Selector
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: availableAccounts.any((a) => a.id == _selectedAccount)
+                                ? _selectedAccount
+                                : (availableAccounts.isNotEmpty ? availableAccounts.first.id : 'default'),
+                            decoration: const InputDecoration(
+                              labelText: 'Account',
+                              prefixIcon: Icon(Icons.person_outline, size: 18),
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                            ),
+                            items: [
+                              if (availableAccounts.isEmpty)
+                                const DropdownMenuItem(value: 'default', child: Text('Personal')),
+                              ...availableAccounts.map(
+                                (acc) => DropdownMenuItem(
+                                  value: acc.id,
+                                  child: Text(acc.name, overflow: TextOverflow.ellipsis),
+                                ),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) setState(() => _selectedAccount = val);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // List Autocomplete / Input
+                        Expanded(
+                          child: Autocomplete<String>(
+                            initialValue: TextEditingValue(text: _listController.text),
+                            optionsBuilder: (TextEditingValue textEditingValue) {
+                              if (textEditingValue.text.isEmpty) {
+                                return availableLists;
+                              }
+                              return availableLists.where((String option) {
+                                return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                              });
+                            },
+                            onSelected: (String selection) {
+                              _listController.text = selection;
+                            },
+                            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                              // Sync external controller
+                              controller.addListener(() {
+                                _listController.text = controller.text;
+                              });
+                              return TextField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                decoration: const InputDecoration(
+                                  labelText: 'List / Project',
+                                  prefixIcon: Icon(Icons.list_alt, size: 18),
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Priority & Due Date Row
+                    Row(
+                      children: [
+                        // Priority Selector
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedPriority,
+                            decoration: const InputDecoration(
+                              labelText: 'Priority',
+                              prefixIcon: Icon(Icons.flag_outlined, size: 18),
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'critical',
+                                child: Text('🔴 Critical', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              DropdownMenuItem(
+                                value: 'high',
+                                child: Text('🟠 High', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              DropdownMenuItem(
+                                value: 'medium',
+                                child: Text('🟡 Medium'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'low',
+                                child: Text('🟢 Low'),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) setState(() => _selectedPriority = val);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Due Date Selector
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: _selectedDueDate ?? DateTime.now(),
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2035),
+                              );
+                              if (picked != null) {
+                                setState(() => _selectedDueDate = picked);
+                              }
+                            },
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                labelText: 'Due Date',
+                                prefixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+                                suffixIcon: _selectedDueDate != null
+                                    ? IconButton(
+                                        icon: const Icon(Icons.clear, size: 16),
+                                        onPressed: () => setState(() => _selectedDueDate = null),
+                                      )
+                                    : null,
+                                border: const OutlineInputBorder(),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                              ),
+                              child: Text(
+                                _selectedDueDate != null
+                                    ? '${_selectedDueDate!.year}-${_selectedDueDate!.month.toString().padLeft(2, '0')}-${_selectedDueDate!.day.toString().padLeft(2, '0')}'
+                                    : 'No due date',
+                                style: TextStyle(
+                                  color: _selectedDueDate != null ? theme.textTheme.bodyMedium?.color : theme.hintColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 14),
 
@@ -206,14 +402,10 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                           'Notes / Description',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
-                        Row(
-                          children: [
-                            TextButton.icon(
-                              icon: const Icon(Icons.fullscreen, size: 18),
-                              label: const Text('Full Screen', style: TextStyle(fontSize: 12)),
-                              onPressed: () => setState(() => _isFullscreenNotes = true),
-                            ),
-                          ],
+                        TextButton.icon(
+                          icon: const Icon(Icons.fullscreen, size: 18),
+                          label: const Text('Full Screen', style: TextStyle(fontSize: 12)),
+                          onPressed: () => setState(() => _isFullscreenNotes = true),
                         ),
                       ],
                     ),
@@ -229,11 +421,11 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                           onPressed: () => setState(() => _isFullscreenNotes = true),
                         ),
                       ),
-                      maxLines: 5,
+                      maxLines: 4,
                     ),
 
                     const SizedBox(height: 14),
-                    const Text('Tags', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text('Tags (Search & Quick Suggestions)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(height: 4),
                     TextField(
                       controller: _tagsController,
@@ -243,6 +435,37 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                         prefixIcon: Icon(Icons.tag, size: 18),
                       ),
                     ),
+                    if (availableTags.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: availableTags.take(8).map((tag) {
+                          final currentTags = _tagsController.text
+                              .split(',')
+                              .map((t) => t.trim().toLowerCase())
+                              .where((t) => t.isNotEmpty)
+                              .toSet();
+                          final isSelected = currentTags.contains(tag.toLowerCase());
+                          return FilterChip(
+                            label: Text(tag, style: const TextStyle(fontSize: 11)),
+                            selected: isSelected,
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  currentTags.add(tag);
+                                } else {
+                                  currentTags.remove(tag.toLowerCase());
+                                }
+                                _tagsController.text = currentTags.join(', ');
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ],
                   ],
                 ),
               ),

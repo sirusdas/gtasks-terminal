@@ -104,6 +104,8 @@ class ApiClient {
     String? description,
     String? due,
     String? account,
+    String? listTitle,
+    String? priority,
     List<String>? tags,
   }) async {
     final uri = Uri.parse('$baseUrl/api/tasks');
@@ -113,8 +115,11 @@ class ApiClient {
       body: json.encode({
         'title': title,
         'description': description ?? '',
+        'notes': description ?? '',
         'due': due,
-        'account': account ?? 'default',
+        'account_id': account ?? 'default',
+        'list_title': listTitle ?? 'My Tasks',
+        'priority': priority ?? 'medium',
         'tags': tags ?? [],
       }),
     );
@@ -127,6 +132,8 @@ class ApiClient {
     String? description,
     String? due,
     String? account,
+    String? listTitle,
+    String? priority,
     List<String>? tags,
   }) async {
     final uri = Uri.parse('$baseUrl/api/tasks/$taskId');
@@ -136,8 +143,11 @@ class ApiClient {
       body: json.encode({
         'title': title,
         'description': description ?? '',
+        'notes': description ?? '',
         'due': due,
-        'account': account ?? 'default',
+        'account_id': account ?? 'default',
+        if (listTitle != null) 'list_title': listTitle,
+        if (priority != null) 'priority': priority,
         'tags': tags ?? [],
       }),
     );
