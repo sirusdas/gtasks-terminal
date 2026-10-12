@@ -290,8 +290,9 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           );
           return;
         } else if (response != null) {
+          final errResp = response;
           setState(() {
-            _error = 'Failed to exchange authorization code: ${response!.statusCode}\n${response!.body}';
+            _error = 'Failed to exchange authorization code: ${errResp.statusCode}\n${errResp.body}';
           });
           return;
         } else {

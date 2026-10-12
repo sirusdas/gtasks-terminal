@@ -28,7 +28,7 @@ class SyncService:
     _current_sync_id: Optional[str] = None
     
     @classmethod
-    def start_advanced_sync(cls, sync_type: str = 'both', account: Optional[str] = None) -> str:
+    def start_advanced_sync(cls, sync_type: str = 'both', account: Optional[str] = None, sync_all: bool = False) -> str:
         """
         Start an advanced sync operation in a background thread.
         Uses the same approach as: gtasks advanced-sync
@@ -36,6 +36,7 @@ class SyncService:
         Args:
             sync_type: Type of sync - 'push', 'pull', or 'both'
             account: Optional account name to sync
+            sync_all: If True, syncs all tasks ignoring pull_range_days (like --all)
             
         Returns:
             str: Unique sync ID for tracking progress
@@ -46,9 +47,10 @@ class SyncService:
             # Set initial state
             cls._sync_state[sync_id] = {
                 'percentage': 0,
-                'message': f'Initializing {sync_type} sync...',
+                'message': f'Initializing {"full " if sync_all else ""}{sync_type} sync...',
                 'status': 'running',
                 'sync_type': sync_type,
+                'sync_all': sync_all,
                 'account': account,
                 'start_time': datetime.utcnow().isoformat(),
                 'error': None
@@ -58,7 +60,7 @@ class SyncService:
         # Start sync in background thread
         sync_thread = threading.Thread(
             target=cls._run_advanced_sync,
-            args=(sync_id, sync_type, account),
+            args=(sync_id, sync_type, account, sync_all),
             daemon=True
         )
         sync_thread.start()
@@ -66,7 +68,7 @@ class SyncService:
         return sync_id
     
     @classmethod
-    def _run_advanced_sync(cls, sync_id: str, sync_type: str, account: Optional[str]):
+    def _run_advanced_sync(cls, sync_id: str, sync_type: str, account: Optional[str], sync_all: bool = False):
         """
         Internal method to run the advanced sync operation.
         Uses the exact same approach as the CLI command.
@@ -75,6 +77,7 @@ class SyncService:
             sync_id: Unique sync identifier
             sync_type: Type of sync - 'push', 'pull', or 'both'
             account: Optional account name
+            sync_all: If True, syncs all tasks ignoring pull_range_days (like --all)
         """
         def progress_callback(percentage: int, message: str, status: str):
             """Progress callback that updates the sync state."""
@@ -119,7 +122,9 @@ class SyncService:
             
             # Load configuration to get sync settings - exactly like CLI
             config_manager = ConfigManager(account_name=account_name)
-            pull_range_days = config_manager.get('sync.pull_range_days')
+            pull_range_days = None if sync_all else config_manager.get('sync.pull_range_days')
+            if sync_all:
+                print(f"[SyncService] Full sync mode enabled (sync_all=True) matching 'gtasks advanced-sync --all'")
             
             # Create task manager - EXACTLY like CLI does
             task_manager = TaskManager(
@@ -151,6 +156,13 @@ class SyncService:
                 success = sync_manager.pull_from_google()
             else:
                 success = sync_manager.sync()
+
+            if success:
+                try:
+                    from routes.api import refresh_dashboard_cache
+                    refresh_dashboard_cache()
+                except Exception as cache_err:
+                    print(f"[SyncService] Cache refresh notice: {cache_err}")
             
             with cls._state_lock:
                 if sync_id in cls._sync_state:

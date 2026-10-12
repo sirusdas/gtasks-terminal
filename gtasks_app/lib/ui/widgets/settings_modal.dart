@@ -645,6 +645,92 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
             ),
           ),
         ],
+        const SizedBox(height: 20),
+        const Text('Google Tasks Synchronization', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.cloud_sync, color: Colors.blueAccent),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Full Sync (gtasks advanced-sync --all)',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        Text(
+                          'Synchronizes 100% of tasks across all tasklists without date range limits.',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.cloud_sync, size: 16),
+                    label: const Text('Run Full Sync (--all)'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () async {
+                      final scaffold = ScaffoldMessenger.of(context);
+                      scaffold.showSnackBar(
+                        const SnackBar(content: Text('⚡ Starting Full Sync (--all)...')),
+                      );
+                      final ok = await taskProvider.syncAllGoogleTasks(account: taskProvider.selectedAccount);
+                      scaffold.showSnackBar(
+                        SnackBar(
+                          backgroundColor: ok ? Colors.green.shade700 : Colors.red.shade700,
+                          content: Text(
+                            ok
+                                ? '✅ Full Sync complete! ${taskProvider.allTasksUnfiltered.length} tasks synced.'
+                                : '❌ Full sync failed.',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.sync, size: 16),
+                    label: const Text('Quick Sync'),
+                    onPressed: () async {
+                      final scaffold = ScaffoldMessenger.of(context);
+                      scaffold.showSnackBar(
+                        const SnackBar(content: Text('🔄 Running Quick Sync...')),
+                      );
+                      final ok = await taskProvider.syncGoogleTasks(account: taskProvider.selectedAccount);
+                      scaffold.showSnackBar(
+                        SnackBar(
+                          backgroundColor: ok ? Colors.green.shade700 : Colors.red.shade700,
+                          content: Text(ok ? '✅ Quick sync complete!' : '❌ Quick sync failed.'),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

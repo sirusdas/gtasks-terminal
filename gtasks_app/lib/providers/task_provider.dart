@@ -434,23 +434,44 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> syncGoogleTasks({String? account}) async {
+  Future<bool> syncGoogleTasks({String? account, bool syncAll = false}) async {
     final targetAccount = account ?? _selectedAccount;
 
     if (!_isStandalone) {
-      if (targetAccount == 'all') {
-        // Sync all accounts
-        bool allSuccess = true;
-        for (final acc in _accounts) {
-          final ok = await apiClient.triggerGoogleSync(account: acc.id);
-          if (!ok) allSuccess = false;
+      _isLoading = true;
+      notifyListeners();
+      try {
+        if (targetAccount == 'all') {
+          // Sync all accounts
+          bool allSuccess = true;
+          for (final acc in _accounts) {
+            final res = await apiClient.triggerGoogleSync(account: acc.id, syncAll: syncAll);
+            final syncId = res['sync_id']?.toString();
+            if (syncId != null) {
+              await apiClient.waitForSyncCompletion(syncId);
+            } else if (res['success'] != true) {
+              allSuccess = false;
+            }
+          }
+          await refreshTasks();
+          return allSuccess;
+        } else {
+          final res = await apiClient.triggerGoogleSync(account: targetAccount, syncAll: syncAll);
+          final syncId = res['sync_id']?.toString();
+          if (syncId != null) {
+            final ok = await apiClient.waitForSyncCompletion(syncId);
+            await refreshTasks();
+            return ok;
+          }
+          await refreshTasks();
+          return res['success'] == true;
         }
-        await refreshTasks();
-        return allSuccess;
-      } else {
-        final ok = await apiClient.triggerGoogleSync(account: targetAccount);
-        await refreshTasks();
-        return ok;
+      } catch (e) {
+        _errorMessage = 'Sync failed: $e';
+        return false;
+      } finally {
+        _isLoading = false;
+        notifyListeners();
       }
     }
 
@@ -514,6 +535,10 @@ class TaskProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<bool> syncAllGoogleTasks({String? account}) async {
+    return syncGoogleTasks(account: account, syncAll: true);
   }
 
   Future<void> setAccount(String accountId) async {

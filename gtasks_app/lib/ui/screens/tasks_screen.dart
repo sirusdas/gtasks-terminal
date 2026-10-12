@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
 import '../widgets/task_card.dart';
-import '../widgets/developer_settings_modal.dart';
 import '../widgets/settings_modal.dart';
 import '../widgets/add_account_modal.dart';
 import '../widgets/tasks_sidebar_drawer.dart';
@@ -164,33 +163,68 @@ class _TasksScreenState extends State<TasksScreen> {
               );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.sync),
-            tooltip: 'Google Sync',
-            onPressed: () async {
+          PopupMenuButton<String>(
+            icon: provider.isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.sync),
+            tooltip: 'Google Sync Options',
+            onSelected: (action) async {
+              final isAll = action == 'sync_all';
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                    provider.selectedAccount == 'all'
-                        ? 'Starting Google Sync for all accounts...'
-                        : 'Starting Google Sync for "${provider.selectedAccount}"...',
+                    isAll
+                        ? '⚡ Running Full Sync (advanced-sync --all)...'
+                        : '🔄 Running Quick Google Sync...',
                   ),
+                  duration: const Duration(seconds: 2),
                 ),
               );
-              final success = await provider.syncGoogleTasks(account: provider.selectedAccount);
+              final success = await provider.syncGoogleTasks(
+                account: provider.selectedAccount,
+                syncAll: isAll,
+              );
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     backgroundColor: success ? Colors.green.shade700 : Colors.red.shade700,
                     content: Text(
                       success
-                          ? '✅ Google Tasks Sync completed successfully!'
-                          : '❌ Sync failed. Check credentials/network.',
+                          ? (isAll
+                              ? '✅ Full Sync (--all) completed! All tasks updated.'
+                              : '✅ Google Tasks Sync completed successfully!')
+                          : '❌ Sync failed. Check network or credentials.',
                     ),
                   ),
                 );
               }
             },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'sync_all',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.cloud_sync, color: Colors.blueAccent),
+                  title: Text('Sync All (Full --all)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('Pull all tasks & lists from Google Tasks'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'quick_sync',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.sync, color: Colors.teal),
+                  title: Text('Quick Sync'),
+                  subtitle: Text('Sync recent changes'),
+                ),
+              ),
+            ],
           ),
           IconButton(
             icon: const Icon(Icons.refresh),

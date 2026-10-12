@@ -104,7 +104,10 @@ class ApiClient {
     final response = await http.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({'account': account ?? 'default'}),
+      body: json.encode({
+        'account': account ?? 'default',
+        'account_id': account ?? 'default',
+      }),
     );
     return response.statusCode == 200;
   }
@@ -169,14 +172,20 @@ class ApiClient {
     final response = await http.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({'account': account ?? 'default'}),
+      body: json.encode({
+        'account': account ?? 'default',
+        'account_id': account ?? 'default',
+      }),
     );
     return response.statusCode == 200;
   }
 
-  Future<bool> triggerGoogleSync({String? account}) async {
+  Future<Map<String, dynamic>> triggerGoogleSync({String? account, bool syncAll = false}) async {
     final uri = Uri.parse('$baseUrl/api/sync/advanced');
-    final Map<String, dynamic> body = {'sync_type': 'both'};
+    final Map<String, dynamic> body = {
+      'sync_type': 'both',
+      'sync_all': syncAll,
+    };
     if (account != null && account != 'all') {
       body['account'] = account;
     }
@@ -185,7 +194,36 @@ class ApiClient {
       headers: {'Content-Type': 'application/json'},
       body: json.encode(body),
     );
-    return response.statusCode == 200;
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    }
+    return {'success': false, 'message': 'HTTP ${response.statusCode}'};
+  }
+
+  Future<Map<String, dynamic>?> getSyncProgress({String? syncId}) async {
+    final uri = Uri.parse('$baseUrl/api/sync/progress${syncId != null ? '?sync_id=$syncId' : ''}');
+    try {
+      final response = await http.get(uri);
+      if (response.statusCode == 200) {
+        final jsonBody = json.decode(response.body);
+        return jsonBody['data'] as Map<String, dynamic>?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<bool> waitForSyncCompletion(String syncId, {int timeoutSeconds = 60}) async {
+    final end = DateTime.now().add(Duration(seconds: timeoutSeconds));
+    while (DateTime.now().isBefore(end)) {
+      await Future.delayed(const Duration(milliseconds: 600));
+      final progress = await getSyncProgress(syncId: syncId);
+      if (progress != null) {
+        final status = progress['status']?.toString();
+        if (status == 'completed') return true;
+        if (status == 'error') return false;
+      }
+    }
+    return false;
   }
 
   Future<Map<String, dynamic>> fetchReportTypes() async {

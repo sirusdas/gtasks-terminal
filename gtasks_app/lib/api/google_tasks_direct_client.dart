@@ -28,16 +28,28 @@ class GoogleTasksDirectClient {
   // ---------------------------------------------------------------------------
 
   Future<List<Map<String, dynamic>>> fetchTaskLists() async {
-    final uri = Uri.parse('$_tasksBaseUrl/users/@me/lists');
-    final response = await http.get(uri, headers: _headers);
+    final List<Map<String, dynamic>> allLists = [];
+    String? pageToken;
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final items = (data['items'] as List?) ?? [];
-      return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-    } else {
-      throw Exception('Failed to fetch task lists: ${response.statusCode} - ${response.body}');
-    }
+    do {
+      final Map<String, String> queryParams = {
+        'maxResults': '100',
+        if (pageToken != null && pageToken.isNotEmpty) 'pageToken': pageToken,
+      };
+      final uri = Uri.parse('$_tasksBaseUrl/users/@me/lists').replace(queryParameters: queryParams);
+      final response = await http.get(uri, headers: _headers);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final items = (data['items'] as List?) ?? [];
+        allLists.addAll(items.map((e) => Map<String, dynamic>.from(e as Map)));
+        pageToken = data['nextPageToken']?.toString();
+      } else {
+        throw Exception('Failed to fetch task lists: ${response.statusCode} - ${response.body}');
+      }
+    } while (pageToken != null && pageToken.isNotEmpty);
+
+    return allLists;
   }
 
   // ---------------------------------------------------------------------------
@@ -50,44 +62,52 @@ class GoogleTasksDirectClient {
     String account = 'default',
     bool showCompleted = true,
   }) async {
-    final queryParams = {
-      'showCompleted': showCompleted.toString(),
-      'showHidden': 'true',
-      'maxResults': '100',
-    };
-    final uri = Uri.parse('$_tasksBaseUrl/lists/$listId/tasks').replace(queryParameters: queryParams);
-    final response = await http.get(uri, headers: _headers);
+    final List<TaskItem> allTasks = [];
+    String? pageToken;
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final items = (data['items'] as List?) ?? [];
-      final List<TaskItem> tasks = [];
+    do {
+      final Map<String, String> queryParams = {
+        'showCompleted': showCompleted.toString(),
+        'showHidden': 'true',
+        'maxResults': '100',
+        if (pageToken != null && pageToken.isNotEmpty) 'pageToken': pageToken,
+      };
+      final uri = Uri.parse('$_tasksBaseUrl/lists/$listId/tasks').replace(queryParameters: queryParams);
+      final response = await http.get(uri, headers: _headers);
 
-      for (final raw in items) {
-        if (raw['title'] == null && raw['notes'] == null) continue;
-        final isCompleted = raw['status'] == 'completed';
-        final notes = raw['notes']?.toString() ?? '';
-        final split = NotesParser.splitNotesAndTags(notes);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final items = (data['items'] as List?) ?? [];
 
-        tasks.add(TaskItem(
-          id: raw['id'].toString(),
-          title: raw['title']?.toString() ?? 'Untitled',
-          description: notes,
-          status: isCompleted ? 'completed' : 'pending',
-          due: raw['due']?.toString(),
-          listId: listId,
-          listTitle: listTitle,
-          account: account,
-          tags: split.tags,
-          calculatedPriority: _calculatePriorityFromTags(split.tags),
-          createdAt: raw['updated']?.toString(), // Google uses 'updated'
-          completedAt: raw['completed']?.toString(),
-        ));
+        for (final raw in items) {
+          if (raw['title'] == null && raw['notes'] == null) continue;
+          final isCompleted = raw['status'] == 'completed';
+          final notes = raw['notes']?.toString() ?? '';
+          final split = NotesParser.splitNotesAndTags(notes);
+
+          allTasks.add(TaskItem(
+            id: raw['id'].toString(),
+            title: raw['title']?.toString() ?? 'Untitled',
+            description: notes,
+            status: isCompleted ? 'completed' : 'pending',
+            due: raw['due']?.toString(),
+            listId: listId,
+            listTitle: listTitle,
+            account: account,
+            tags: split.tags,
+            calculatedPriority: _calculatePriorityFromTags(split.tags),
+            createdAt: raw['updated']?.toString(), // Google uses 'updated'
+            completedAt: raw['completed']?.toString(),
+          ));
+        }
+
+        pageToken = data['nextPageToken']?.toString();
+      } else {
+        throw Exception('Failed to fetch tasks from list $listId: ${response.statusCode} - ${response.body}');
       }
-      return tasks;
-    } else {
-      throw Exception('Failed to fetch tasks from list $listId: ${response.statusCode} - ${response.body}');
-    }
+    } while (pageToken != null && pageToken.isNotEmpty);
+
+    return allTasks;
   }
 
   Future<TaskItem> createTask({

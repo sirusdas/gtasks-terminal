@@ -387,6 +387,7 @@ def api_data():
             gtasks_cli_path = Path(__file__).parent.parent.parent / 'gtasks_cli' / 'src'
             if str(gtasks_cli_path) not in sys.path:
                 sys.path.insert(0, str(gtasks_cli_path))
+            from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
             cli_account = _resolve_cli_account(current_account_id)
             google_client = GoogleTasksClient(account_name=cli_account)
             if google_client.connect(interactive=False):
@@ -1330,7 +1331,17 @@ def api_create_task():
                 tasklist_id=target_list_id
             )
 
-            created_google_task = google_client.create_task(cli_task)
+            from gtasks_cli.utils.task_deduplication import create_task_signature
+            existing_signatures = set()
+            for t in _dashboard_state.get('tasks', {}).get(account_id, []):
+                t_desc = (t.get('description', '') or '') + (t.get('notes', '') or '')
+                existing_signatures.add(create_task_signature(
+                    title=t.get('title', ''),
+                    description=t_desc,
+                    status=t.get('status', 'pending')
+                ))
+
+            created_google_task = google_client.create_task(cli_task, existing_signatures=existing_signatures)
             if created_google_task:
                 synced_to_google = True
                 print(f"[API] ✅ New task {task_id} synced immediately to Google Tasks list '{list_title}'")
@@ -1782,29 +1793,57 @@ def api_tasks_due_today():
 
 @api.route('/tasks/<task_id>/delete', methods=['POST'])
 def api_delete_task(task_id):
-    """Soft delete a task"""
+    """Delete a task from local SQLite and sync delete with Google Tasks"""
+    from datetime import datetime
+    import threading
     data = request.get_json() or {}
-    account_id = data.get('account_id', _dashboard_state.get('current_account'))
+    account_id = data.get('account_id') or data.get('account') or _dashboard_state.get('current_account')
     permanent = data.get('permanent', False)
     
     try:
+        # 1. Update/delete in SQLite
+        db_path = data_manager.gtasks_path / account_id / 'tasks.db' if (account_id and data_manager.gtasks_path) else None
+        if not db_path or not db_path.exists():
+            db_path = data_manager.gtasks_path / 'tasks.db' if data_manager.gtasks_path else None
+
+        if db_path and db_path.exists():
+            import sqlite3
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            if permanent:
+                cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+                cursor.execute("DELETE FROM task_lists WHERE task_id = ?", (task_id,))
+            else:
+                cursor.execute("UPDATE tasks SET status = 'deleted', modified_at = ? WHERE id = ?", (datetime.now().isoformat(), task_id))
+            conn.commit()
+            conn.close()
+
+        # 2. Update memory state
+        for acc in _dashboard_state.get('tasks', {}):
+            _dashboard_state['tasks'][acc] = [t for t in _dashboard_state['tasks'][acc] if t.get('id') != task_id]
+
         if permanent:
-            success = data_manager.permanently_delete_task(task_id, account_id)
-            action = 'permanently deleted'
+            data_manager.permanently_delete_task(task_id, account_id)
         else:
-            success = data_manager.soft_delete_task(task_id, account_id)
-            action = 'deleted'
-        
-        if success:
-            return jsonify({
-                'success': True,
-                'message': f'Task {action} successfully'
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'Task not found'
-            }), 404
+            data_manager.soft_delete_task(task_id, account_id)
+
+        # 3. Background delete from Google Tasks
+        def _delete_google():
+            try:
+                from gtasks_cli.integrations.google_tasks_client import GoogleTasksClient
+                cli_account = _resolve_cli_account(account_id)
+                google_client = GoogleTasksClient(account_name=cli_account)
+                if google_client.connect(interactive=False):
+                    google_client.delete_task(task_id)
+            except Exception as ge:
+                print(f"[Background Delete] Notice: {ge}")
+
+        threading.Thread(target=_delete_google, daemon=True).start()
+
+        return jsonify({
+            'success': True,
+            'message': 'Task deleted successfully'
+        })
     except Exception as e:
         return jsonify({
             'success': False,
@@ -2093,7 +2132,7 @@ def api_check_notifications():
     """Scan tasks and generate alerts for overdue or upcoming deadlines"""
     try:
         from gtasks_cli.notifications.manager import NotificationManager
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         account = data.get('account') or _dashboard_state.get('current_account')
         cli_account = _resolve_cli_account(account)
 
@@ -2162,7 +2201,7 @@ def api_complete_task(task_id):
     """Mark a task as completed with background sync to Google Tasks"""
     from datetime import datetime
     data = request.get_json() or {}
-    account_id = data.get('account_id', _dashboard_state.get('current_account'))
+    account_id = data.get('account_id') or data.get('account') or _dashboard_state.get('current_account')
     sync_to_google = data.get('sync_to_google', True)
     
     print(f'[API] Completing task: {task_id}')
@@ -2287,11 +2326,11 @@ def api_advanced_sync():
     try:
         data = request.get_json() or {}
         sync_type = data.get('sync_type', 'both')
+        sync_all = bool(data.get('sync_all', False) or data.get('all', False))
         account = data.get('account')
         
         if not account:
             account = _dashboard_state.get('current_account')
-            
 
         # Validate sync_type
         if sync_type not in ('push', 'pull', 'both'):
@@ -2300,13 +2339,14 @@ def api_advanced_sync():
                 'message': 'Invalid sync_type. Must be "push", "pull", or "both"'
             }), 400
         
-        # Start the sync
-        sync_id = SyncService.start_advanced_sync(sync_type=sync_type, account=account)
+        # Start the sync (with sync_all support matching 'gtasks advanced-sync --all')
+        sync_id = SyncService.start_advanced_sync(sync_type=sync_type, account=account, sync_all=sync_all)
         
         return jsonify({
             'success': True,
             'sync_id': sync_id,
-            'message': f'Started {sync_type} sync'
+            'sync_all': sync_all,
+            'message': f'Started {"full " if sync_all else ""}{sync_type} sync'
         })
     
     except Exception as e:

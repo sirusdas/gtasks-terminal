@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/task_provider.dart';
 import '../widgets/add_account_modal.dart';
@@ -21,8 +20,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   // Standalone Google Auth State
   final TextEditingController _accessTokenController = TextEditingController();
-  bool _isAuthenticating = false;
-  String? _authError;
 
   // PC Server Mode State
   late TextEditingController _serverUrlController;
@@ -56,7 +53,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     try {
       final taskProvider = context.read<TaskProvider>();
       taskProvider.apiClient.baseUrl = url;
-      final accounts = await taskProvider.apiClient.fetchAccounts();
+      await taskProvider.apiClient.fetchAccounts();
       setState(() {
         _connectionSuccess = true;
       });
@@ -424,11 +421,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ],
                         )
                       else if (_connectionSuccess == false)
-                        const Row(
+                        Row(
                           children: [
-                            Icon(Icons.cancel, color: Colors.red, size: 18),
-                            SizedBox(width: 4),
-                            Text('Unreachable', style: TextStyle(color: Colors.red, fontSize: 12)),
+                            const Icon(Icons.cancel, color: Colors.red, size: 18),
+                            const SizedBox(width: 4),
+                            Text(
+                              _connectionError != null ? 'Unreachable (${_connectionError!.split(':').last.trim()})' : 'Unreachable',
+                              style: const TextStyle(color: Colors.red, fontSize: 12),
+                            ),
                           ],
                         ),
                     ],

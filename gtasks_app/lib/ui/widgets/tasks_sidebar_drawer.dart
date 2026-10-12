@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/settings_provider.dart';
 import 'settings_modal.dart';
-import 'developer_settings_modal.dart';
 
 class TasksSidebarDrawer extends StatefulWidget {
   const TasksSidebarDrawer({super.key});
