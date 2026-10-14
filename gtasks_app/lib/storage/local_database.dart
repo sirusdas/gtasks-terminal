@@ -21,9 +21,16 @@ class LocalDatabase {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _onUpgradeDB,
     );
+  }
+
+  Future<void> _onUpgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE tasks ADD COLUMN spaces TEXT;');
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -37,6 +44,7 @@ class LocalDatabase {
         priority TEXT,
         status TEXT NOT NULL DEFAULT 'pending',
         tags TEXT, -- JSON array of tags
+        spaces TEXT, -- JSON map of spaces
         list_id TEXT,
         list_title TEXT,
         account TEXT NOT NULL DEFAULT 'default',
@@ -261,6 +269,22 @@ class LocalDatabase {
       } catch (_) {}
     }
 
+    Map<String, List<String>> parsedSpaces = {};
+    if (row['spaces'] != null && row['spaces'].toString().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(row['spaces'].toString());
+        if (decoded is Map) {
+          decoded.forEach((k, v) {
+            if (v is List) {
+              parsedSpaces[k.toString()] = v.map((e) => e.toString()).toList();
+            } else {
+              parsedSpaces[k.toString()] = [];
+            }
+          });
+        }
+      } catch (_) {}
+    }
+
     return TaskItem(
       id: row['id']?.toString() ?? '',
       title: row['title']?.toString() ?? 'Untitled',
@@ -271,6 +295,7 @@ class LocalDatabase {
       listTitle: row['list_title']?.toString(),
       account: row['account']?.toString() ?? 'default',
       tags: parsedTags,
+      spaces: parsedSpaces.isNotEmpty ? parsedSpaces : null,
       calculatedPriority: row['priority']?.toString() ?? 'medium',
       createdAt: row['created_at']?.toString(),
       completedAt: row['completed_at']?.toString(),
@@ -288,6 +313,7 @@ class LocalDatabase {
       'priority': task.calculatedPriority,
       'status': task.status,
       'tags': jsonEncode(task.tags),
+      'spaces': jsonEncode(task.spaces),
       'list_id': task.listId,
       'list_title': task.listTitle,
       'account': task.account,

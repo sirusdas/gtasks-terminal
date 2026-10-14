@@ -400,6 +400,10 @@ class DataManager:
 
             notes_content = task_data['notes'] if task_data['notes'] else task_data['description']
             extra_content = task_data['description'] if task_data['description'] and task_data['description'] != task_data['notes'] else ''
+            
+            from gtasks_cli.utils.space_extractor import extract_spaces_from_text
+            task_data['spaces'] = extract_spaces_from_text(f"{notes_content or ''} {extra_content}".strip())
+
             task_data['hybrid_tags'] = self._extract_tags(
                 f"{task_data['title']} {notes_content} {extra_content}".strip()
             )

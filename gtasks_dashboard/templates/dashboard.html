@@ -152,6 +152,18 @@
                             <div class="sidebar-empty-hint">Loading lists...</div>
                         </div>
 
+                        <!-- Spaces Collapsible Section -->
+                        <div class="sidebar-section-header" onclick="toggleSidebarSection('spaces')">
+                            <div class="sidebar-section-title">
+                                <i class="fas fa-layer-group"></i>
+                                <span>Spaces</span>
+                            </div>
+                            <i class="fas fa-chevron-down section-chevron" id="sidebar-spaces-chevron"></i>
+                        </div>
+                        <div class="sidebar-subitems-container" id="sidebar-spaces-container">
+                            <div class="sidebar-empty-hint">No spaces</div>
+                        </div>
+
                         <!-- Tags Collapsible Section -->
                         <div class="sidebar-section-header" onclick="toggleSidebarSection('tags')">
                             <div class="sidebar-section-title">
@@ -1163,6 +1175,13 @@
                     </div>
                     <div id="edit-task-tags-container" class="task-tags-selector-wrapper"></div>
                 </div>
+                <div class="edit-form-group edit-spaces-group">
+                    <div class="edit-tags-header">
+                        <label><i class="fas fa-layer-group" style="color: #6366f1;"></i> Spaces & Sub-spaces (Super-Tags)</label>
+                        <span class="tags-hint">Format: <code>space:sub1,sub2 | space2</code></span>
+                    </div>
+                    <input type="text" id="edit-task-spaces" class="filter-input" placeholder="e.g. engineering:frontend,backend | personal:finance">
+                </div>
                 <div class="edit-form-group edit-notes-group">
                     <div class="edit-notes-header">
                         <label>Notes <span class="markdown-hint">— Markdown & JSON supported</span></label>
@@ -1250,6 +1269,13 @@
                         <span class="tags-hint">Search, select, or type new tags (saved as [tag])</span>
                     </div>
                     <div id="add-task-tags-container" class="task-tags-selector-wrapper"></div>
+                </div>
+                <div class="edit-form-group edit-spaces-group">
+                    <div class="edit-tags-header">
+                        <label><i class="fas fa-layer-group" style="color: #6366f1;"></i> Spaces & Sub-spaces (Super-Tags)</label>
+                        <span class="tags-hint">Format: <code>space:sub1,sub2 | space2</code></span>
+                    </div>
+                    <input type="text" id="add-task-spaces" class="filter-input" placeholder="e.g. engineering:frontend,backend | personal:finance">
                 </div>
                 <div class="edit-form-group edit-notes-group">
                     <div class="edit-notes-header">

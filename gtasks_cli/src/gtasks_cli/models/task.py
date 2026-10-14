@@ -4,7 +4,7 @@ Task model for the Google Tasks CLI application.
 
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict
 from enum import Enum
 
 
@@ -32,6 +32,7 @@ class Task(BaseModel):
     status: TaskStatus = TaskStatus.PENDING
     project: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
+    spaces: Dict[str, List[str]] = Field(default_factory=dict)
     parent_id: Optional[str] = None
     tasklist_id: Optional[str] = "@default"
     list_title: Optional[str] = None

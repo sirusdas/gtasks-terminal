@@ -20,7 +20,8 @@ import {
     getTaskDate,
     getDefaultDateRange,
     splitNotesAndTags,
-    combineNotesAndTags
+    combineNotesAndTags,
+    extractSpacesFromText
 } from './utils.js';
 import { createTaskCard, renderTasksGrid } from './task-card.js?v=39';
 import { createMultiselect, getUniqueLists, getUniqueTags, getListsWithCounts, getTagsWithCounts, getStatusWithCounts, getFilteredTagsByLists, getFilteredListsByTags, getFilteredTasksBySearchAndDate, getFilteredListsByTagsAndCriteria, getFilteredTagsByListsAndCriteria } from './multiselect.js';
@@ -1106,13 +1107,60 @@ function escapeJsString(str) {
 }
 
 /**
- * Populate the sidebar nested lists and tags under /tasks with counts
+let activeSpaceFilter = null;
+let activeSubspaceFilter = null;
+
+/**
+ * Get unique spaces and sub-spaces with counts from tasks
+ * @param {Array} tasks
+ * @returns {Array}
+ */
+export function getSpacesWithCounts(tasks) {
+    const spacesMap = new Map();
+    tasks.forEach(t => {
+        if (t.is_deleted) return;
+        const spaces = (t.spaces && Object.keys(t.spaces).length > 0)
+            ? t.spaces
+            : extractSpacesFromText(t.notes || t.description || '');
+        if (!spaces || typeof spaces !== 'object') return;
+
+        Object.entries(spaces).forEach(([spaceName, subs]) => {
+            const spa = String(spaceName).trim();
+            if (!spa) return;
+            if (!spacesMap.has(spa)) {
+                spacesMap.set(spa, { count: 0, subspaces: new Map() });
+            }
+            const spObj = spacesMap.get(spa);
+            spObj.count++;
+
+            (subs || []).forEach(sub => {
+                const s = String(sub).trim();
+                if (!s) return;
+                spObj.subspaces.set(s, (spObj.subspaces.get(s) || 0) + 1);
+            });
+        });
+    });
+
+    return Array.from(spacesMap.entries())
+        .map(([label, data]) => ({
+            label,
+            count: data.count,
+            subspaces: Array.from(data.subspaces.entries())
+                .map(([subLabel, subCount]) => ({ label: subLabel, count: subCount }))
+                .sort((a, b) => a.label.localeCompare(b.label))
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Populate the sidebar nested lists, spaces, and tags under /tasks with counts
  * @param {Array} tasks - Array of task objects
  */
 export function populateSidebarTasksSubmenu(tasks) {
     if (!tasks || !Array.isArray(tasks)) return;
 
     const listsContainer = document.getElementById('sidebar-lists-container');
+    const spacesContainer = document.getElementById('sidebar-spaces-container');
     const tagsContainer = document.getElementById('sidebar-tags-container');
     const allCountBadge = document.getElementById('sidebar-all-tasks-count');
 
@@ -1122,8 +1170,9 @@ export function populateSidebarTasksSubmenu(tasks) {
         allCountBadge.textContent = pendingCount || tasks.length;
     }
 
-    // Get unique lists and tags with counts
+    // Get unique lists, spaces, and tags with counts
     const listsWithCounts = getListsWithCounts(tasks);
+    const spacesWithCounts = getSpacesWithCounts(tasks);
     const tagsWithCounts = getTagsWithCounts(tasks);
 
     // Populate lists container
@@ -1139,6 +1188,32 @@ export function populateSidebarTasksSubmenu(tasks) {
                     </div>
                     <span class="subitem-badge">${item.count}</span>
                 </div>
+            `).join('');
+        }
+    }
+
+    // Populate spaces container
+    if (spacesContainer) {
+        if (spacesWithCounts.length === 0) {
+            spacesContainer.innerHTML = '<div class="sidebar-empty-hint">No spaces</div>';
+        } else {
+            spacesContainer.innerHTML = spacesWithCounts.map(item => `
+                <div class="sidebar-subitem" data-type="space" data-value="${escapeHtml(item.label)}" onclick="selectSidebarFilter('space', '${escapeJsString(item.label)}')">
+                    <div class="sidebar-subitem-main">
+                        <i class="fas fa-layer-group subitem-icon" style="color: #6366f1;"></i>
+                        <span class="subitem-title" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>
+                    </div>
+                    <span class="subitem-badge">${item.count}</span>
+                </div>
+                ${item.subspaces.map(sub => `
+                    <div class="sidebar-subitem sidebar-subspace-item" data-type="subspace" data-space="${escapeHtml(item.label)}" data-value="${escapeHtml(sub.label)}" onclick="selectSidebarFilter('subspace', '${escapeJsString(sub.label)}', '${escapeJsString(item.label)}')">
+                        <div class="sidebar-subitem-main" style="padding-left: 1.5rem;">
+                            <i class="fas fa-angle-right subitem-icon" style="color: #a5b4fc; font-size: 0.75rem; margin-right: 0.25rem;"></i>
+                            <span class="subitem-title" title="${escapeHtml(sub.label)}">${escapeHtml(sub.label)}</span>
+                        </div>
+                        <span class="subitem-badge" style="opacity: 0.85;">${sub.count}</span>
+                    </div>
+                `).join('')}
             `).join('');
         }
     }
@@ -1168,33 +1243,42 @@ export function populateSidebarTasksSubmenu(tasks) {
 }
 
 /**
- * Handle clicking a list, tag, or 'all' from the sidebar.
+ * Handle clicking a list, tag, space, subspace, or 'all' from the sidebar.
  * Automatically navigates to /tasks and applies the filter.
- * @param {string} type - 'all' | 'list' | 'tag'
- * @param {string|null} value - list name or tag name
+ * @param {string} type - 'all' | 'list' | 'tag' | 'space' | 'subspace'
+ * @param {string|null} value
+ * @param {string|null} parentSpace
  */
-export function selectSidebarFilter(type, value = null) {
+export function selectSidebarFilter(type, value = null, parentSpace = null) {
     // 1. Ensure we are in Tasks section
     showSection('tasks', true);
 
     // 2. Set filter selection
     if (type === 'all') {
+        activeSpaceFilter = null;
+        activeSubspaceFilter = null;
         if (listMultiselect) listMultiselect.clear();
         if (tagsMultiselect) tagsMultiselect.clear();
     } else if (type === 'list') {
-        if (listMultiselect) {
-            listMultiselect.setSelectedValues([value]);
-        }
-        if (tagsMultiselect) {
-            tagsMultiselect.clear();
-        }
+        activeSpaceFilter = null;
+        activeSubspaceFilter = null;
+        if (listMultiselect) listMultiselect.setSelectedValues([value]);
+        if (tagsMultiselect) tagsMultiselect.clear();
     } else if (type === 'tag') {
-        if (tagsMultiselect) {
-            tagsMultiselect.setSelectedValues([value]);
-        }
-        if (listMultiselect) {
-            listMultiselect.clear();
-        }
+        activeSpaceFilter = null;
+        activeSubspaceFilter = null;
+        if (tagsMultiselect) tagsMultiselect.setSelectedValues([value]);
+        if (listMultiselect) listMultiselect.clear();
+    } else if (type === 'space') {
+        activeSpaceFilter = value;
+        activeSubspaceFilter = null;
+        if (listMultiselect) listMultiselect.clear();
+        if (tagsMultiselect) tagsMultiselect.clear();
+    } else if (type === 'subspace') {
+        activeSpaceFilter = parentSpace;
+        activeSubspaceFilter = value;
+        if (listMultiselect) listMultiselect.clear();
+        if (tagsMultiselect) tagsMultiselect.clear();
     }
 
     // 3. Save state & trigger filter update
@@ -1202,7 +1286,7 @@ export function selectSidebarFilter(type, value = null) {
     filterTasks();
 
     // 4. Update sidebar active item highlighting
-    updateSidebarActiveItem(type, value);
+    updateSidebarActiveItem(type, value, parentSpace);
 
     // 5. On mobile, close sidebar drawer
     if (window.innerWidth <= 768) {
@@ -1212,10 +1296,11 @@ export function selectSidebarFilter(type, value = null) {
 
 /**
  * Update the visual active state of items in the sidebar
- * @param {string} type - 'all' | 'list' | 'tag'
+ * @param {string} type - 'all' | 'list' | 'tag' | 'space' | 'subspace'
  * @param {string|null} value
+ * @param {string|null} parentSpace
  */
-export function updateSidebarActiveItem(type, value = null) {
+export function updateSidebarActiveItem(type, value = null, parentSpace = null) {
     document.querySelectorAll('#sidebar-tasks-submenu .sidebar-subitem').forEach(el => el.classList.remove('active'));
 
     if (type === 'all') {
@@ -1228,6 +1313,15 @@ export function updateSidebarActiveItem(type, value = null) {
     } else if (type === 'tag' && value) {
         const escaped = value.replace(/["\\]/g, '\\$&');
         const el = document.querySelector(`#sidebar-tasks-submenu .sidebar-subitem[data-type="tag"][data-value="${escaped}"]`);
+        if (el) el.classList.add('active');
+    } else if (type === 'space' && value) {
+        const escaped = value.replace(/["\\]/g, '\\$&');
+        const el = document.querySelector(`#sidebar-tasks-submenu .sidebar-subitem[data-type="space"][data-value="${escaped}"]`);
+        if (el) el.classList.add('active');
+    } else if (type === 'subspace' && value) {
+        const escapedVal = value.replace(/["\\]/g, '\\$&');
+        const escapedSpa = (parentSpace || '').replace(/["\\]/g, '\\$&');
+        const el = document.querySelector(`#sidebar-tasks-submenu .sidebar-subitem[data-type="subspace"][data-value="${escapedVal}"][data-space="${escapedSpa}"]`);
         if (el) el.classList.add('active');
     }
 }
@@ -1758,6 +1852,8 @@ export function filterTasks() {
         hideLists: hideListValues,
         hideRecurring: hideRecurringValues,
         tags: tagValues,
+        space: activeSpaceFilter,
+        subspace: activeSubspaceFilter,
         dateField: document.getElementById('task-date-field')?.value || 'modified_at',
         dateStart: document.getElementById('task-date-start')?.value || '',
         dateEnd: document.getElementById('task-date-end')?.value || '',
@@ -1805,6 +1901,11 @@ export function filterTasks() {
  * Clear all task filters and restore defaults
  */
 export function clearTasksFilters() {
+    activeSpaceFilter = null;
+    activeSubspaceFilter = null;
+    if (typeof updateSidebarActiveItem === 'function') {
+        updateSidebarActiveItem('all');
+    }
     const defaults = getDefaultFilterState();
     
     // Reset search filter
@@ -2706,6 +2807,8 @@ function openAddModal() {
     document.getElementById('add-task-status').value = 'pending';
     document.getElementById('add-task-due').value = '';
     document.getElementById('add-task-notes').value = '';
+    const addSpacesEl = document.getElementById('add-task-spaces');
+    if (addSpacesEl) addSpacesEl.value = '';
 
     // Initialize or refresh tags multiselect
     initModalTagSelectors();
@@ -2787,6 +2890,44 @@ function switchAddNotesTab(tab) {
         textarea.style.display = 'block';
         preview.style.display = 'none';
     }
+function parseSpacesInput(inputStr) {
+    if (!inputStr) return {};
+    const spaces = {};
+    const chunks = inputStr.split(/[|\n;]+/);
+    for (const chunk of chunks) {
+        const trimmed = chunk.trim();
+        if (!trimmed) continue;
+        const colonIdx = trimmed.indexOf(':');
+        if (colonIdx !== -1) {
+            const spa = trimmed.substring(0, colonIdx).trim().replace(/^spa::/i, '');
+            const rawSubs = trimmed.substring(colonIdx + 1).trim().replace(/^\(|\)$/g, '');
+            const subs = rawSubs.split(',')
+                .map(s => s.trim().replace(/^sub::/i, ''))
+                .filter(s => s.length > 0 && isValidTag(s));
+            if (spa && isValidTag(spa)) {
+                spaces[spa] = subs;
+            }
+        } else {
+            const spa = trimmed.replace(/^spa::/i, '');
+            if (spa && isValidTag(spa)) {
+                spaces[spa] = [];
+            }
+        }
+    }
+    return spaces;
+}
+
+function formatSpacesForInput(spaces) {
+    if (!spaces || typeof spaces !== 'object') return '';
+    const parts = [];
+    Object.entries(spaces).forEach(([spa, subs]) => {
+        if (subs && subs.length > 0) {
+            parts.push(`${spa}:${subs.join(',')}`);
+        } else {
+            parts.push(spa);
+        }
+    });
+    return parts.join(' | ');
 }
 
 async function saveNewTask() {
@@ -2806,7 +2947,9 @@ async function saveNewTask() {
 
     const cleanNotesInput = document.getElementById('add-task-notes').value;
     const selectedTags = addTaskTagsMultiselect ? addTaskTagsMultiselect.getSelectedValues() : [];
-    const finalNotes = combineNotesAndTags(cleanNotesInput, selectedTags);
+    const spacesInput = document.getElementById('add-task-spaces')?.value || '';
+    const parsedSpaces = parseSpacesInput(spacesInput);
+    const finalNotes = combineNotesAndTags(cleanNotesInput, selectedTags, parsedSpaces);
 
     const payload = {
         title: title,
@@ -2868,14 +3011,19 @@ function openEditModal(taskId) {
 
     window.editingTaskId = taskId;
 
-    // Parse raw notes to extract cleanNotes and any footer tags below '---'
+    // Parse raw notes to extract cleanNotes, tags, and spaces
     const rawNotes = task.notes || task.description || '';
-    const { cleanNotes, tags: footerTags } = splitNotesAndTags(rawNotes);
+    const { cleanNotes, tags: footerTags, spaces: extractedSpaces } = splitNotesAndTags(rawNotes);
+    const taskSpaces = (task.spaces && Object.keys(task.spaces).length > 0) ? task.spaces : extractedSpaces;
 
     document.getElementById('edit-task-title').value = task.title || '';
     document.getElementById('edit-task-priority').value = task.calculated_priority || task.priority || 'medium';
     document.getElementById('edit-task-status').value = task.status || 'pending';
     document.getElementById('edit-task-notes').value = cleanNotes;
+    const editSpacesEl = document.getElementById('edit-task-spaces');
+    if (editSpacesEl) {
+        editSpacesEl.value = formatSpacesForInput(taskSpaces);
+    }
 
     // Initialize or refresh tags multiselect for Edit modal
     initModalTagSelectors();
@@ -2949,7 +3097,9 @@ async function saveTaskEdit() {
 
     const cleanNotesInput = document.getElementById('edit-task-notes').value;
     const selectedTags = editTaskTagsMultiselect ? editTaskTagsMultiselect.getSelectedValues() : [];
-    const finalNotes = combineNotesAndTags(cleanNotesInput, selectedTags);
+    const spacesInput = document.getElementById('edit-task-spaces')?.value || '';
+    const parsedSpaces = parseSpacesInput(spacesInput);
+    const finalNotes = combineNotesAndTags(cleanNotesInput, selectedTags, parsedSpaces);
 
     const payload = {
         title: document.getElementById('edit-task-title').value,

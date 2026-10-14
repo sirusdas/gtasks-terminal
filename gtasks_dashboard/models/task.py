@@ -99,6 +99,7 @@ class Task:
     recurrence_rule: Optional[str] = None
     recurrence_type: Optional[str] = None
     recurring_task_id: Optional[str] = None
+    spaces: Dict[str, List[str]] = field(default_factory=dict)
     
     @property
     def has_dependencies(self) -> bool:
@@ -144,7 +145,8 @@ class Task:
             is_recurring=bool(data.get('is_recurring', False)),
             recurrence_rule=data.get('recurrence_rule'),
             recurrence_type=data.get('recurrence_type'),
-            recurring_task_id=data.get('recurring_task_id')
+            recurring_task_id=data.get('recurring_task_id'),
+            spaces=data.get('spaces', {}) or {}
         )
     
     def to_dict(self) -> Dict[str, Any]:
@@ -180,7 +182,8 @@ class Task:
             'is_recurring': self.is_recurring,
             'recurrence_rule': self.recurrence_rule,
             'recurrence_type': self.recurrence_type,
-            'recurring_task_id': self.recurring_task_id
+            'recurring_task_id': self.recurring_task_id,
+            'spaces': self.spaces
         }
 
 

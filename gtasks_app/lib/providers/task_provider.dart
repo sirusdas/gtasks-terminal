@@ -19,6 +19,8 @@ class TaskProvider with ChangeNotifier {
   String _searchQuery = '';
   Set<String> _selectedLists = {};
   Set<String> _selectedTags = {};
+  String? _selectedSpace;
+  String? _selectedSubspace;
   String? _selectedPriority; // 'critical', 'high', 'medium', 'low'
   Set<String> _hiddenLists = {};
   Set<String> _hiddenTags = {};
@@ -164,6 +166,8 @@ class TaskProvider with ChangeNotifier {
   List<TaskItem> _filteredTasksCache = [];
   Map<String, int> _listsWithCountsCache = {};
   Map<String, int> _tagsWithCountsCache = {};
+  Map<String, int> _spacesWithCountsCache = {};
+  Map<String, Map<String, int>> _subspacesWithCountsCache = {};
   int _pendingTasksCountCache = 0;
 
   List<TaskItem> get tasks => _filteredTasksCache;
@@ -174,6 +178,8 @@ class TaskProvider with ChangeNotifier {
   String get searchQuery => _searchQuery;
   Set<String> get selectedLists => _selectedLists;
   Set<String> get selectedTags => _selectedTags;
+  String? get selectedSpace => _selectedSpace;
+  String? get selectedSubspace => _selectedSubspace;
   String? get selectedList => _selectedLists.isNotEmpty ? _selectedLists.first : null;
   String? get selectedTag => _selectedTags.isNotEmpty ? _selectedTags.first : null;
   String? get selectedPriority => _selectedPriority;
@@ -190,6 +196,8 @@ class TaskProvider with ChangeNotifier {
   bool get hasActiveFilters {
     return _selectedLists.isNotEmpty ||
         _selectedTags.isNotEmpty ||
+        _selectedSpace != null ||
+        _selectedSubspace != null ||
         _selectedPriority != null ||
         _hiddenLists.isNotEmpty ||
         _hiddenTags.isNotEmpty ||
@@ -202,6 +210,8 @@ class TaskProvider with ChangeNotifier {
     int count = 0;
     if (_selectedLists.isNotEmpty) count += _selectedLists.length;
     if (_selectedTags.isNotEmpty) count += _selectedTags.length;
+    if (_selectedSpace != null) count++;
+    if (_selectedSubspace != null) count++;
     if (_selectedPriority != null) count++;
     if (_hiddenLists.isNotEmpty) count += _hiddenLists.length;
     if (_hiddenTags.isNotEmpty) count += _hiddenTags.length;
@@ -214,6 +224,8 @@ class TaskProvider with ChangeNotifier {
   int get pendingTasksCount => _pendingTasksCountCache;
   Map<String, int> get listsWithCounts => _listsWithCountsCache;
   Map<String, int> get tagsWithCounts => _tagsWithCountsCache;
+  Map<String, int> get spacesWithCounts => _spacesWithCountsCache;
+  Map<String, Map<String, int>> get subspacesWithCounts => _subspacesWithCountsCache;
 
   void _recomputeAllCaches() {
     _recomputeAggregates();
@@ -224,6 +236,8 @@ class TaskProvider with ChangeNotifier {
     int pendingCount = 0;
     final Map<String, int> listMap = {};
     final Map<String, int> tagMap = {};
+    final Map<String, int> spaceMap = {};
+    final Map<String, Map<String, int>> subspaceMap = {};
 
     for (final task in _tasks) {
       if (_selectedAccount != 'all' && task.account != _selectedAccount) continue;
@@ -240,11 +254,24 @@ class TaskProvider with ChangeNotifier {
           tagMap[tag] = (tagMap[tag] ?? 0) + 1;
         }
       }
+
+      for (final entry in task.spaces.entries) {
+        final spaceName = entry.key;
+        spaceMap[spaceName] = (spaceMap[spaceName] ?? 0) + 1;
+        if (!subspaceMap.containsKey(spaceName)) {
+          subspaceMap[spaceName] = {};
+        }
+        for (final sub in entry.value) {
+          subspaceMap[spaceName]![sub] = (subspaceMap[spaceName]![sub] ?? 0) + 1;
+        }
+      }
     }
 
     _pendingTasksCountCache = pendingCount;
     _listsWithCountsCache = listMap;
     _tagsWithCountsCache = tagMap;
+    _spacesWithCountsCache = spaceMap;
+    _subspacesWithCountsCache = subspaceMap;
   }
 
   void _recomputeFilteredTasks() {
@@ -295,6 +322,13 @@ class TaskProvider with ChangeNotifier {
       if (_selectedTags.isNotEmpty) {
         if (!task.allTags.any((t) => _selectedTags.contains(t))) return false;
       }
+      if (_selectedSpace != null) {
+        if (!task.spaces.containsKey(_selectedSpace)) return false;
+        if (_selectedSubspace != null) {
+          final subs = task.spaces[_selectedSpace] ?? [];
+          if (!subs.contains(_selectedSubspace)) return false;
+        }
+      }
       if (_selectedPriority != null) {
         if (task.calculatedPriority.toLowerCase() != _selectedPriority!.toLowerCase()) {
           return false;
@@ -323,7 +357,9 @@ class TaskProvider with ChangeNotifier {
         final matchTitle = task.title.toLowerCase().contains(query);
         final matchNotes = task.description.toLowerCase().contains(query);
         final matchTags = task.allTags.any((t) => t.toLowerCase().contains(query));
-        return matchTitle || matchNotes || matchTags;
+        final matchSpaces = task.spaces.keys.any((s) => s.toLowerCase().contains(query)) ||
+            task.spaces.values.any((subs) => subs.any((sub) => sub.toLowerCase().contains(query)));
+        return matchTitle || matchNotes || matchTags || matchSpaces;
       }
       return true;
     }).toList();
@@ -810,11 +846,32 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void setSelectedSpace(String? space, {String? subspace}) {
+    if (_selectedSpace == space && _selectedSubspace == subspace) {
+      _selectedSpace = null;
+      _selectedSubspace = null;
+    } else {
+      _selectedSpace = space;
+      _selectedSubspace = subspace;
+    }
+    _recomputeFilteredTasks();
+    notifyListeners();
+  }
+
+  void clearSpaceFilter() {
+    _selectedSpace = null;
+    _selectedSubspace = null;
+    _recomputeFilteredTasks();
+    notifyListeners();
+  }
+
   void clearAllFilters() {
     _statusFilter = 'pending';
     _searchQuery = '';
     _selectedLists.clear();
     _selectedTags.clear();
+    _selectedSpace = null;
+    _selectedSubspace = null;
     _selectedPriority = null;
     _hiddenLists.clear();
     _hiddenTags.clear();
@@ -841,6 +898,7 @@ class TaskProvider with ChangeNotifier {
         listTitle: targetTask.listTitle,
         account: targetTask.account,
         tags: targetTask.tags,
+        spaces: targetTask.spaces,
         calculatedPriority: targetTask.calculatedPriority,
         createdAt: targetTask.createdAt,
         completedAt: DateTime.now().toIso8601String(),
@@ -871,6 +929,7 @@ class TaskProvider with ChangeNotifier {
     String? listTitle,
     String? priority,
     List<String>? tags,
+    Map<String, List<String>>? spaces,
   }) async {
     final effectiveAccount = account ??
         ((_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
@@ -890,6 +949,7 @@ class TaskProvider with ChangeNotifier {
         listTitle: effectiveList,
         calculatedPriority: calculatedPriority,
         tags: effectiveTags,
+        spaces: spaces,
         account: effectiveAccount,
         createdAt: DateTime.now().toUtc().toIso8601String(),
       );
@@ -930,6 +990,7 @@ class TaskProvider with ChangeNotifier {
     String? listTitle,
     String? priority,
     List<String>? tags,
+    Map<String, List<String>>? spaces,
   }) async {
     final effectiveAccount = account ??
         ((_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
@@ -940,6 +1001,7 @@ class TaskProvider with ChangeNotifier {
       final existing = await localDb.getTaskById(taskId);
       if (existing != null) {
         final newTags = tags ?? existing.tags;
+        final newSpaces = spaces ?? existing.spaces;
         final newPriority = priority ?? GoogleTasksDirectClient.calculatePriorityFromTags(newTags);
         final updated = TaskItem(
           id: taskId,
@@ -948,6 +1010,7 @@ class TaskProvider with ChangeNotifier {
           due: due ?? existing.due,
           status: existing.status,
           tags: newTags,
+          spaces: newSpaces,
           listId: existing.listId,
           listTitle: listTitle ?? existing.listTitle,
           account: effectiveAccount,
@@ -1051,7 +1114,11 @@ class TaskProvider with ChangeNotifier {
 
       final targetList = await findOrCreateList(task.listTitle ?? 'My Tasks');
       final listId = targetList['id']?.toString() ?? '@default';
-      final combinedNotes = NotesParser.combineNotesAndTags(task.description, task.tags);
+      final combinedNotes = NotesParser.combineNotesAndMetadata(
+        task.cleanNotes,
+        task.tags,
+        spaces: task.spaces,
+      );
 
       if (isCreate) {
         final created = await client.createTask(

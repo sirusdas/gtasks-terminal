@@ -370,6 +370,23 @@ class _TasksScreenState extends State<TasksScreen> {
                             visualDensity: VisualDensity.compact,
                           ),
                         )),
+                    if (provider.selectedSpace != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Chip(
+                          avatar: const Icon(Icons.rocket_launch, size: 14, color: Colors.deepPurpleAccent),
+                          label: Text(
+                            provider.selectedSubspace != null
+                                ? 'Space: ${provider.selectedSpace} › ${provider.selectedSubspace}'
+                                : 'Space: ${provider.selectedSpace}',
+                            style: const TextStyle(fontSize: 12, color: Colors.deepPurple, fontWeight: FontWeight.bold),
+                          ),
+                          deleteIcon: const Icon(Icons.close, size: 14),
+                          onDeleted: () => provider.clearSpaceFilter(),
+                          backgroundColor: Colors.deepPurple.withValues(alpha: 0.1),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
                     if (provider.selectedPriority != null)
                       Padding(
                         padding: const EdgeInsets.only(right: 6),

@@ -1,8 +1,9 @@
-from typing import List
+from typing import List, Dict
 from gtasks_cli.models.task import Task
 from gtasks_cli.models.task_list import TaskList
 from datetime import datetime, timedelta  # Needed for date formatting
 from gtasks_cli.utils.datetime_utils import _normalize_datetime
+from gtasks_cli.utils.space_extractor import split_notes_and_metadata, extract_spaces_from_text
 import click
 
 
@@ -57,12 +58,32 @@ def display_tasks_grouped_by_list(tasks: List[Task]):
             task_color = _get_status_color(task.status)
             click.secho(task_line, fg=task_color)
             
-            # Display description if available
-            if task.description:
-                click.echo(f"     📝 {task.description[:60]}{'...' if len(task.description) > 60 else ''}")
+            # Display spaces and sub-spaces if available
+            spaces_dict = _get_task_spaces(task)
+            if spaces_dict:
+                space_parts = []
+                for sp_name, subs in spaces_dict.items():
+                    if subs:
+                        space_parts.append(f"{sp_name} › {', '.join(subs)}")
+                    else:
+                        space_parts.append(sp_name)
+                click.secho(f"     🌌 [{' | '.join(space_parts)}]", fg='cyan')
+
+            # Display clean description if available
+            raw_desc = task.description or task.notes or ''
+            clean_desc, _, _ = split_notes_and_metadata(raw_desc)
+            if clean_desc:
+                click.echo(f"     📝 {clean_desc[:60]}{'...' if len(clean_desc) > 60 else ''}")
     
     # Summary
     click.echo(f"\nTotal: {len(tasks)} task(s) across {len(tasks_by_list)} list(s)")
+
+def _get_task_spaces(task: Task) -> Dict[str, List[str]]:
+    """Retrieve spaces map from task attributes or task notes."""
+    if hasattr(task, 'spaces') and task.spaces:
+        return task.spaces
+    raw = getattr(task, 'notes', '') or getattr(task, 'description', '') or ''
+    return extract_spaces_from_text(raw)
 
 def _get_list_color(list_title: str) -> str:
     """Get color for list title based on its name"""
@@ -482,9 +503,11 @@ task_state = TaskState()
 @click.option('--order-by', '-o', 'order_by',
               help='Order tasks by field (due, created, modified, priority, title). Supports :asc/:desc suffix (e.g. due_date:desc).')
 @click.option('--search', '-S', help='Search tasks by title, description, or notes')
+@click.option('--space', help='Filter tasks by space name')
+@click.option('--subspace', help='Filter tasks by sub-space name')
 @click.option('--account', '-a', help='Account name for multi-account support')
 @click.pass_context
-def list(ctx, list_filter, status, priority, project, recurring, time_filter, search, account, order_by):
+def list(ctx, list_filter, status, priority, project, recurring, time_filter, search, account, order_by, space=None, subspace=None):
     """List tasks with optional filtering.
     
     LIST_FILTER: Filter tasks by list name (partial match, case insensitive)
@@ -536,6 +559,20 @@ def list(ctx, list_filter, status, priority, project, recurring, time_filter, se
     if use_google_tasks:
         tasks = [t for t in tasks if t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.WAITING]]
     
+    # Apply space / subspace filter
+    if space:
+        sp_lower = space.lower().strip()
+        tasks = [
+            t for t in tasks
+            if sp_lower in [s.lower() for s in _get_task_spaces(t).keys()]
+        ]
+    if subspace:
+        sub_lower = subspace.lower().strip()
+        tasks = [
+            t for t in tasks
+            if any(sub_lower in [s.lower() for s in subs] for subs in _get_task_spaces(t).values())
+        ]
+
     # Apply sorting if requested
     if order_by:
         tasks = _sort_tasks(tasks, order_by)

@@ -2520,3 +2520,46 @@ body {
         padding: 0.25rem;
     }
 }
+
+/* Spaces & Sub-spaces Super-Tags Styling */
+.task-spaces-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0.35rem 0;
+}
+
+.task-space-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border-radius: 9999px;
+    background: rgba(99, 102, 241, 0.12);
+    color: #4f46e5;
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.task-space-chip:hover {
+    background: rgba(99, 102, 241, 0.22);
+    transform: translateY(-1px);
+}
+
+.task-space-chip .chip-sep {
+    opacity: 0.6;
+    font-weight: 400;
+}
+
+.sidebar-subspace-item {
+    font-size: 0.8rem;
+    opacity: 0.9;
+}
+
+.sidebar-subspace-item:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+

@@ -151,6 +151,18 @@ class _TaskCardState extends State<TaskCard> {
                             ),
                             backgroundColor: _getPriorityColor(task.calculatedPriority).withValues(alpha: 0.15),
                           ),
+                        ...task.spaces.entries.map(
+                          (entry) => Chip(
+                            avatar: const Icon(Icons.rocket_launch, size: 12, color: Colors.deepPurpleAccent),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            label: Text(
+                              entry.value.isEmpty ? entry.key : '${entry.key} › ${entry.value.join(', ')}',
+                              style: const TextStyle(fontSize: 11, color: Colors.deepPurple, fontWeight: FontWeight.w500),
+                            ),
+                            backgroundColor: Colors.deepPurple.withValues(alpha: 0.1),
+                          ),
+                        ),
                         ...tags.map(
                           (tag) => Chip(
                             visualDensity: VisualDensity.compact,

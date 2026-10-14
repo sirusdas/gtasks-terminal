@@ -72,9 +72,24 @@ def view(ctx, task_id):
     
     if task.tags:
         click.echo(f"  Tags: {', '.join(task.tags)}")
+
+    from gtasks_cli.utils.space_extractor import split_notes_and_metadata, extract_spaces_from_text
+    spaces = task.spaces or extract_spaces_from_text(task.notes or task.description or "")
+    if spaces:
+        space_strs = []
+        for s_name, s_subs in spaces.items():
+            if s_subs:
+                space_strs.append(f"{s_name} › {', '.join(s_subs)}")
+            else:
+                space_strs.append(s_name)
+        click.echo(f"  Spaces: {' | '.join(space_strs)}")
     
-    if task.notes:
-        click.echo(f"  Notes: {task.notes}")
+    clean_notes = ""
+    raw_notes = task.notes or task.description or ""
+    if raw_notes:
+        clean_notes, _, _ = split_notes_and_metadata(raw_notes)
+    if clean_notes:
+        click.echo(f"  Notes: {clean_notes}")
         
     if task.dependencies:
         click.echo(f"  Dependencies: {', '.join(task.dependencies)}")

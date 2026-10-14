@@ -16,6 +16,7 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
   bool _listsExpanded = true;
+  bool _spacesExpanded = true;
   bool _tagsExpanded = true;
 
   @override
@@ -39,6 +40,16 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
     }).toList()
       ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
 
+    final spaces = provider.spacesWithCounts;
+    final subspaces = provider.subspacesWithCounts;
+    final filteredSpaces = spaces.entries.where((e) {
+      if (query.isEmpty) return true;
+      final spaceMatch = e.key.toLowerCase().contains(query);
+      final subsMatch = (subspaces[e.key]?.keys ?? []).any((s) => s.toLowerCase().contains(query));
+      return spaceMatch || subsMatch;
+    }).toList()
+      ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+
     final tags = provider.tagsWithCounts;
     final filteredTags = tags.entries.where((e) {
       if (query.isEmpty) return true;
@@ -47,6 +58,9 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
       ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
 
     final totalTasks = provider.pendingTasksCount;
+    final isAllSelected = provider.selectedLists.isEmpty &&
+        provider.selectedTags.isEmpty &&
+        provider.selectedSpace == null;
 
     return Drawer(
       child: SafeArea(
@@ -144,7 +158,7 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                     trailing: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: provider.selectedLists.isEmpty && provider.selectedTags.isEmpty
+                        color: isAllSelected
                             ? theme.colorScheme.primary
                             : theme.colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(12),
@@ -154,17 +168,18 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: provider.selectedLists.isEmpty && provider.selectedTags.isEmpty
+                          color: isAllSelected
                               ? theme.colorScheme.onPrimary
                               : theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
-                    selected: provider.selectedLists.isEmpty && provider.selectedTags.isEmpty,
+                    selected: isAllSelected,
                     selectedTileColor: theme.colorScheme.primary.withValues(alpha: 0.1),
                     onTap: () {
                       provider.setSelectedLists({});
                       provider.setSelectedTags({});
+                      provider.clearSpaceFilter();
                       Navigator.pop(context);
                     },
                   ),
@@ -270,6 +285,144 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                           onTap: () {
                             provider.toggleSelectedList(entry.key);
                           },
+                        );
+                      }),
+                  ],
+
+                  const Divider(height: 16),
+
+                  // Collapsible Spaces Section
+                  InkWell(
+                    onTap: () => setState(() => _spacesExpanded = !_spacesExpanded),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.rocket_launch_outlined, size: 18, color: Colors.deepPurpleAccent),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Spaces (${spaces.length})',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const Spacer(),
+                          Icon(
+                            _spacesExpanded ? Icons.expand_less : Icons.expand_more,
+                            size: 20,
+                            color: theme.disabledColor,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_spacesExpanded) ...[
+                    if (filteredSpaces.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                        child: Text('No matching spaces', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      )
+                    else
+                      ...filteredSpaces.map((entry) {
+                        final isSpaceSelected = provider.selectedSpace == entry.key && provider.selectedSubspace == null;
+                        final spaceSubs = subspaces[entry.key] ?? {};
+                        final filteredSubs = spaceSubs.entries.where((sub) {
+                          if (query.isEmpty) return true;
+                          return sub.key.toLowerCase().contains(query) || entry.key.toLowerCase().contains(query);
+                        }).toList()
+                          ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ListTile(
+                              dense: true,
+                              contentPadding: const EdgeInsets.only(left: 28, right: 16),
+                              leading: Icon(
+                                Icons.circle,
+                                size: 10,
+                                color: isSpaceSelected ? Colors.deepPurpleAccent : theme.disabledColor,
+                              ),
+                              title: Text(
+                                entry.key,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isSpaceSelected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: isSpaceSelected
+                                      ? Colors.deepPurpleAccent
+                                      : theme.colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '${entry.value}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSpaceSelected
+                                        ? Colors.white
+                                        : theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                              selected: isSpaceSelected,
+                              selectedTileColor: Colors.deepPurpleAccent.withValues(alpha: 0.1),
+                              onTap: () {
+                                provider.setSelectedSpace(entry.key);
+                              },
+                            ),
+                            if (filteredSubs.isNotEmpty)
+                              ...filteredSubs.map((subEntry) {
+                                final isSubSelected = provider.selectedSpace == entry.key &&
+                                    provider.selectedSubspace == subEntry.key;
+                                return ListTile(
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.only(left: 48, right: 16),
+                                  leading: Icon(
+                                    Icons.subdirectory_arrow_right,
+                                    size: 14,
+                                    color: isSubSelected ? Colors.deepPurpleAccent : theme.disabledColor,
+                                  ),
+                                  title: Text(
+                                    subEntry.key,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: isSubSelected ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  trailing: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: isSubSelected
+                                          ? Colors.deepPurpleAccent
+                                          : theme.colorScheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '${subEntry.value}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: isSubSelected
+                                            ? Colors.white
+                                            : theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
+                                  selected: isSubSelected,
+                                  selectedTileColor: Colors.deepPurpleAccent.withValues(alpha: 0.08),
+                                  onTap: () {
+                                    provider.setSelectedSpace(entry.key, subspace: subEntry.key);
+                                  },
+                                );
+                              }),
+                          ],
                         );
                       }),
                   ],

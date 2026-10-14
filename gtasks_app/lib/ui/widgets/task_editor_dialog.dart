@@ -18,6 +18,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
   late TextEditingController _titleController;
   late TextEditingController _notesController;
   late TextEditingController _tagsController;
+  late TextEditingController _spacesController;
   late TextEditingController _listController;
   String? _selectedAccount;
   String _selectedPriority = 'medium';
@@ -33,6 +34,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       _titleController = TextEditingController(text: task.title);
       _notesController = TextEditingController(text: task.cleanNotes);
       _tagsController = TextEditingController(text: task.allTags.join(', '));
+      _spacesController = TextEditingController(text: NotesParser.formatSpacesInput(task.spaces));
       _listController = TextEditingController(text: task.listTitle ?? 'My Tasks');
       _selectedAccount = task.account;
       _selectedPriority = task.calculatedPriority.toLowerCase();
@@ -45,6 +47,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       _titleController = TextEditingController();
       _notesController = TextEditingController();
       _tagsController = TextEditingController();
+      _spacesController = TextEditingController();
       _listController = TextEditingController(text: 'My Tasks');
     }
   }
@@ -69,6 +72,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     _titleController.dispose();
     _notesController.dispose();
     _tagsController.dispose();
+    _spacesController.dispose();
     _listController.dispose();
     super.dispose();
   }
@@ -83,9 +87,12 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
         .where((t) => t.isNotEmpty)
         .toList();
 
-    final combinedNotes = NotesParser.combineNotesAndTags(
+    final spaces = NotesParser.parseSpacesInput(_spacesController.text.trim());
+
+    final combinedNotes = NotesParser.combineNotesAndMetadata(
       _notesController.text.trim(),
       tags,
+      spaces: spaces,
     );
 
     final provider = context.read<TaskProvider>();
@@ -102,6 +109,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
         priority: _selectedPriority,
         due: dueStr,
         tags: tags,
+        spaces: spaces,
       );
     } else {
       provider.addTask(
@@ -112,6 +120,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
         priority: _selectedPriority,
         due: dueStr,
         tags: tags,
+        spaces: spaces,
       );
     }
     Navigator.pop(context);
@@ -548,6 +557,25 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                         }).toList(),
                       ),
                     ],
+                    const SizedBox(height: 14),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Spaces & Sub-spaces',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: _spacesController,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g. work: dev, ops | personal',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.rocket_launch_outlined, size: 18),
+                      ),
+                    ),
                   ],
                 ),
               ),

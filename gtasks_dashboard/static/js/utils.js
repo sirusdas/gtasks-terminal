@@ -162,15 +162,65 @@ export function getCompactDateDisplay(task) {
 /**
  * Splits raw task notes/description into clean human notes and tags array.
  * Looks for the divider:
- * ---
- * [tag1][tag2]...
- * at the bottom of the notes.
+/**
+ * Extract spaces and sub-spaces mapping from raw text.
+ * @param {string} text
+ * @returns {Record<string, string[]>}
+ */
+export function extractSpacesFromText(text) {
+    if (!text) return {};
+    const str = String(text);
+    const spacesDividerRegex = /(?:^|\r?\n)[ \t]*---[ \t]*\{spaces\}[ \t]*(?:\r?\n)([\s\S]*?)(?=(?:\r?\n[ \t]*---[ \t]*[^\r\n]*)|$)/i;
+    const dividerMatch = str.match(spacesDividerRegex);
+    const searchChunk = dividerMatch ? dividerMatch[1] : str;
+
+    const spaceItemRegex = /\{spa::([a-zA-Z0-9_\-\s]+?)(?::\(([^)]*)\))?\}/gi;
+    const spaces = {};
+    let m;
+    while ((m = spaceItemRegex.exec(searchChunk)) !== null) {
+        const spaceName = m[1].trim();
+        if (!spaceName || !isValidTag(spaceName)) continue;
+
+        const rawSubspaces = m[2] || '';
+        const subspaces = [];
+        if (rawSubspaces.trim()) {
+            const parts = rawSubspaces.split(',');
+            for (let part of parts) {
+                let s = part.trim();
+                if (s.toLowerCase().startsWith('sub::')) {
+                    s = s.substring(5).trim();
+                }
+                if (s && isValidTag(s) && !subspaces.includes(s)) {
+                    subspaces.push(s);
+                }
+            }
+        }
+
+        if (spaces[spaceName]) {
+            for (const s of subspaces) {
+                if (!spaces[spaceName].includes(s)) spaces[spaceName].push(s);
+            }
+        } else {
+            spaces[spaceName] = subspaces;
+        }
+    }
+    return spaces;
+}
+
+/**
+ * Splits raw task notes into user-readable clean notes, extracted tags, and spaces map,
+ * stripping dividers (--- and ---{spaces}) and bracket tags at the bottom.
  * @param {string} rawText
- * @returns {{ cleanNotes: string, tags: string[] }}
+ * @returns {{ cleanNotes: string, tags: string[], spaces: Record<string, string[]> }}
  */
 export function splitNotesAndTags(rawText) {
-    if (!rawText) return { cleanNotes: '', tags: [] };
-    const str = String(rawText);
+    if (!rawText) return { cleanNotes: '', tags: [], spaces: {} };
+    let str = String(rawText);
+    const spaces = extractSpacesFromText(str);
+
+    // Strip the ---{spaces} section first
+    const spacesDividerRegex = /(?:^|\r?\n)[ \t]*---[ \t]*\{spaces\}[ \t]*(?:\r?\n)([\s\S]*?)(?=(?:\r?\n[ \t]*---[ \t]*[^\r\n]*)|$)/gi;
+    str = str.replace(spacesDividerRegex, '').trimEnd();
     
     // Helper to extract clean unique valid bracket tags from a text chunk
     const extractTags = (chunk) => {
@@ -195,7 +245,8 @@ export function splitNotesAndTags(rawText) {
             const clean = str.substring(0, dividerMatch.index).replace(/[\r\n]+$/, '');
             return {
                 cleanNotes: clean,
-                tags: extractedTags
+                tags: extractedTags,
+                spaces: spaces
             };
         }
     }
@@ -207,7 +258,8 @@ export function splitNotesAndTags(rawText) {
         if (extractedTags.length > 0) {
             return {
                 cleanNotes: '',
-                tags: extractedTags
+                tags: extractedTags,
+                spaces: spaces
             };
         }
     }
@@ -221,47 +273,74 @@ export function splitNotesAndTags(rawText) {
             const clean = str.substring(0, trailingMatch.index).replace(/[\r\n]+$/, '');
             return {
                 cleanNotes: clean,
-                tags: extractedTags
+                tags: extractedTags,
+                spaces: spaces
             };
         }
     }
     
     return {
         cleanNotes: str,
-        tags: []
+        tags: [],
+        spaces: spaces
     };
 }
 
 /**
- * Combines clean notes and tags with a trailing '---' divider.
+ * Combines clean notes, tags, and spaces with standard dividers.
  * Format:
  * <cleanNotes>
  *
  * ---
  * [tag1][tag2]
  *
+ * ---{spaces}
+ * {spa::space:(sub::sub1,sub::sub2)}
+ *
  * @param {string} cleanNotes
  * @param {string[]} tags
+ * @param {Record<string, string[]>} spaces
  * @returns {string}
  */
-export function combineNotesAndTags(cleanNotes, tags = []) {
+export function combineNotesAndMetadata(cleanNotes, tags = [], spaces = {}) {
     const clean = (cleanNotes || '').trim();
+    const sections = [];
+    if (clean) sections.push(clean);
+
     const cleanTags = (tags || [])
         .map(t => String(t).trim().replace(/^\[|\]$/g, '').replace(/^#/, ''))
         .filter(t => t.length > 0 && isValidTag(t));
     const uniqueTags = Array.from(new Set(cleanTags));
-    
-    if (uniqueTags.length === 0) {
-        return clean;
+    if (uniqueTags.length > 0) {
+        const tagsLine = uniqueTags.map(t => `[${t}]`).join('');
+        sections.push(`---\n${tagsLine}`);
     }
-    
-    const tagsLine = uniqueTags.map(t => `[${t}]`).join('');
-    
-    if (!clean) {
-        return `---\n${tagsLine}`;
+
+    if (spaces && Object.keys(spaces).length > 0) {
+        const spaceLines = [];
+        for (const [spaceName, subspaces] of Object.entries(spaces)) {
+            const spa = String(spaceName).trim();
+            if (!spa || !isValidTag(spa)) continue;
+            const validSubs = (subspaces || [])
+                .map(s => String(s).trim().replace(/^sub::/i, ''))
+                .filter(s => s.length > 0 && isValidTag(s));
+            const uniqueSubs = Array.from(new Set(validSubs));
+            if (uniqueSubs.length > 0) {
+                spaceLines.push(`{spa::${spa}:(${uniqueSubs.map(s => 'sub::' + s).join(',')})}`);
+            } else {
+                spaceLines.push(`{spa::${spa}}`);
+            }
+        }
+        if (spaceLines.length > 0) {
+            sections.push(`---{spaces}\n${spaceLines.join('\n')}`);
+        }
     }
-    
-    return `${clean}\n\n---\n${tagsLine}`;
+
+    return sections.join('\n\n').trim();
+}
+
+export function combineNotesAndTags(cleanNotes, tags = [], spaces = {}) {
+    return combineNotesAndMetadata(cleanNotes, tags, spaces);
 }
 
 /**
@@ -354,6 +433,40 @@ export function getTagsDisplay(task) {
     
     const tagsHtml = uniqueTags.map(tag => `<span class="task-tag">[${tag}]</span>`).join(' ');
     return `<div class="task-tags">${tagsHtml}</div>`;
+}
+
+/**
+ * Generate spaces and sub-spaces display HTML for a task
+ * @param {Object} task - The task object
+ * @returns {string} - The spaces HTML
+ */
+export function getSpacesDisplay(task) {
+    const rawNotes = task.notes || task.description || '';
+    const spaces = (task.spaces && Object.keys(task.spaces).length > 0) ? task.spaces : extractSpacesFromText(rawNotes);
+    if (!spaces || Object.keys(spaces).length === 0) return '';
+
+    const chips = [];
+    Object.entries(spaces).forEach(([spaceName, subspaces]) => {
+        const spa = escapeHtml(spaceName);
+        if (subspaces && subspaces.length > 0) {
+            subspaces.forEach(sub => {
+                const subEsc = escapeHtml(sub);
+                chips.push(`
+                    <span class="task-space-chip" onclick="selectSidebarFilter('subspace', '${escapeJsString(sub)}', '${escapeJsString(spaceName)}'); event.stopPropagation();" title="Space: ${spa} › Sub-space: ${subEsc}">
+                        <i class="fas fa-layer-group"></i> ${spa} <span class="chip-sep">›</span> ${subEsc}
+                    </span>
+                `);
+            });
+        } else {
+            chips.push(`
+                <span class="task-space-chip" onclick="selectSidebarFilter('space', '${escapeJsString(spaceName)}'); event.stopPropagation();" title="Space: ${spa}">
+                    <i class="fas fa-layer-group"></i> ${spa}
+                </span>
+            `);
+        }
+    });
+
+    return `<div class="task-spaces-container">${chips.join('')}</div>`;
 }
 
 /**
@@ -553,6 +666,34 @@ export function filterTasksByCriteria(tasks, filters) {
         console.log('[Utils] Tasks after tags filter:', filteredTasks.length);
     }
     
+    // Apply space filter
+    if (filters.space) {
+        const filterSpace = String(filters.space).toLowerCase().trim();
+        filteredTasks = filteredTasks.filter(task => {
+            const spaces = (task.spaces && Object.keys(task.spaces).length > 0)
+                ? task.spaces
+                : extractSpacesFromText(task.notes || task.description || '');
+            if (!spaces) return false;
+            return Object.keys(spaces).some(s => s.toLowerCase() === filterSpace);
+        });
+    }
+
+    // Apply subspace filter
+    if (filters.subspace) {
+        const filterSubspace = String(filters.subspace).toLowerCase().trim();
+        const parentSpace = filters.space ? String(filters.space).toLowerCase().trim() : null;
+        filteredTasks = filteredTasks.filter(task => {
+            const spaces = (task.spaces && Object.keys(task.spaces).length > 0)
+                ? task.spaces
+                : extractSpacesFromText(task.notes || task.description || '');
+            if (!spaces) return false;
+            return Object.entries(spaces).some(([sp, subs]) => {
+                if (parentSpace && sp.toLowerCase() !== parentSpace) return false;
+                return (subs || []).some(sub => sub.toLowerCase() === filterSubspace);
+            });
+        });
+    }
+
     // Apply date filter (Modified date first if not found then created date)
     if (filters.dateStart || filters.dateEnd) {
         const dateField = filters.dateField || 'modified_at';
