@@ -55,12 +55,15 @@ class SearchableMultiSelectModal extends StatefulWidget {
 
 class _SearchableMultiSelectModalState extends State<SearchableMultiSelectModal> {
   late Set<String> _selected;
+  late final List<String> _allOptions;
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _selected = Set.from(widget.initialSelected);
+    _allOptions = widget.optionsWithCounts.keys.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
   }
 
   @override
@@ -74,10 +77,7 @@ class _SearchableMultiSelectModalState extends State<SearchableMultiSelectModal>
     final theme = Theme.of(context);
     final query = _searchController.text.toLowerCase().trim();
 
-    final allOptions = widget.optionsWithCounts.keys.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-
-    final filteredOptions = allOptions.where((opt) {
+    final filteredOptions = _allOptions.where((opt) {
       if (query.isEmpty) return true;
       return opt.toLowerCase().contains(query);
     }).toList();
@@ -162,7 +162,7 @@ class _SearchableMultiSelectModalState extends State<SearchableMultiSelectModal>
                 child: Row(
                   children: [
                     Text(
-                      '${_selected.length} of ${allOptions.length} selected',
+                      '${_selected.length} of ${_allOptions.length} selected',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

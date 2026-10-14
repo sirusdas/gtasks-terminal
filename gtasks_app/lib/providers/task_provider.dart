@@ -161,7 +161,12 @@ class TaskProvider with ChangeNotifier {
 
   bool get isStandalone => _isStandalone;
 
-  List<TaskItem> get tasks => _filteredTasks();
+  List<TaskItem> _filteredTasksCache = [];
+  Map<String, int> _listsWithCountsCache = {};
+  Map<String, int> _tagsWithCountsCache = {};
+  int _pendingTasksCountCache = 0;
+
+  List<TaskItem> get tasks => _filteredTasksCache;
   List<TaskItem> get allTasksUnfiltered => _tasks;
   List<GTasksAccount> get accounts => _accounts;
   String get selectedAccount => _selectedAccount;
@@ -206,40 +211,44 @@ class TaskProvider with ChangeNotifier {
     return count;
   }
 
-  int get pendingTasksCount {
-    return _tasks.where((t) {
-      if (_selectedAccount != 'all' && t.account != _selectedAccount) return false;
-      return !t.isCompleted;
-    }).length;
+  int get pendingTasksCount => _pendingTasksCountCache;
+  Map<String, int> get listsWithCounts => _listsWithCountsCache;
+  Map<String, int> get tagsWithCounts => _tagsWithCountsCache;
+
+  void _recomputeAllCaches() {
+    _recomputeAggregates();
+    _recomputeFilteredTasks();
   }
 
-  // Lists with pending task counts based on current account
-  Map<String, int> get listsWithCounts {
-    final Map<String, int> map = {};
+  void _recomputeAggregates() {
+    int pendingCount = 0;
+    final Map<String, int> listMap = {};
+    final Map<String, int> tagMap = {};
+
     for (final task in _tasks) {
       if (_selectedAccount != 'all' && task.account != _selectedAccount) continue;
       if (task.isCompleted) continue; // Only count pending tasks
+      pendingCount++;
+
       final list = (task.listTitle != null && task.listTitle!.isNotEmpty)
           ? task.listTitle!
           : 'Default List';
-      map[list] = (map[list] ?? 0) + 1;
-    }
-    return map;
-  }
+      listMap[list] = (listMap[list] ?? 0) + 1;
 
-  // Tags with pending task counts based on current account
-  Map<String, int> get tagsWithCounts {
-    final Map<String, int> map = {};
-    for (final task in _tasks) {
-      if (_selectedAccount != 'all' && task.account != _selectedAccount) continue;
-      if (task.isCompleted) continue; // Only count pending tasks
       for (final tag in task.allTags) {
         if (tag.trim().isNotEmpty) {
-          map[tag] = (map[tag] ?? 0) + 1;
+          tagMap[tag] = (tagMap[tag] ?? 0) + 1;
         }
       }
     }
-    return map;
+
+    _pendingTasksCountCache = pendingCount;
+    _listsWithCountsCache = listMap;
+    _tagsWithCountsCache = tagMap;
+  }
+
+  void _recomputeFilteredTasks() {
+    _filteredTasksCache = _filteredTasks();
   }
 
   List<TaskItem> _filteredTasks() {
@@ -409,6 +418,7 @@ class TaskProvider with ChangeNotifier {
       if (_accounts.isEmpty) {
         _tasks = [];
         _errorMessage = null;
+        _recomputeAllCaches();
         notifyListeners();
         return;
       }
@@ -449,6 +459,7 @@ class TaskProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
     }
+    _recomputeAllCaches();
     notifyListeners();
   }
 
@@ -640,11 +651,13 @@ class TaskProvider with ChangeNotifier {
 
   void setStatusFilter(String status) {
     _statusFilter = status;
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
   void setSearchQuery(String query) {
     _searchQuery = query;
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
@@ -654,6 +667,7 @@ class TaskProvider with ChangeNotifier {
     } else {
       _selectedLists = {list};
     }
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
@@ -663,16 +677,19 @@ class TaskProvider with ChangeNotifier {
     } else {
       _selectedTags = {tag};
     }
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
   void setSelectedLists(Set<String> lists) {
     _selectedLists = Set.from(lists);
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
   void setSelectedTags(Set<String> tags) {
     _selectedTags = Set.from(tags);
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
@@ -682,6 +699,7 @@ class TaskProvider with ChangeNotifier {
     } else {
       _selectedLists.add(list);
     }
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
@@ -691,11 +709,13 @@ class TaskProvider with ChangeNotifier {
     } else {
       _selectedTags.add(tag);
     }
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
   void setPriorityFilter(String? priority) {
     _selectedPriority = priority;
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
@@ -705,6 +725,7 @@ class TaskProvider with ChangeNotifier {
     } else {
       _hiddenLists.add(list);
     }
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
@@ -714,33 +735,78 @@ class TaskProvider with ChangeNotifier {
     } else {
       _hiddenTags.add(tag);
     }
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
   void setHideRecurring(bool hide) {
     _hideRecurring = hide;
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
   void setHiddenLists(Set<String> lists) {
     _hiddenLists = Set.from(lists);
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
   void setHiddenTags(Set<String> tags) {
     _hiddenTags = Set.from(tags);
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
   void setSort(String field, bool ascending) {
     _sortField = field;
     _sortAscending = ascending;
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
   void setDateFilter(String field, DateTimeRange? range) {
     _dateField = field;
     _dateRange = range;
+    _recomputeFilteredTasks();
+    notifyListeners();
+  }
+
+  void applyFiltersBatch({
+    String? statusFilter,
+    Set<String>? selectedLists,
+    Set<String>? selectedTags,
+    String? selectedPriority,
+    bool clearPriority = false,
+    Set<String>? hiddenLists,
+    Set<String>? hiddenTags,
+    bool? hideRecurring,
+    String? dateField,
+    DateTimeRange? dateRange,
+    bool clearDateRange = false,
+    String? sortField,
+    bool? sortAscending,
+  }) {
+    if (statusFilter != null) _statusFilter = statusFilter;
+    if (selectedLists != null) _selectedLists = Set.from(selectedLists);
+    if (selectedTags != null) _selectedTags = Set.from(selectedTags);
+    if (clearPriority) {
+      _selectedPriority = null;
+    } else if (selectedPriority != null) {
+      _selectedPriority = selectedPriority;
+    }
+    if (hiddenLists != null) _hiddenLists = Set.from(hiddenLists);
+    if (hiddenTags != null) _hiddenTags = Set.from(hiddenTags);
+    if (hideRecurring != null) _hideRecurring = hideRecurring;
+    if (dateField != null) _dateField = dateField;
+    if (clearDateRange) {
+      _dateRange = null;
+    } else if (dateRange != null) {
+      _dateRange = dateRange;
+    }
+    if (sortField != null) _sortField = sortField;
+    if (sortAscending != null) _sortAscending = sortAscending;
+
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
@@ -756,6 +822,7 @@ class TaskProvider with ChangeNotifier {
     _dateRange = null;
     _sortField = 'modified_at';
     _sortAscending = false;
+    _recomputeFilteredTasks();
     notifyListeners();
   }
 
@@ -778,6 +845,7 @@ class TaskProvider with ChangeNotifier {
         createdAt: targetTask.createdAt,
         completedAt: DateTime.now().toIso8601String(),
       );
+      _recomputeAllCaches();
       notifyListeners();
     }
 
@@ -916,6 +984,7 @@ class TaskProvider with ChangeNotifier {
       final existing = await localDb.getTaskById(taskId);
       await localDb.markTaskPendingDelete(taskId);
       _tasks.removeWhere((t) => t.id == taskId);
+      _recomputeAllCaches();
       notifyListeners();
       if (existing != null) {
         _syncStandaloneTaskToGoogle(existing, isDelete: true);
@@ -926,6 +995,7 @@ class TaskProvider with ChangeNotifier {
     final success = await apiClient.deleteTask(taskId, account: effectiveAccount);
     if (success) {
       _tasks.removeWhere((t) => t.id == taskId);
+      _recomputeAllCaches();
       notifyListeners();
     }
     return success;

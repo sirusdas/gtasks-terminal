@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
@@ -13,11 +14,13 @@ class TasksSidebarDrawer extends StatefulWidget {
 
 class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
   final TextEditingController _searchController = TextEditingController();
+  Timer? _debounce;
   bool _listsExpanded = true;
   bool _tagsExpanded = true;
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -97,7 +100,12 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                   // Quick search input for lists & tags
                   TextField(
                     controller: _searchController,
-                    onChanged: (_) => setState(() {}),
+                    onChanged: (_) {
+                      _debounce?.cancel();
+                      _debounce = Timer(const Duration(milliseconds: 150), () {
+                        if (mounted) setState(() {});
+                      });
+                    },
                     decoration: InputDecoration(
                       hintText: 'Filter lists & tags...',
                       prefixIcon: const Icon(Icons.search, size: 18),
@@ -105,6 +113,7 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                           ? IconButton(
                               icon: const Icon(Icons.clear, size: 16),
                               onPressed: () {
+                                _debounce?.cancel();
                                 _searchController.clear();
                                 setState(() {});
                               },

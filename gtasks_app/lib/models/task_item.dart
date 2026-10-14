@@ -15,6 +15,8 @@ class TaskItem {
   final String? completedAt;
   final bool isRecurring;
   final String? recurrenceType;
+  final String cleanNotes;
+  final List<String> allTags;
 
   TaskItem({
     required this.id,
@@ -31,17 +33,17 @@ class TaskItem {
     this.completedAt,
     this.isRecurring = false,
     this.recurrenceType,
-  });
+    String? cleanNotes,
+    List<String>? allTags,
+  })  : cleanNotes = cleanNotes ?? NotesParser.splitNotesAndTags(description).cleanNotes,
+        allTags = allTags ??
+            (() {
+              final extracted = NotesParser.splitNotesAndTags(description).tags;
+              final set = <String>{...tags, ...extracted};
+              return set.toList();
+            })();
 
   bool get isCompleted => status.toLowerCase() == 'completed';
-
-  String get cleanNotes => NotesParser.splitNotesAndTags(description).cleanNotes;
-
-  List<String> get allTags {
-    final extracted = NotesParser.splitNotesAndTags(description).tags;
-    final set = <String>{...tags, ...extracted};
-    return set.toList();
-  }
 
   factory TaskItem.fromJson(Map<String, dynamic> json) {
     Set<String> tagSet = {};

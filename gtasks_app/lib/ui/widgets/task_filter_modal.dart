@@ -491,15 +491,21 @@ class _TaskFilterModalState extends State<TaskFilterModal> {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     onPressed: () {
-                      provider.setStatusFilter(_status);
-                      provider.setSelectedLists(_selectedLists);
-                      provider.setSelectedTags(_selectedTags);
-                      provider.setPriorityFilter(_selectedPriority);
-                      provider.setHiddenLists(_hiddenLists);
-                      provider.setHiddenTags(_hiddenTags);
-                      provider.setHideRecurring(_hideRecurring);
-                      provider.setDateFilter(_dateField, _dateRange);
-                      provider.setSort(_sortField, _sortAscending);
+                      provider.applyFiltersBatch(
+                        statusFilter: _status,
+                        selectedLists: _selectedLists,
+                        selectedTags: _selectedTags,
+                        selectedPriority: _selectedPriority,
+                        clearPriority: _selectedPriority == null,
+                        hiddenLists: _hiddenLists,
+                        hiddenTags: _hiddenTags,
+                        hideRecurring: _hideRecurring,
+                        dateField: _dateField,
+                        dateRange: _dateRange,
+                        clearDateRange: _dateRange == null,
+                        sortField: _sortField,
+                        sortAscending: _sortAscending,
+                      );
                       Navigator.pop(context);
                     },
                   ),

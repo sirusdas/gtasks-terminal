@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
@@ -19,6 +20,7 @@ class TasksScreen extends StatefulWidget {
 
 class _TasksScreenState extends State<TasksScreen> {
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -97,6 +99,7 @@ class _TasksScreenState extends State<TasksScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -222,8 +225,10 @@ class _TasksScreenState extends State<TasksScreen> {
                         ? IconButton(
                             icon: const Icon(Icons.clear),
                             onPressed: () {
+                              _searchDebounce?.cancel();
                               _searchController.clear();
                               provider.setSearchQuery('');
+                              setState(() {});
                             },
                           )
                         : null,
@@ -231,7 +236,13 @@ class _TasksScreenState extends State<TasksScreen> {
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  onChanged: (val) => provider.setSearchQuery(val),
+                  onChanged: (val) {
+                    _searchDebounce?.cancel();
+                    _searchDebounce = Timer(const Duration(milliseconds: 200), () {
+                      if (mounted) provider.setSearchQuery(val);
+                    });
+                    setState(() {});
+                  },
                 ),
               ),
               const SizedBox(height: 6),
@@ -491,6 +502,7 @@ class _TasksScreenState extends State<TasksScreen> {
                               itemBuilder: (ctx, index) {
                                 final task = provider.tasks[index];
                                 return TaskCard(
+                                  key: ValueKey(task.id),
                                   task: task,
                                   onToggleComplete: () => provider.completeTask(task.id),
                                   onEdit: () => _showEditTaskSheet(context, task),
