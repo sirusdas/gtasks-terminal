@@ -122,10 +122,10 @@
                     </a>
                     
                     <div class="sidebar-tasks-submenu" id="sidebar-tasks-submenu">
-                        <!-- Quick Search for Lists & Tags -->
+                        <!-- Quick Search for Spaces, Lists & Tags -->
                         <div class="sidebar-search-wrapper">
                             <i class="fas fa-search sidebar-search-icon"></i>
-                            <input type="text" id="sidebar-quick-search" class="sidebar-search-input" placeholder="Filter lists & tags..." oninput="filterSidebarListItems(this.value)">
+                            <input type="text" id="sidebar-quick-search" class="sidebar-search-input" placeholder="Filter spaces, lists & tags..." oninput="filterSidebarListItems(this.value)">
                             <button class="sidebar-search-clear" id="sidebar-quick-search-clear" onclick="clearSidebarQuickSearch()" style="display: none;" title="Clear">
                                 <i class="fas fa-times"></i>
                             </button>
@@ -140,6 +140,18 @@
                             <span class="subitem-badge" id="sidebar-all-tasks-count">-</span>
                         </div>
 
+                        <!-- Spaces Collapsible Section (Top of Tasks Submenu) -->
+                        <div class="sidebar-section-header" onclick="toggleSidebarSection('spaces')">
+                            <div class="sidebar-section-title">
+                                <i class="fas fa-layer-group"></i>
+                                <span>Spaces</span>
+                            </div>
+                            <i class="fas fa-chevron-down section-chevron" id="sidebar-spaces-chevron"></i>
+                        </div>
+                        <div class="sidebar-subitems-container" id="sidebar-spaces-container">
+                            <div class="sidebar-empty-hint">No spaces</div>
+                        </div>
+
                         <!-- Lists Collapsible Section -->
                         <div class="sidebar-section-header" onclick="toggleSidebarSection('lists')">
                             <div class="sidebar-section-title">
@@ -150,18 +162,6 @@
                         </div>
                         <div class="sidebar-subitems-container" id="sidebar-lists-container">
                             <div class="sidebar-empty-hint">Loading lists...</div>
-                        </div>
-
-                        <!-- Spaces Collapsible Section -->
-                        <div class="sidebar-section-header" onclick="toggleSidebarSection('spaces')">
-                            <div class="sidebar-section-title">
-                                <i class="fas fa-layer-group"></i>
-                                <span>Spaces</span>
-                            </div>
-                            <i class="fas fa-chevron-down section-chevron" id="sidebar-spaces-chevron"></i>
-                        </div>
-                        <div class="sidebar-subitems-container" id="sidebar-spaces-container">
-                            <div class="sidebar-empty-hint">No spaces</div>
                         </div>
 
                         <!-- Tags Collapsible Section -->
@@ -1526,10 +1526,10 @@
         <p>Loading...</p>
     </div>
 
-    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=41"></script>
-    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=41"></script>
-    <script type="module" src="{{ base_path }}/static/js/reports.js?v=41"></script>
-    <script type="module" src="{{ base_path }}/static/js/notifications.js?v=41"></script>
-    <script type="module" src="{{ base_path }}/static/js/debugger.js?v=41"></script>
+    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=42"></script>
+    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=42"></script>
+    <script type="module" src="{{ base_path }}/static/js/reports.js?v=42"></script>
+    <script type="module" src="{{ base_path }}/static/js/notifications.js?v=42"></script>
+    <script type="module" src="{{ base_path }}/static/js/debugger.js?v=42"></script>
 </body>
 </html>

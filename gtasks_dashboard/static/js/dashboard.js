@@ -2890,6 +2890,8 @@ function switchAddNotesTab(tab) {
         textarea.style.display = 'block';
         preview.style.display = 'none';
     }
+}
+
 function parseSpacesInput(inputStr) {
     if (!inputStr) return {};
     const spaces = {};
