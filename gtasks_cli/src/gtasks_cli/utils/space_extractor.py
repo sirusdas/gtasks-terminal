@@ -206,3 +206,78 @@ def combine_notes_and_metadata(
             sections.append(f'---{{spaces}}\n{spaces_block}')
 
     return '\n\n'.join(sections).strip()
+
+
+def parse_spaces_input(input_str: str) -> Dict[str, List[str]]:
+    """
+    Parse a user input string into a dictionary of spaces and sub-spaces.
+    Accepts:
+      - Raw format: '{spa::work:(sub::frontend,sub::backend)}'
+      - Friendly format: 'work:frontend,backend; personal' or 'work:frontend, personal:finances'
+    """
+    if not input_str or not input_str.strip():
+        return {}
+
+    text = input_str.strip()
+    if '{spa::' in text:
+        return extract_spaces_from_text(text)
+
+    spaces: Dict[str, List[str]] = {}
+    parts = [p.strip() for p in text.split(';') if p.strip()]
+    if len(parts) == 1 and ';' not in text:
+        raw_items = [i.strip() for i in text.split(',') if i.strip()]
+        current_space = None
+        for item in raw_items:
+            if ':' in item:
+                spa, sub = item.split(':', 1)
+                spa = spa.strip()
+                sub = sub.strip()
+                if _is_valid_identifier(spa):
+                    current_space = spa
+                    if current_space not in spaces:
+                        spaces[current_space] = []
+                    if sub and _is_valid_identifier(sub) and sub not in spaces[current_space]:
+                        spaces[current_space].append(sub)
+            elif current_space is not None and _is_valid_identifier(item):
+                if item not in spaces[current_space]:
+                    spaces[current_space].append(item)
+            elif _is_valid_identifier(item):
+                current_space = item
+                if current_space not in spaces:
+                    spaces[current_space] = []
+        return spaces
+
+    for part in parts:
+        if ':' in part:
+            spa, raw_subs = part.split(':', 1)
+            spa = spa.strip()
+            if _is_valid_identifier(spa):
+                if spa not in spaces:
+                    spaces[spa] = []
+                for sub in raw_subs.split(','):
+                    sub = sub.strip()
+                    if sub and _is_valid_identifier(sub) and sub not in spaces[spa]:
+                        spaces[spa].append(sub)
+        else:
+            spa = part.strip()
+            if _is_valid_identifier(spa):
+                if spa not in spaces:
+                    spaces[spa] = []
+
+    return spaces
+
+
+def format_spaces_for_input(spaces: Dict[str, List[str]]) -> str:
+    """
+    Format a spaces dict into a user-friendly input string (e.g. 'work:frontend,backend; personal').
+    """
+    if not spaces:
+        return ""
+    parts = []
+    for spa, subs in spaces.items():
+        if subs:
+            parts.append(f"{spa}:{','.join(subs)}")
+        else:
+            parts.append(spa)
+    return "; ".join(parts)
+

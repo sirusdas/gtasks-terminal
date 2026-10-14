@@ -30,6 +30,8 @@ def handle_update_command(task_state, task_manager, command_parts, use_google_ta
                 # Capture original state
                 original_title = task.title
                 original_description = task.description
+                original_notes = task.notes
+                original_spaces = getattr(task, 'spaces', {})
                 
                 updated_task = _edit_task_in_editor(task, task_manager)
                 if updated_task:
@@ -60,12 +62,20 @@ def handle_update_command(task_state, task_manager, command_parts, use_google_ta
                     
                     def undo_editor_update():
                         try:
-                            task_manager.update_task(task.id, title=original_title, description=original_description)
+                            task_manager.update_task(
+                                task.id,
+                                title=original_title,
+                                description=original_description,
+                                notes=original_notes,
+                                spaces=original_spaces,
+                            )
                             # Update in-memory task
                             for t in task_state.tasks:
                                 if t.id == task.id:
                                     t.title = original_title
                                     t.description = original_description
+                                    t.notes = original_notes
+                                    t.spaces = original_spaces
                                     break
                             return True
                         except Exception as e:
@@ -82,18 +92,41 @@ def handle_update_command(task_state, task_manager, command_parts, use_google_ta
                 else:
                     click.echo("Task update cancelled or failed.")
             else:
+                from gtasks_cli.utils.space_extractor import (
+                    split_notes_and_metadata,
+                    combine_notes_and_metadata,
+                    parse_spaces_input,
+                    format_spaces_for_input,
+                )
+
+                raw_notes = task.description or task.notes or ""
+                clean_notes, current_tags, current_spaces = split_notes_and_metadata(raw_notes)
+                if not current_spaces and getattr(task, 'spaces', None):
+                    current_spaces = task.spaces
+
                 # Collect updated details
                 title = click.prompt("Task title", default=task.title)
-                description = click.prompt("Task description", default=task.description or "")
-                if description == "":
-                    description = None
-                
+                clean_desc = click.prompt("Task description", default=clean_notes)
+                default_spaces_str = format_spaces_for_input(current_spaces)
+                spaces_input = click.prompt("Spaces (e.g. work:frontend, personal)", default=default_spaces_str)
+
+                new_spaces = parse_spaces_input(spaces_input)
+                combined_desc = combine_notes_and_metadata(clean_desc, tags=current_tags, spaces=new_spaces)
+
                 # Capture original state
                 original_title = task.title
                 original_description = task.description
-                
+                original_notes = task.notes
+                original_spaces = getattr(task, 'spaces', {})
+
                 # Update the task
-                update_success = task_manager.update_task(task.id, title=title, description=description)
+                update_success = task_manager.update_task(
+                    task.id,
+                    title=title,
+                    description=combined_desc,
+                    notes=combined_desc,
+                    spaces=new_spaces,
+                )
                 if update_success:
                     click.echo(f"Task '{title}' updated successfully.")
                     
@@ -124,12 +157,20 @@ def handle_update_command(task_state, task_manager, command_parts, use_google_ta
                     
                     def undo_update():
                         try:
-                            task_manager.update_task(task.id, title=original_title, description=original_description)
+                            task_manager.update_task(
+                                task.id,
+                                title=original_title,
+                                description=original_description,
+                                notes=original_notes,
+                                spaces=original_spaces,
+                            )
                             # Update in-memory task
                             for t in task_state.tasks:
                                 if t.id == task.id:
                                     t.title = original_title
                                     t.description = original_description
+                                    t.notes = original_notes
+                                    t.spaces = original_spaces
                                     break
                             return True
                         except Exception as e:
@@ -263,11 +304,16 @@ def _edit_task_in_editor(task: Task, task_manager) -> Optional[Task]:
                 
                 description = '\n'.join(description_lines) if description_lines else None
                 
+                from gtasks_cli.utils.space_extractor import split_notes_and_metadata
+                clean_desc, _, spaces = split_notes_and_metadata(description or "")
+
                 # Update the task
                 update_result = task_manager.update_task(
                     task.id, 
                     title=title, 
-                    description=description
+                    description=description,
+                    notes=description,
+                    spaces=spaces
                 )
                 
                 if update_result:

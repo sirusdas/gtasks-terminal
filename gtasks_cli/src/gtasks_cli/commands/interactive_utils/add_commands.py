@@ -15,10 +15,19 @@ def handle_add_command(task_state, task_manager, command_parts, use_google_tasks
     if description == "":
         description = None
     
+    spaces_input = click.prompt("Spaces (e.g. work:frontend, personal)", default="")
+
+    from gtasks_cli.utils.space_extractor import parse_spaces_input, combine_notes_and_metadata
+    spaces = parse_spaces_input(spaces_input)
+    if spaces:
+        description = combine_notes_and_metadata(description or "", tags=None, spaces=spaces)
+
     # Create the task
     task = Task(
         title=title,
         description=description,
+        notes=description,
+        spaces=spaces,
         status=TaskStatus.PENDING,
         priority=Priority.MEDIUM
     )

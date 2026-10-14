@@ -190,8 +190,21 @@ def _display_tasks_grouped_by_list(tasks: List[Task]) -> List[Task]:
             if task.modified_at:
                 dates_str += f" [dim]M:{task.modified_at.strftime('%Y-%m-%d')}[/dim]"
             
+            # Extract spaces badge
+            from gtasks_cli.utils.space_extractor import extract_spaces_from_text, split_notes_and_metadata
+            spaces = getattr(task, 'spaces', None) or extract_spaces_from_text(task.notes or task.description or "")
+            spaces_badge = ""
+            if spaces:
+                sp_parts = []
+                for s_name, s_subs in spaces.items():
+                    if s_subs:
+                        sp_parts.append(f"{s_name} › {', '.join(s_subs)}")
+                    else:
+                        sp_parts.append(s_name)
+                spaces_badge = f" [magenta]🌌 [{'; '.join(sp_parts)}][/magenta]"
+
             # Build the task line
-            task_line = f"{global_index:2d}. {priority_icon} {task.title}{due_str}{dates_str}"
+            task_line = f"{global_index:2d}. {priority_icon} {task.title}{spaces_badge}{due_str}{dates_str}"
             
             # Color code task status
             status_colors = {
@@ -205,29 +218,18 @@ def _display_tasks_grouped_by_list(tasks: List[Task]) -> List[Task]:
             
             console.print(task_line, style=task_color)
             
-            # Display description if available
-            if task.description:
-                # Truncate long descriptions
-                desc = task.description[:60] + "..." if len(task.description) > 60 else task.description
-                console.print(f"     📝 {desc}")
-                
-            # Display notes if available
-            if task.notes is not None:
-                notes_stripped = task.notes.strip()
-                if notes_stripped:
-                    # Split notes into lines
-                    note_lines = notes_stripped.splitlines()
-                    # Show at least 3 lines or up to 200 characters
-                    displayed_lines = note_lines[:3]  # Take up to 3 lines
-                    notes = "\n     📓 ".join(displayed_lines)  # Join with prefix for each line
-                    
-                    # If we have more than 200 characters, truncate and add ellipsis
-                    if len(notes) > 200:
-                        notes = notes[:200] + "..."
-                    
-                    # Using Rich console print with proper text handling
-                    note_text = Text(f"     📓 {notes}")
-                    console.print(note_text)
+            # Display clean notes/description preview (strip metadata dividers)
+            content = task.notes or task.description or ""
+            if content:
+                clean_content, _, _ = split_notes_and_metadata(content)
+                if clean_content:
+                    note_lines = clean_content.splitlines()
+                    displayed_lines = [l.strip() for l in note_lines if l.strip()][:3]
+                    if displayed_lines:
+                        notes_preview = "\n     📓 ".join(displayed_lines)
+                        if len(notes_preview) > 200:
+                            notes_preview = notes_preview[:200] + "..."
+                        console.print(Text(f"     📓 {notes_preview}"))
     
     # Summary
     console.print(f"\nTotal: {len(tasks)} task(s) across {len(tasks_by_list)} list(s)")
@@ -517,13 +519,15 @@ def interactive(ctx, command):
                 search_filter = None
                 order_by = None
                 tags_filter = None
+                space_filter = None
+                subspace_filter = None
                 list_names_flag = False  # Flag for --list-names option
 
                 # Parse arguments
                 i = 1
                 while i < len(command_parts):
                     part = command_parts[i]
-                    if part.startswith('--'):
+                    if part.startswith('--') or part.startswith('-'):
                         if part == '--status' and i + 1 < len(command_parts):
                             status_filter = command_parts[i + 1]
                             i += 2
@@ -550,6 +554,12 @@ def interactive(ctx, command):
                             i += 1
                         elif part in ['--tags', '-t'] and i + 1 < len(command_parts):
                             tags_filter = command_parts[i + 1]
+                            i += 2
+                        elif part in ['--space', '-s'] and i + 1 < len(command_parts):
+                            space_filter = command_parts[i + 1]
+                            i += 2
+                        elif part == '--subspace' and i + 1 < len(command_parts):
+                            subspace_filter = command_parts[i + 1]
                             i += 2
                         else:
                             i += 1
@@ -626,6 +636,10 @@ def interactive(ctx, command):
                             from gtasks_cli.commands.interactive_utils.search import apply_tag_filter
                             tasks = apply_tag_filter(tasks, tags_filter)
                         
+                        if space_filter or subspace_filter:
+                            from gtasks_cli.commands.interactive_utils.search import apply_space_filter
+                            tasks = apply_space_filter(tasks, space_filter, subspace_filter)
+
                         # Add list_title to each task for grouping display
                         for task in tasks:
                             if not hasattr(task, 'list_title') or not task.list_title:
@@ -660,6 +674,11 @@ def interactive(ctx, command):
                     if tags_filter:
                         from gtasks_cli.commands.interactive_utils.search import apply_tag_filter
                         all_tasks = apply_tag_filter(all_tasks, tags_filter)
+
+                    # Apply space filter if provided
+                    if space_filter or subspace_filter:
+                        from gtasks_cli.commands.interactive_utils.search import apply_space_filter
+                        all_tasks = apply_space_filter(all_tasks, space_filter, subspace_filter)
 
                     # Apply sorting if requested
                     if order_by:
@@ -743,6 +762,16 @@ def interactive(ctx, command):
                 # Import and use the update tags command handler
                 from gtasks_cli.commands.interactive_utils.update_tags_commands import handle_update_tags_command
                 handle_update_tags_command(task_state, task_manager, command_parts, use_google_tasks)
+            elif cmd == 'update-spaces':
+                # Import and use the update spaces command handler
+                from gtasks_cli.commands.interactive_utils.update_spaces_commands import handle_update_spaces_command
+                handle_update_spaces_command(task_state, task_manager, command_parts, use_google_tasks)
+            elif cmd in ['spaces', 'space']:
+                # Import and use the space filtering handler
+                from gtasks_cli.commands.interactive_utils.space_commands import handle_space_filtering_interactive_mode
+                handle_space_filtering_interactive_mode(task_manager, use_google_tasks)
+                _display_tasks_grouped_by_list(task_state.tasks)
+                task_state.push_command(command_input)
             elif cmd == 'undo':
                 from gtasks_cli.commands.interactive_utils.undo_manager import undo_manager
                 op = undo_manager.pop_undo()
@@ -858,6 +887,12 @@ def interactive(ctx, command):
                         show_add_help()
                     elif subcommand == 'list':
                         show_list_help()
+                    elif subcommand in ['spaces', 'space']:
+                        from gtasks_cli.commands.interactive_help import show_spaces_help
+                        show_spaces_help()
+                    elif subcommand == 'update-spaces':
+                        from gtasks_cli.commands.interactive_help import show_update_spaces_help
+                        show_update_spaces_help()
                     elif subcommand in ['quit', 'exit']:
                         show_quit_help()
                     else:

@@ -20,11 +20,18 @@ def view_task_details(task):
     panel_content.append(f"[bold]{escape(task.title)}[/bold]")
     panel_content.append(f"ID: {task.id}")
     
-    # Add description
-    if task.description:
-        # Format description with proper alignment and limit
+    from gtasks_cli.utils.space_extractor import split_notes_and_metadata, extract_spaces_from_text
+
+    raw_content = task.notes or task.description or ""
+    clean_notes = ""
+    spaces = getattr(task, 'spaces', None) or extract_spaces_from_text(raw_content)
+    if raw_content:
+        clean_notes, _, _ = split_notes_and_metadata(raw_content)
+
+    # Add description / notes
+    if clean_notes:
         max_chars = 500  # Increased limit for view details
-        desc = task.description.strip()
+        desc = clean_notes.strip()
         if len(desc) > max_chars:
             desc = desc[:max_chars].rsplit(' ', 1)[0] + "..."
         
@@ -32,10 +39,6 @@ def view_task_details(task):
         desc_lines = desc.split('\n')
         formatted_desc = "\n".join([f"    {escape(line)}" for line in desc_lines])
         panel_content.append(f"[italic white]📝 {formatted_desc}[/italic white]")
-    
-    # Add notes
-    if task.notes:
-        panel_content.append(f"📌 Notes: {escape(task.notes)}")
     
     # Add due date
     if task.due:
@@ -86,6 +89,15 @@ def view_task_details(task):
     
     if project_tags_line:
         panel_content.append(project_tags_line)
+    
+    if spaces:
+        space_strs = []
+        for s_name, s_subs in spaces.items():
+            if s_subs:
+                space_strs.append(f"{escape(s_name)} › {escape(', '.join(s_subs))}")
+            else:
+                space_strs.append(escape(s_name))
+        panel_content.append(f"🌌 Spaces: {' | '.join(space_strs)}")
     
     # Add list name
     list_title = getattr(task, 'list_title', None)

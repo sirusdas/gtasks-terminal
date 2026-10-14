@@ -292,7 +292,16 @@ class TaskManager:
         """Update a task with given attributes."""
         if self.use_google_tasks:
             # Update via Google Tasks API
-            success = self.google_client.update_task(task_id, **kwargs)
+            task_obj = self.get_task(task_id)
+            if task_obj:
+                for key, value in kwargs.items():
+                    if hasattr(task_obj, key):
+                        setattr(task_obj, key, value)
+                res = self.google_client.update_task(task_obj, task_obj.tasklist_id)
+                success = res is not None
+            else:
+                success = False
+
             if success:
                 # Also update local storage
                 tasks = self.list_tasks()

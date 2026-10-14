@@ -25,6 +25,7 @@ def show_general_help():
     table.add_row("update <number>", "Update a task (title, description)")
     table.add_row("update-status", "Bulk update task status and due dates")
     table.add_row("update-tags", "Bulk update task tags")
+    table.add_row("update-spaces", "Bulk update task spaces and sub-spaces")
     table.add_row("add", "Add a new task")
     table.add_row("list", "List all tasks with optional filters")
     table.add_row("search <query>", "Search for tasks")
@@ -32,6 +33,7 @@ def show_general_help():
     table.add_row("default", "Go back to default task listing")
     table.add_row("help", "Show this help message")
     table.add_row("tags", "Filter tasks by tags")
+    table.add_row("spaces", "Filter tasks by spaces and sub-spaces")
     table.add_row("quit/exit", "Exit interactive mode")
     
     console.print(table)
@@ -48,13 +50,19 @@ def show_general_help():
     console.print("  [green]# Bulk update task tags[/green]")
     console.print("  update-tags ADD[1,2|work], DEL[3|personal]")
     console.print("  update-tags ALL[ADD:urgent]")
+    console.print("  [green]# Bulk update task spaces[/green]")
+    console.print("  update-spaces ADD[1,2|work:frontend], DEL[3|personal]")
+    console.print("  update-spaces ALL[ADD:work]")
     console.print("  [green]# List tasks with filters[/green]")
     console.print("  list --status pending --priority high")
+    console.print("  list --space work --subspace frontend")
     console.print("  [green]# Search for tasks[/green]")
     console.print("  search meeting")
     console.print("  [green]# List tasks by tag[/green]")
     console.print("  tags work")
     console.print("  tags personal --status pending")
+    console.print("  [green]# Enter spaces mode[/green]")
+    console.print("  spaces")
 
 
 def show_update_help():
@@ -227,6 +235,8 @@ def show_list_help():
     console.print("  [yellow]--priority[/yellow]   Filter by priority (low, medium, high, critical)")
     console.print("  [yellow]--project[/yellow]    Filter by project")
     console.print("  [yellow]--recurring[/yellow]  Show only recurring tasks")
+    console.print("  [yellow]--space, -s[/yellow]  Filter by space name")
+    console.print("  [yellow]--subspace[/yellow]   Filter by sub-space name")
     console.print("  [yellow]--filter[/yellow]     Filter by time period (today, this_week, this_month, etc.)")
     console.print("  [yellow]--search[/yellow]     Search by title, description or notes")
     console.print("  [yellow]--order-by[/yellow]   Sort by field (due, created, modified, title)")
@@ -292,3 +302,47 @@ def show_search_help():
     console.print("   Combine with OR logic: search \"--em:apple|--em:mango|--ex:rotten\"")
     console.print("4. [yellow]Combined Search[/yellow]: Use pipe (|) for OR logic with multiple terms")
     console.print("   Example: search \"work|-personal\" - finds tasks with 'work' but not 'personal'\n")
+
+
+def show_spaces_help():
+    """Show help for the spaces command"""
+    console.print(Panel("[bold blue]Spaces Command Help[/bold blue]", expand=False))
+
+    console.print("[bold]Description:[/bold]")
+    console.print("Filter tasks by hierarchical spaces and sub-spaces ('super-tags').")
+    console.print("Spaces provide high-level organizational structure with nested sub-spaces.\n")
+
+    console.print("[bold]Usage:[/bold]")
+    console.print("  spaces\n")
+
+    console.print("[bold]Interactive Tree Selection:[/bold]")
+    console.print("In spaces selection mode, you can select:")
+    console.print("  - A whole space by number (e.g., 1)")
+    console.print("  - A specific sub-space by alphanumeric code (e.g., 1a, 2b)")
+    console.print("  - Direct name or path (e.g., work, work:frontend)")
+    console.print("  - 'all' to select all tasks with spaces\n")
+
+    console.print("[bold]List with Spaces:[/bold]")
+    console.print("  list --space work")
+    console.print("  list --space work --subspace frontend\n")
+
+
+def show_update_spaces_help():
+    """Show help for the update-spaces command"""
+    console.print(Panel("[bold blue]Update-Spaces Command Help[/bold blue]", expand=False))
+
+    console.print("[bold]Description:[/bold]")
+    console.print("Bulk add or remove spaces and sub-spaces from tasks.\n")
+
+    console.print("[bold]Usage:[/bold]")
+    console.print("  update-spaces ADD[ids|space:sub1,sub2], DEL[ids|space] ...")
+    console.print("  update-spaces ALL[ADD:space], ALL[DEL:space]\n")
+
+    console.print("[bold]Operations:[/bold]")
+    console.print("  [yellow]ADD[ids|space:sub1,sub2][/yellow]  Add space and sub-spaces to tasks")
+    console.print("  [yellow]ADD[ids|space][/yellow]            Add space without sub-spaces to tasks")
+    console.print("  [yellow]DEL[ids|space:sub1][/yellow]       Remove specific sub-space from space")
+    console.print("  [yellow]DEL[ids|space][/yellow]            Remove space entirely from tasks")
+    console.print("  [yellow]ALL[ADD:space][/yellow]           Add space to ALL currently displayed tasks")
+    console.print("  [yellow]ALL[DEL:space][/yellow]           Remove space from ALL currently displayed tasks\n")
+

@@ -92,48 +92,58 @@ def display_tasks_grouped_by_list(tasks, start_number=1):
             tags_info = ""
             if task.tags:
                 tags_info = f" [cyan]🏷️  {', '.join(task.tags)}[/cyan]"
-            
+
+            # Format spaces if present
+            spaces_info = ""
+            from gtasks_cli.utils.space_extractor import extract_spaces_from_text, split_notes_and_metadata
+            spaces = task.spaces or extract_spaces_from_text(task.notes or task.description or "")
+            if spaces:
+                sp_strs = []
+                for s_name, s_subs in spaces.items():
+                    if s_subs:
+                        sp_strs.append(f"{s_name} › {', '.join(s_subs)}")
+                    else:
+                        sp_strs.append(s_name)
+                spaces_info = f" [magenta]🌌 [{ ' | '.join(sp_strs) }][/magenta]"
+
             # Format recurring info
             recurring_info = ""
             if task.is_recurring:
                 recurring_info = " [green]🔁[/green]"
-            
+
             # Format created, modified, and due dates
             dates_info = ""
             if task.due:
                 due_str = task.due.strftime('%Y-%m-%d') if hasattr(task.due, 'strftime') else str(task.due)[:10]
                 dates_info += f" [dim]D:{due_str}[/dim]"
-            
+
             if task.created_at:
                 created_str = task.created_at.strftime('%Y-%m-%d')
                 dates_info += f" [dim]C:{created_str}[/dim]"
-            
+
             if task.modified_at:
                 modified_str = task.modified_at.strftime('%Y-%m-%d')
                 dates_info += f" [dim]M:{modified_str}[/dim]"
-            
+
             # Format description/notes with limit (at least 3 lines)
             description_info = ""
             content = task.description or task.notes
             if content:
-                # Show at least 3 lines as they are without truncation
-                desc = content.strip()
-                desc_lines = desc.split('\n')
-                
-                # Take at least 3 lines and format them using Rich Text to avoid markup interpretation
-                formatted_lines = []
-                for line in desc_lines[:3]:  # Show exactly 3 lines as per requirement
-                    if line.strip():  # Only add non-empty lines
-                        # Use Rich Text to prevent markup interpretation
-                        line_text = Text(f"      {line}", style="italic white")
-                        formatted_lines.append(line_text)
-                
-                # Display each line separately to ensure proper rendering
-                if formatted_lines:
-                    description_info = formatted_lines
-            
+                # Strip metadata dividers so clean notes are displayed
+                clean_content, _, _ = split_notes_and_metadata(content)
+                desc = clean_content.strip()
+                if desc:
+                    desc_lines = desc.split('\n')
+                    formatted_lines = []
+                    for line in desc_lines[:3]:
+                        if line.strip():
+                            line_text = Text(f"      {line}", style="italic white")
+                            formatted_lines.append(line_text)
+                    if formatted_lines:
+                        description_info = formatted_lines
+
             # Display task with number
-            task_line = f"  {i:2d}. [bright_black]{task.id[:8]}[/bright_black]: [{status_color}]{status_icon}[/{status_color}] [{priority_color}]{priority_icon}[/{priority_color}] {task.title}{due_info}{project_info}{tags_info}{recurring_info}{dates_info}"
+            task_line = f"  {i:2d}. [bright_black]{task.id[:8]}[/bright_black]: [{status_color}]{status_icon}[/{status_color}] [{priority_color}]{priority_icon}[/{priority_color}] {task.title}{due_info}{project_info}{tags_info}{spaces_info}{recurring_info}{dates_info}"
             console.print(task_line)
             
             # Display description/notes separately to avoid markup interpretation issues
