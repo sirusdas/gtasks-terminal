@@ -3,6 +3,7 @@ import '../api/api_client.dart';
 import '../api/google_tasks_direct_client.dart';
 import '../models/task_item.dart';
 import '../models/account.dart';
+import '../services/widget_service.dart';
 import '../storage/local_database.dart';
 import '../utils/notes_parser.dart';
 
@@ -230,6 +231,7 @@ class TaskProvider with ChangeNotifier {
   void _recomputeAllCaches() {
     _recomputeAggregates();
     _recomputeFilteredTasks();
+    WidgetService.updateWidget();
   }
 
   void _recomputeAggregates() {

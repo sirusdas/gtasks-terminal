@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GTasks</string>
+    <string name="widget_name">GTasks Pending Tasks</string>
+    <string name="widget_description">Displays pending tasks with priority and space tags directly on your home screen.</string>
+</resources>
