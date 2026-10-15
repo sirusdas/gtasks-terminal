@@ -63,6 +63,15 @@ class GTasksRemoteViewsFactory(
             val sortBy = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                 prefs.getString("sort_by_$appWidgetId", "priority")
             } else "priority"
+            val hideRecurring = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                prefs.getBoolean("hide_recurring_$appWidgetId", false)
+            } else false
+            val hiddenListsJson = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                prefs.getString("hidden_lists_$appWidgetId", null)
+            } else null
+            val hiddenTagsJson = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                prefs.getString("hidden_tags_$appWidgetId", null)
+            } else null
 
             SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
                 val checkCursor = db.rawQuery(
@@ -121,6 +130,42 @@ class GTasksRemoteViewsFactory(
                             }
                         }
                     }
+                }
+
+                // Exclusion: Recurring tasks
+                if (hideRecurring) {
+                    queryBuilder.append(" AND (is_recurring = 0 OR is_recurring IS NULL) AND (recurrence_type IS NULL OR recurrence_type = '')")
+                }
+
+                // Exclusion: Hidden lists
+                if (!hiddenListsJson.isNullOrBlank()) {
+                    try {
+                        val arr = JSONArray(hiddenListsJson)
+                        val hiddenLists = mutableListOf<String>()
+                        for (i in 0 until arr.length()) {
+                            val s = arr.getString(i).trim()
+                            if (s.isNotEmpty()) hiddenLists.add(s)
+                        }
+                        if (hiddenLists.isNotEmpty()) {
+                            val placeholders = hiddenLists.map { "?" }.joinToString(",")
+                            queryBuilder.append(" AND (list_title IS NULL OR list_title NOT IN ($placeholders))")
+                            args.addAll(hiddenLists)
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                // Exclusion: Hidden tags
+                if (!hiddenTagsJson.isNullOrBlank()) {
+                    try {
+                        val arr = JSONArray(hiddenTagsJson)
+                        for (i in 0 until arr.length()) {
+                            val t = arr.getString(i).trim()
+                            if (t.isNotEmpty()) {
+                                queryBuilder.append(" AND (tags IS NULL OR tags NOT LIKE ?)")
+                                args.add("%\"$t\"%")
+                            }
+                        }
+                    } catch (_: Exception) {}
                 }
 
                 val orderByClause = when (sortBy) {

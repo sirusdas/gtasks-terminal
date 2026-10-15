@@ -91,8 +91,8 @@
 
         <ImageView
             android:id="@+id/widget_filter_list"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_list"
             android:contentDescription="Filter by List"
@@ -101,9 +101,9 @@
 
         <ImageView
             android:id="@+id/widget_filter_tag"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_tag"
             android:contentDescription="Filter by Tag"
@@ -112,9 +112,9 @@
 
         <ImageView
             android:id="@+id/widget_filter_space"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_space"
             android:contentDescription="Filter by Workspace"
@@ -123,9 +123,9 @@
 
         <ImageView
             android:id="@+id/widget_filter_subspace"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_subspace"
             android:contentDescription="Filter by Sub-workspace"
@@ -134,9 +134,9 @@
 
         <ImageView
             android:id="@+id/widget_filter_account"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_account"
             android:contentDescription="Filter by Account"
@@ -145,9 +145,9 @@
 
         <ImageView
             android:id="@+id/widget_filter_date"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_calendar"
             android:contentDescription="Filter by Date Window"
@@ -155,18 +155,40 @@
             android:padding="5dp" />
 
         <ImageView
+            android:id="@+id/widget_filter_recurring"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_recurring"
+            android:contentDescription="Recurring Tasks Filter"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
             android:id="@+id/widget_filter_sort"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_sort"
             android:contentDescription="Sort by"
             android:clickable="true"
             android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/widget_filter_hide"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_visibility_off"
+            android:contentDescription="Hide &amp; Exclusions"
+            android:clickable="true"
+            android:padding="5dp" />
     </LinearLayout>
 
-    <!-- Active Filter Badge Pill (Visible when a filter or sort is applied) -->
+    <!-- Active Filter Badge Pill (Visible when a filter, exclusion, or sort is applied) -->
     <LinearLayout
         android:id="@+id/widget_active_filter_container"
         android:layout_width="match_parent"

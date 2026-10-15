@@ -14,7 +14,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingBottom="12dp">
+        android:paddingBottom="8dp">
 
         <ImageView
             android:id="@+id/iv_filter_icon"
@@ -42,6 +42,15 @@
             android:contentDescription="Close"
             android:clickable="true" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/tv_filter_subtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#94A3B8"
+        android:textSize="12sp"
+        android:paddingBottom="8dp"
+        android:visibility="gone" />
 
     <!-- Search input -->
     <EditText
@@ -77,4 +86,16 @@
         android:layout_weight="1"
         android:divider="#334155"
         android:dividerHeight="1dp" />
+
+    <!-- Done / Apply Button (for multi-select exclusions) -->
+    <Button
+        android:id="@+id/btn_filter_done"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:text="Done / Apply"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:background="#2563EB"
+        android:layout_marginTop="10dp"
+        android:visibility="gone" />
 </LinearLayout>

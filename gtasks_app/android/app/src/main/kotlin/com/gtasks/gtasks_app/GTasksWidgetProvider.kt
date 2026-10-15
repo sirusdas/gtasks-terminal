@@ -13,6 +13,7 @@ import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
 import android.widget.Toast
+import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -45,7 +46,7 @@ class GTasksWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        fun getFilteredTaskCount(context: Context, filterType: String?, filterVal: String?): Int {
+        fun getFilteredTaskCount(context: Context, appWidgetId: Int): Int {
             return try {
                 val dbFile = context.getDatabasePath("gtasks_local.db")
                 if (!dbFile.exists()) return 0
@@ -56,6 +57,13 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                     )
                     val tableExists = checkCursor.use { it.moveToFirst() }
                     if (!tableExists) return 0
+
+                    val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                    val filterType = prefs.getString("filter_type_$appWidgetId", null)
+                    val filterVal = prefs.getString("filter_val_$appWidgetId", null)
+                    val hideRecurring = prefs.getBoolean("hide_recurring_$appWidgetId", false)
+                    val hiddenListsJson = prefs.getString("hidden_lists_$appWidgetId", null)
+                    val hiddenTagsJson = prefs.getString("hidden_tags_$appWidgetId", null)
 
                     val queryBuilder = StringBuilder(
                         "SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete'"
@@ -92,7 +100,7 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                                 }
                             }
                             "date" -> {
-                                when (filterVal?.lowercase()) {
+                                when (filterVal.lowercase()) {
                                     "today" -> queryBuilder.append(" AND substr(due, 1, 10) = date('now', 'localtime')")
                                     "tomorrow" -> queryBuilder.append(" AND substr(due, 1, 10) = date('now', 'localtime', '+1 day')")
                                     "overdue" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) < date('now', 'localtime')")
@@ -102,6 +110,42 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                                 }
                             }
                         }
+                    }
+
+                    // Exclusion: Recurring tasks
+                    if (hideRecurring) {
+                        queryBuilder.append(" AND (is_recurring = 0 OR is_recurring IS NULL) AND (recurrence_type IS NULL OR recurrence_type = '')")
+                    }
+
+                    // Exclusion: Hidden lists
+                    if (!hiddenListsJson.isNullOrBlank()) {
+                        try {
+                            val arr = JSONArray(hiddenListsJson)
+                            val hiddenLists = mutableListOf<String>()
+                            for (i in 0 until arr.length()) {
+                                val s = arr.getString(i).trim()
+                                if (s.isNotEmpty()) hiddenLists.add(s)
+                            }
+                            if (hiddenLists.isNotEmpty()) {
+                                val placeholders = hiddenLists.map { "?" }.joinToString(",")
+                                queryBuilder.append(" AND (list_title IS NULL OR list_title NOT IN ($placeholders))")
+                                args.addAll(hiddenLists)
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    // Exclusion: Hidden tags
+                    if (!hiddenTagsJson.isNullOrBlank()) {
+                        try {
+                            val arr = JSONArray(hiddenTagsJson)
+                            for (i in 0 until arr.length()) {
+                                val t = arr.getString(i).trim()
+                                if (t.isNotEmpty()) {
+                                    queryBuilder.append(" AND (tags IS NULL OR tags NOT LIKE ?)")
+                                    args.add("%\"$t\"%")
+                                }
+                            }
+                        } catch (_: Exception) {}
                     }
 
                     val cursor = db.rawQuery(queryBuilder.toString(), args.toTypedArray())
@@ -191,6 +235,9 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                             .remove("filter_type_$appWidgetId")
                             .remove("filter_val_$appWidgetId")
                             .remove("sort_by_$appWidgetId")
+                            .remove("hide_recurring_$appWidgetId")
+                            .remove("hidden_lists_$appWidgetId")
+                            .remove("hidden_tags_$appWidgetId")
                             .apply()
                         updateAllWidgets(context)
                     }
@@ -204,15 +251,18 @@ class GTasksWidgetProvider : AppWidgetProvider() {
     private fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
         val views = RemoteViews(context.packageName, R.layout.gtasks_widget_layout)
 
-        // Read active filter & sort
+        // Read active filter, sort & exclusions
         val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
         val filterType = prefs.getString("filter_type_$appWidgetId", null)
         val filterVal = prefs.getString("filter_val_$appWidgetId", null)
         val sortBy = prefs.getString("sort_by_$appWidgetId", "priority")
+        val hideRecurring = prefs.getBoolean("hide_recurring_$appWidgetId", false)
+        val hiddenListsJson = prefs.getString("hidden_lists_$appWidgetId", null)
+        val hiddenTagsJson = prefs.getString("hidden_tags_$appWidgetId", null)
 
-        val count = getFilteredTaskCount(context, filterType, filterVal)
+        val count = getFilteredTaskCount(context, appWidgetId)
 
-        // Format active filter & sort badge pill
+        // Format active filter, exclusions & sort badge pill
         val filterLabel = when (filterType) {
             "space" -> "Space: $filterVal"
             "subspace" -> filterVal
@@ -231,12 +281,40 @@ class GTasksWidgetProvider : AppWidgetProvider() {
             else -> null
         }
 
-        val pillText = when {
-            !filterLabel.isNullOrBlank() && !sortLabel.isNullOrBlank() -> "$filterLabel • Sort: $sortLabel"
-            !filterLabel.isNullOrBlank() -> filterLabel
-            !sortLabel.isNullOrBlank() -> "Sort: $sortLabel"
-            else -> null
+        val hiddenLists = mutableListOf<String>()
+        if (!hiddenListsJson.isNullOrBlank()) {
+            try {
+                val arr = JSONArray(hiddenListsJson)
+                for (i in 0 until arr.length()) {
+                    val s = arr.getString(i).trim()
+                    if (s.isNotEmpty()) hiddenLists.add(s)
+                }
+            } catch (_: Exception) {}
         }
+
+        val hiddenTags = mutableListOf<String>()
+        if (!hiddenTagsJson.isNullOrBlank()) {
+            try {
+                val arr = JSONArray(hiddenTagsJson)
+                for (i in 0 until arr.length()) {
+                    val s = arr.getString(i).trim()
+                    if (s.isNotEmpty()) hiddenTags.add(s)
+                }
+            } catch (_: Exception) {}
+        }
+
+        val pillParts = mutableListOf<String>()
+        if (!filterLabel.isNullOrBlank()) pillParts.add(filterLabel)
+        if (hideRecurring) pillParts.add("No Recurring")
+        if (hiddenLists.isNotEmpty()) {
+            pillParts.add(if (hiddenLists.size == 1) "Hide: ${hiddenLists[0]}" else "Hide: ${hiddenLists.size} lists")
+        }
+        if (hiddenTags.isNotEmpty()) {
+            pillParts.add(if (hiddenTags.size == 1) "Hide: #${hiddenTags[0]}" else "Hide: ${hiddenTags.size} tags")
+        }
+        if (!sortLabel.isNullOrBlank()) pillParts.add("Sort: $sortLabel")
+
+        val pillText = if (pillParts.isNotEmpty()) pillParts.joinToString(" • ") else null
 
         if (pillText != null) {
             views.setViewVisibility(R.id.widget_active_filter_container, View.VISIBLE)
@@ -278,6 +356,7 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.widget_root, openAppPendingIntent)
         views.setOnClickPendingIntent(R.id.widget_header, openAppPendingIntent)
+
         // Add Task Button -> Opens Full Screen In-App Task Editor with all features
         val addTaskIntent = Intent(context, MainActivity::class.java).apply {
             action = "com.gtasks.gtasks_app.ACTION_NEW_TASK"
@@ -355,7 +434,9 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         setupFilterButton(R.id.widget_filter_subspace, "subspace", 13)
         setupFilterButton(R.id.widget_filter_account, "account", 14)
         setupFilterButton(R.id.widget_filter_date, "date", 15)
-        setupFilterButton(R.id.widget_filter_sort, "sort", 16)
+        setupFilterButton(R.id.widget_filter_recurring, "recurring", 16)
+        setupFilterButton(R.id.widget_filter_sort, "sort", 17)
+        setupFilterButton(R.id.widget_filter_hide, "hide", 18)
 
         // Item click template (Broadcasts to provider to handle complete, expand, or open)
         val itemTemplateIntent = Intent(context, GTasksWidgetProvider::class.java).apply {
