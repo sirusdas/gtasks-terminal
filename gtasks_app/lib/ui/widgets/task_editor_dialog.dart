@@ -21,6 +21,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
   late TextEditingController _tagsController;
   late TextEditingController _spacesController;
   late TextEditingController _listController;
+  Set<String> _selectedTags = {};
   Map<String, List<String>> _selectedSpaces = {};
   String? _selectedAccount;
   String _selectedPriority = 'medium';
@@ -35,7 +36,8 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     if (task != null) {
       _titleController = TextEditingController(text: task.title);
       _notesController = TextEditingController(text: task.cleanNotes);
-      _tagsController = TextEditingController(text: task.allTags.join(', '));
+      _selectedTags = Set.from(task.allTags);
+      _tagsController = TextEditingController(text: _selectedTags.join(', '));
       _selectedSpaces = Map.from(task.spaces.map((k, v) => MapEntry(k, List<String>.from(v))));
       _spacesController = TextEditingController(text: NotesParser.formatSpacesInput(_selectedSpaces));
       _listController = TextEditingController(text: task.listTitle ?? 'My Tasks');
@@ -49,10 +51,35 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     } else {
       _titleController = TextEditingController();
       _notesController = TextEditingController();
+      _selectedTags = {};
       _tagsController = TextEditingController();
       _selectedSpaces = {};
       _spacesController = TextEditingController();
       _listController = TextEditingController(text: 'My Tasks');
+    }
+  }
+
+  void _syncTagsText() {
+    _tagsController.text = _selectedTags.join(', ');
+  }
+
+  Future<void> _openTagPicker() async {
+    final provider = context.read<TaskProvider>();
+    final result = await SearchablePickerModal.show(
+      context: context,
+      title: 'Select Tags',
+      subtitle: 'Search existing tags or type to create a new one',
+      icon: Icons.tag,
+      optionsWithCounts: provider.tagsWithCounts,
+      initialSelected: _selectedTags,
+      isMultiSelect: true,
+      isTag: true,
+    );
+    if (result != null) {
+      setState(() {
+        _selectedTags = result;
+        _syncTagsText();
+      });
     }
   }
 
@@ -106,11 +133,13 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
 
-    final tags = _tagsController.text
-        .split(',')
-        .map((t) => t.trim())
-        .where((t) => t.isNotEmpty)
-        .toList();
+    final tags = _selectedTags.isNotEmpty
+        ? _selectedTags.toList()
+        : _tagsController.text
+            .split(',')
+            .map((t) => t.trim())
+            .where((t) => t.isNotEmpty)
+            .toList();
 
     final spaces = _selectedSpaces.isNotEmpty
         ? _selectedSpaces
@@ -470,114 +499,155 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                     ),
 
                     const SizedBox(height: 14),
+
+                    // Tags Header
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Tags',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        Row(
+                          children: [
+                            const Text(
+                              'Tags',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            if (_selectedTags.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.teal.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '${_selectedTags.length}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.teal,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         TextButton.icon(
                           style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                          icon: const Icon(Icons.search, size: 16),
-                          label: const Text('Search & Select Tags', style: TextStyle(fontSize: 12)),
-                          onPressed: () async {
-                            final currentTags = _tagsController.text
-                                .split(',')
-                                .map((t) => t.trim())
-                                .where((t) => t.isNotEmpty)
-                                .toSet();
-
-                            final result = await SearchablePickerModal.show(
-                              context: context,
-                              title: 'Select Tags',
-                              subtitle: 'Search existing tags or type to create a new one',
-                              icon: Icons.tag,
-                              optionsWithCounts: provider.tagsWithCounts,
-                              initialSelected: currentTags,
-                              isMultiSelect: true,
-                              isTag: true,
-                            );
-
-                            if (result != null) {
-                              setState(() {
-                                _tagsController.text = result.join(', ');
-                              });
-                            }
-                          },
+                          icon: const Icon(Icons.tune, size: 16),
+                          label: const Text('Browse & Manage', style: TextStyle(fontSize: 12)),
+                          onPressed: _openTagPicker,
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    TextField(
-                      controller: _tagsController,
-                      onChanged: (_) => setState(() {}),
-                      decoration: InputDecoration(
-                        hintText: 'e.g. urgent, study, dev (or tap Search & Select)',
-                        border: const OutlineInputBorder(),
-                        prefixIcon: const Icon(Icons.tag, size: 18),
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.tune, size: 18),
-                          tooltip: 'Open Tags Search Modal',
-                          onPressed: () async {
-                            final currentTags = _tagsController.text
-                                .split(',')
-                                .map((t) => t.trim())
-                                .where((t) => t.isNotEmpty)
-                                .toSet();
 
-                            final result = await SearchablePickerModal.show(
-                              context: context,
-                              title: 'Select Tags',
-                              subtitle: 'Search existing tags or type to create a new one',
-                              icon: Icons.tag,
-                              optionsWithCounts: provider.tagsWithCounts,
-                              initialSelected: currentTags,
-                              isMultiSelect: true,
-                              isTag: true,
-                            );
-
-                            if (result != null) {
-                              setState(() {
-                                _tagsController.text = result.join(', ');
-                              });
-                            }
-                          },
+                    // Interactive Tags Box
+                    if (_selectedTags.isEmpty)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: _openTagPicker,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: theme.colorScheme.outlineVariant),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.tag, size: 18, color: theme.hintColor),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Tap to assign tags (e.g. urgent, study, dev)',
+                                  style: TextStyle(color: theme.hintColor, fontSize: 13),
+                                ),
+                              ),
+                              Icon(Icons.arrow_drop_down, color: theme.hintColor),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withValues(alpha: 0.03),
+                          border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: _selectedTags.map((tag) {
+                                return Chip(
+                                  avatar: const Text('#', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  labelPadding: const EdgeInsets.only(left: 2, right: 4),
+                                  backgroundColor: Colors.teal.withValues(alpha: 0.08),
+                                  label: Text(tag, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.teal)),
+                                  deleteIcon: const Icon(Icons.close, size: 14),
+                                  onDeleted: () {
+                                    setState(() {
+                                      _selectedTags.remove(tag);
+                                      _syncTagsText();
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton.icon(
+                                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                                  icon: const Icon(Icons.add, size: 14),
+                                  label: const Text('Add / Edit More Tags', style: TextStyle(fontSize: 11)),
+                                  onPressed: _openTagPicker,
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                    ),
+
+                    // Quick suggestions from existing tags
                     if (availableTags.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 6,
                         runSpacing: 4,
                         children: availableTags.take(10).map((tag) {
-                          final currentTags = _tagsController.text
-                              .split(',')
-                              .map((t) => t.trim().toLowerCase())
-                              .where((t) => t.isNotEmpty)
-                              .toSet();
-                          final isSelected = currentTags.contains(tag.toLowerCase());
+                          final isSelected = _selectedTags.contains(tag);
+                          final count = provider.tagsWithCounts[tag] ?? 0;
                           return FilterChip(
-                            label: Text(tag, style: const TextStyle(fontSize: 11)),
+                            avatar: const Text('#', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.teal)),
+                            label: Text(
+                              count > 0 ? '$tag ($count)' : tag,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                color: isSelected ? Colors.teal : null,
+                              ),
+                            ),
                             selected: isSelected,
+                            selectedColor: Colors.teal.withValues(alpha: 0.15),
+                            checkmarkColor: Colors.teal,
                             visualDensity: VisualDensity.compact,
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             onSelected: (selected) {
                               setState(() {
-                                final existing = _tagsController.text
-                                    .split(',')
-                                    .map((t) => t.trim())
-                                    .where((t) => t.isNotEmpty)
-                                    .toList();
                                 if (selected) {
-                                  if (!existing.any((t) => t.toLowerCase() == tag.toLowerCase())) {
-                                    existing.add(tag);
-                                  }
+                                  _selectedTags.add(tag);
                                 } else {
-                                  existing.removeWhere((t) => t.toLowerCase() == tag.toLowerCase());
+                                  _selectedTags.remove(tag);
                                 }
-                                _tagsController.text = existing.join(', ');
+                                _syncTagsText();
                               });
                             },
                           );

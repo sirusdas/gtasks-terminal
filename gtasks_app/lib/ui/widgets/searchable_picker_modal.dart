@@ -259,6 +259,46 @@ class _SearchablePickerModalState extends State<SearchablePickerModal> {
                   ),
                 ),
 
+              // Active Selection Badges Strip
+              if (widget.isMultiSelect && _selected.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  color: (widget.isTag ? Colors.teal : theme.colorScheme.primary).withValues(alpha: 0.05),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _selected.map((item) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Chip(
+                            avatar: widget.isTag
+                                ? const Text('#', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal))
+                                : Icon(widget.icon, size: 12, color: theme.colorScheme.primary),
+                            visualDensity: VisualDensity.compact,
+                            label: Text(
+                              item,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: widget.isTag ? Colors.teal : theme.colorScheme.primary,
+                              ),
+                            ),
+                            backgroundColor: (widget.isTag ? Colors.teal : theme.colorScheme.primary).withValues(alpha: 0.12),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            onDeleted: () {
+                              setState(() {
+                                _selected.remove(item);
+                              });
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ],
+
               // Info & Action Bar
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
