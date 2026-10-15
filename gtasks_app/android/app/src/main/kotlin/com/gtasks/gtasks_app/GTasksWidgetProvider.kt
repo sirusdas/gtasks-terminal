@@ -236,12 +236,14 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                         val nextMode = when (currentMode) {
                             "detailed" -> "compact"
                             "compact" -> "two_column"
+                            "two_column" -> "two_column_compact"
                             else -> "detailed"
                         }
                         prefs.edit().putString("view_mode_$appWidgetId", nextMode).apply()
                         val label = when (nextMode) {
                             "compact" -> "Compact View (One-liner) ☰"
-                            "two_column" -> "2-Column Grid View ⊞"
+                            "two_column" -> "2-Column Grid Cards ⊞"
+                            "two_column_compact" -> "2-Column Compact Grid ▤"
                             else -> "Detailed Card View 📄"
                         }
                         Toast.makeText(context, label, Toast.LENGTH_SHORT).show()
@@ -288,6 +290,7 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         val viewIconRes = when (viewMode) {
             "compact" -> R.drawable.ic_widget_view_compact
             "two_column" -> R.drawable.ic_widget_view_grid
+            "two_column_compact" -> R.drawable.ic_widget_view_grid_compact
             else -> R.drawable.ic_widget_view_detailed
         }
         views.setImageViewResource(R.id.widget_btn_view_mode, viewIconRes)
@@ -345,6 +348,7 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         if (!sortLabel.isNullOrBlank()) pillParts.add("Sort: $sortLabel")
         if (viewMode == "compact") pillParts.add("1-Line")
         if (viewMode == "two_column") pillParts.add("2-Col")
+        if (viewMode == "two_column_compact") pillParts.add("2-Col Compact")
 
         val pillText = if (pillParts.isNotEmpty()) pillParts.joinToString(" • ") else null
 

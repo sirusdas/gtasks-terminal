@@ -5,6 +5,7 @@ import '../../providers/task_provider.dart';
 import '../widgets/task_card.dart';
 import '../widgets/task_compact_row.dart';
 import '../widgets/task_grid_card.dart';
+import '../widgets/task_grid_compact_card.dart';
 import '../widgets/settings_modal.dart';
 import '../widgets/add_account_modal.dart';
 import '../widgets/tasks_sidebar_drawer.dart';
@@ -235,14 +236,16 @@ class _TasksScreenState extends State<TasksScreen> {
           Consumer<SettingsProvider>(
             builder: (context, settings, _) {
               final mode = settings.taskViewMode;
-              final icon = mode == 'two_column'
-                  ? Icons.grid_view
-                  : mode == 'compact'
-                      ? Icons.view_headline
-                      : Icons.view_agenda;
+              final icon = mode == 'two_column_compact'
+                  ? Icons.view_compact
+                  : mode == 'two_column'
+                      ? Icons.grid_view
+                      : mode == 'compact'
+                          ? Icons.view_headline
+                          : Icons.view_agenda;
               return PopupMenuButton<String>(
                 icon: Icon(icon),
-                tooltip: 'Switch View (Detailed, Compact, 2-Column)',
+                tooltip: 'Switch View (Detailed, Compact, 2-Column, 2-Col Compact)',
                 onSelected: (newMode) => settings.setTaskViewMode(newMode),
                 itemBuilder: (context) => [
                   const PopupMenuItem(
@@ -271,8 +274,18 @@ class _TasksScreenState extends State<TasksScreen> {
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(Icons.grid_view, color: Colors.deepPurpleAccent),
-                      title: Text('2-Column Grid View', style: TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('Side-by-side cards in two columns'),
+                      title: Text('2-Column Grid Cards', style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Side-by-side cards with 2-line preview'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'two_column_compact',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.view_compact, color: Colors.indigoAccent),
+                      title: Text('2-Column Compact Grid', style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Minimal one-liners side-by-side'),
                     ),
                   ),
                 ],
@@ -591,7 +604,35 @@ class _TasksScreenState extends State<TasksScreen> {
                         : Consumer<SettingsProvider>(
                             builder: (context, settings, _) {
                               final mode = settings.taskViewMode;
-                              if (mode == 'two_column') {
+                              if (mode == 'two_column_compact') {
+                                return RefreshIndicator(
+                                  onRefresh: () => provider.refreshTasks(),
+                                  child: GridView.builder(
+                                    physics: const AlwaysScrollableScrollPhysics(
+                                      parent: BouncingScrollPhysics(),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      crossAxisSpacing: 6,
+                                      mainAxisSpacing: 6,
+                                      childAspectRatio: 3.6,
+                                    ),
+                                    addRepaintBoundaries: true,
+                                    itemCount: provider.tasks.length,
+                                    itemBuilder: (ctx, index) {
+                                      final task = provider.tasks[index];
+                                      return TaskGridCompactCard(
+                                        key: ValueKey(task.id),
+                                        task: task,
+                                        onToggleComplete: () => provider.completeTask(task.id),
+                                        onEdit: () => _showEditTaskSheet(context, task),
+                                        onDelete: () => provider.deleteTask(task.id),
+                                      );
+                                    },
+                                  ),
+                                );
+                              } else if (mode == 'two_column') {
                                 return RefreshIndicator(
                                   onRefresh: () => provider.refreshTasks(),
                                   child: GridView.builder(

@@ -232,7 +232,7 @@ class GTasksRemoteViewsFactory(
         val viewMode = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
             prefs.getString("view_mode_$appWidgetId", "detailed") ?: "detailed"
         } else "detailed"
-        return if (viewMode == "two_column") (tasks.size + 1) / 2 else tasks.size
+        return if (viewMode == "two_column" || viewMode == "two_column_compact") (tasks.size + 1) / 2 else tasks.size
     }
 
     override fun getViewAt(position: Int): RemoteViews {
@@ -242,16 +242,21 @@ class GTasksRemoteViewsFactory(
                 prefs.getString("view_mode_$appWidgetId", "detailed") ?: "detailed"
             } else "detailed"
 
-            if (viewMode == "two_column") {
-                // 2-COLUMN VIEW (Single ListView row containing Left and Right columns)
+            if (viewMode == "two_column" || viewMode == "two_column_compact") {
+                // 2-COLUMN VIEW (Cards or Compact One-Liners)
+                val layoutRes = if (viewMode == "two_column_compact") {
+                    R.layout.gtasks_widget_item_2col_compact_row
+                } else {
+                    R.layout.gtasks_widget_item_2col_row
+                }
                 val leftIdx = position * 2
                 val rightIdx = position * 2 + 1
                 if (leftIdx < 0 || leftIdx >= tasks.size) {
-                    return RemoteViews(context.packageName, R.layout.gtasks_widget_item_2col_row)
+                    return RemoteViews(context.packageName, layoutRes)
                 }
 
                 val itemLeft = tasks[leftIdx]
-                val views = RemoteViews(context.packageName, R.layout.gtasks_widget_item_2col_row)
+                val views = RemoteViews(context.packageName, layoutRes)
 
                 // Fill-in Intent for completing left task directly from widget
                 val completeLeftIntent = Intent().apply {
@@ -568,7 +573,7 @@ class GTasksRemoteViewsFactory(
 
     override fun getLoadingView(): RemoteViews? = null
 
-    override fun getViewTypeCount(): Int = 3
+    override fun getViewTypeCount(): Int = 4
 
     override fun getItemId(position: Int): Long = position.toLong()
 
