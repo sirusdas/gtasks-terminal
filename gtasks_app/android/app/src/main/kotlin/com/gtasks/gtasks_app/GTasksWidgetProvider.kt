@@ -28,6 +28,7 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         const val ACTION_COMPLETE_TASK = "com.gtasks.gtasks_app.ACTION_COMPLETE_TASK"
         const val ACTION_TOGGLE_EXPAND = "com.gtasks.gtasks_app.ACTION_TOGGLE_EXPAND"
         const val ACTION_CLEAR_FILTER = "com.gtasks.gtasks_app.ACTION_CLEAR_FILTER"
+        const val ACTION_TOGGLE_VIEW_MODE = "com.gtasks.gtasks_app.ACTION_TOGGLE_VIEW_MODE"
 
         fun updateAllWidgets(context: Context) {
             try {
@@ -36,6 +37,7 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                 val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget) ?: intArrayOf()
                 if (appWidgetIds.isNotEmpty()) {
                     appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list_view)
+                    appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_grid_view)
                     for (appWidgetId in appWidgetIds) {
                         val provider = GTasksWidgetProvider()
                         provider.updateAppWidget(context, appWidgetManager, appWidgetId)
@@ -225,6 +227,27 @@ class GTasksWidgetProvider : AppWidgetProvider() {
 
                         val appWidgetManager = AppWidgetManager.getInstance(context) ?: return
                         appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list_view)
+                        appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_grid_view)
+                    }
+                }
+                ACTION_TOGGLE_VIEW_MODE -> {
+                    val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+                    if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                        val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                        val currentMode = prefs.getString("view_mode_$appWidgetId", "detailed") ?: "detailed"
+                        val nextMode = when (currentMode) {
+                            "detailed" -> "compact"
+                            "compact" -> "two_column"
+                            else -> "detailed"
+                        }
+                        prefs.edit().putString("view_mode_$appWidgetId", nextMode).apply()
+                        val label = when (nextMode) {
+                            "compact" -> "Compact View (One-liner) ☰"
+                            "two_column" -> "2-Column Grid View ⊞"
+                            else -> "Detailed Card View 📄"
+                        }
+                        Toast.makeText(context, label, Toast.LENGTH_SHORT).show()
+                        updateAllWidgets(context)
                     }
                 }
                 ACTION_CLEAR_FILTER -> {
@@ -259,8 +282,17 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         val hideRecurring = prefs.getBoolean("hide_recurring_$appWidgetId", false)
         val hiddenListsJson = prefs.getString("hidden_lists_$appWidgetId", null)
         val hiddenTagsJson = prefs.getString("hidden_tags_$appWidgetId", null)
+        val viewMode = prefs.getString("view_mode_$appWidgetId", "detailed") ?: "detailed"
 
         val count = getFilteredTaskCount(context, appWidgetId)
+
+        // Update view mode icon
+        val viewIconRes = when (viewMode) {
+            "compact" -> R.drawable.ic_widget_view_compact
+            "two_column" -> R.drawable.ic_widget_view_grid
+            else -> R.drawable.ic_widget_view_detailed
+        }
+        views.setImageViewResource(R.id.widget_btn_view_mode, viewIconRes)
 
         // Format active filter, exclusions & sort badge pill
         val filterLabel = when (filterType) {
@@ -313,6 +345,8 @@ class GTasksWidgetProvider : AppWidgetProvider() {
             pillParts.add(if (hiddenTags.size == 1) "Hide: #${hiddenTags[0]}" else "Hide: ${hiddenTags.size} tags")
         }
         if (!sortLabel.isNullOrBlank()) pillParts.add("Sort: $sortLabel")
+        if (viewMode == "compact") pillParts.add("1-Line")
+        if (viewMode == "two_column") pillParts.add("2-Col")
 
         val pillText = if (pillParts.isNotEmpty()) pillParts.joinToString(" • ") else null
 
@@ -325,22 +359,44 @@ class GTasksWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_task_count, if (count == 0) "All caught up" else "$count pending tasks")
         }
 
-        // Toggle Empty View vs List View
+        // Set up service adapter for ListView and GridView
+        val serviceIntent = Intent(context, GTasksWidgetService::class.java).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            data = Uri.parse("gtasks-widget://widget/id/$appWidgetId?mode=$viewMode&t=${System.currentTimeMillis()}")
+        }
+
+        // Item click template (Broadcasts to provider to handle complete, expand, or open)
+        val itemTemplateIntent = Intent(context, GTasksWidgetProvider::class.java).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        }
+        val itemTemplatePendingIntent = PendingIntent.getBroadcast(
+            context,
+            appWidgetId * 100 + 20,
+            itemTemplateIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        )
+
+        // Toggle Empty View vs List View vs Grid View
         if (count == 0) {
             views.setViewVisibility(R.id.widget_empty_view, View.VISIBLE)
             views.setViewVisibility(R.id.widget_list_view, View.GONE)
+            views.setViewVisibility(R.id.widget_grid_view, View.GONE)
         } else {
             views.setViewVisibility(R.id.widget_empty_view, View.GONE)
-            views.setViewVisibility(R.id.widget_list_view, View.VISIBLE)
+            if (viewMode == "two_column") {
+                views.setViewVisibility(R.id.widget_list_view, View.GONE)
+                views.setViewVisibility(R.id.widget_grid_view, View.VISIBLE)
+                views.setRemoteAdapter(R.id.widget_grid_view, serviceIntent)
+                views.setEmptyView(R.id.widget_grid_view, R.id.widget_empty_view)
+                views.setPendingIntentTemplate(R.id.widget_grid_view, itemTemplatePendingIntent)
+            } else {
+                views.setViewVisibility(R.id.widget_grid_view, View.GONE)
+                views.setViewVisibility(R.id.widget_list_view, View.VISIBLE)
+                views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
+                views.setEmptyView(R.id.widget_list_view, R.id.widget_empty_view)
+                views.setPendingIntentTemplate(R.id.widget_list_view, itemTemplatePendingIntent)
+            }
         }
-
-        // Set up service adapter for the ListView
-        val serviceIntent = Intent(context, GTasksWidgetService::class.java).apply {
-            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            data = Uri.parse("gtasks-widget://widget/id/$appWidgetId?t=${System.currentTimeMillis()}")
-        }
-        views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
-        views.setEmptyView(R.id.widget_list_view, R.id.widget_empty_view)
 
         // Header click -> opens MainActivity
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
@@ -356,6 +412,19 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.widget_root, openAppPendingIntent)
         views.setOnClickPendingIntent(R.id.widget_header, openAppPendingIntent)
+
+        // View Mode Button
+        val toggleViewIntent = Intent(context, GTasksWidgetProvider::class.java).apply {
+            action = ACTION_TOGGLE_VIEW_MODE
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        }
+        val toggleViewPendingIntent = PendingIntent.getBroadcast(
+            context,
+            appWidgetId * 100 + 5,
+            toggleViewIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_btn_view_mode, toggleViewPendingIntent)
 
         // Add Task Button -> Opens Full Screen In-App Task Editor with all features
         val addTaskIntent = Intent(context, MainActivity::class.java).apply {
@@ -437,18 +506,6 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         setupFilterButton(R.id.widget_filter_recurring, "recurring", 16)
         setupFilterButton(R.id.widget_filter_sort, "sort", 17)
         setupFilterButton(R.id.widget_filter_hide, "hide", 18)
-
-        // Item click template (Broadcasts to provider to handle complete, expand, or open)
-        val itemTemplateIntent = Intent(context, GTasksWidgetProvider::class.java).apply {
-            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-        }
-        val itemTemplatePendingIntent = PendingIntent.getBroadcast(
-            context,
-            appWidgetId * 100 + 20,
-            itemTemplateIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-        )
-        views.setPendingIntentTemplate(R.id.widget_list_view, itemTemplatePendingIntent)
 
         appWidgetManager.updateAppWidget(appWidgetId, views)
     }

@@ -200,7 +200,7 @@ class GTasksRemoteViewsFactory(
                     """.trimIndent()
                 }
 
-                queryBuilder.append(" ORDER BY $orderByClause LIMIT 50")
+                queryBuilder.append(" ORDER BY $orderByClause LIMIT 60")
 
                 val cursor = db.rawQuery(queryBuilder.toString(), args.toTypedArray())
                 cursor.use {
@@ -231,127 +231,253 @@ class GTasksRemoteViewsFactory(
 
     override fun getViewAt(position: Int): RemoteViews {
         try {
-            val views = RemoteViews(context.packageName, R.layout.gtasks_widget_item)
-            if (position < 0 || position >= tasks.size) return views
+            if (position < 0 || position >= tasks.size) {
+                return RemoteViews(context.packageName, R.layout.gtasks_widget_item)
+            }
+
+            val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+            val viewMode = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                prefs.getString("view_mode_$appWidgetId", "detailed") ?: "detailed"
+            } else "detailed"
 
             val item = tasks[position]
-            views.setTextViewText(R.id.widget_item_title, item.title)
-
-            // Priority badge styling
-            val priority = item.priority.lowercase()
-            when (priority) {
-                "critical" -> {
-                    views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
-                    views.setTextViewText(R.id.widget_item_priority, "CRITICAL")
-                    views.setTextColor(R.id.widget_item_priority, Color.parseColor("#EF4444"))
-                }
-                "high" -> {
-                    views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
-                    views.setTextViewText(R.id.widget_item_priority, "HIGH")
-                    views.setTextColor(R.id.widget_item_priority, Color.parseColor("#F97316"))
-                }
-                "medium" -> {
-                    views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
-                    views.setTextViewText(R.id.widget_item_priority, "MED")
-                    views.setTextColor(R.id.widget_item_priority, Color.parseColor("#EAB308"))
-                }
-                else -> {
-                    views.setViewVisibility(R.id.widget_item_priority, View.GONE)
-                }
-            }
-
-            // Subtitle: Space › Subspace • Due • List
-            val parts = mutableListOf<String>()
-
-            // Extract primary space & subspace if present
-            if (!item.spacesJson.isNullOrBlank() && item.spacesJson != "{}") {
-                try {
-                    val json = JSONObject(item.spacesJson)
-                    val keys = json.keys()
-                    if (keys.hasNext()) {
-                        val space = keys.next()
-                        val subs = json.optJSONArray(space)
-                        if (subs != null && subs.length() > 0) {
-                            parts.add("$space › ${subs.getString(0)}")
-                        } else {
-                            parts.add(space)
-                        }
-                    }
-                } catch (_: Exception) {}
-            }
-
-            if (!item.listTitle.isNullOrBlank() && item.listTitle != "My Tasks") {
-                parts.add(item.listTitle)
-            }
-
-            if (!item.due.isNullOrBlank()) {
-                val dueFormatted = if (item.due.length >= 10) item.due.substring(0, 10) else item.due
-                parts.add("Due $dueFormatted")
-            }
-
-            if (parts.isNotEmpty()) {
-                views.setViewVisibility(R.id.widget_item_subtitle, View.VISIBLE)
-                views.setTextViewText(R.id.widget_item_subtitle, parts.joinToString(" • "))
-            } else {
-                views.setViewVisibility(R.id.widget_item_subtitle, View.GONE)
-            }
-
-            // Expand / Collapse details logic
-            val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-            val isExpanded = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                prefs.getBoolean("expand_${appWidgetId}_${item.id}", false)
-            } else false
-
-            if (isExpanded) {
-                views.setViewVisibility(R.id.widget_item_notes, View.VISIBLE)
-                views.setImageViewResource(R.id.widget_item_chevron, R.drawable.ic_widget_chevron_up)
-
-                val detailBuilder = StringBuilder()
-                if (!item.description.isNullOrBlank()) {
-                    detailBuilder.append(item.description.trim())
-                }
-                if (!item.tagsJson.isNullOrBlank() && item.tagsJson != "[]") {
-                    try {
-                        val tagArray = JSONArray(item.tagsJson)
-                        val tagList = mutableListOf<String>()
-                        for (i in 0 until tagArray.length()) {
-                            val tag = tagArray.getString(i).trim()
-                            if (tag.isNotEmpty()) tagList.add("#$tag")
-                        }
-                        if (tagList.isNotEmpty()) {
-                            if (detailBuilder.isNotEmpty()) detailBuilder.append("\n")
-                            detailBuilder.append(tagList.joinToString(" "))
-                        }
-                    } catch (_: Exception) {}
-                }
-                if (detailBuilder.isEmpty()) {
-                    detailBuilder.append("No additional details")
-                }
-                views.setTextViewText(R.id.widget_item_notes, detailBuilder.toString())
-            } else {
-                views.setViewVisibility(R.id.widget_item_notes, View.GONE)
-                views.setImageViewResource(R.id.widget_item_chevron, R.drawable.ic_widget_chevron)
-            }
 
             // Fill-in Intent for completing task directly from widget
             val completeFillInIntent = Intent().apply {
                 action = GTasksWidgetProvider.ACTION_COMPLETE_TASK
                 putExtra("task_id", item.id)
             }
-            views.setOnClickFillInIntent(R.id.widget_item_check, completeFillInIntent)
 
-            // Fill-in Intent for expanding/collapsing details
+            // Fill-in Intent for expanding/collapsing or opening task
             val toggleExpandFillInIntent = Intent().apply {
                 action = GTasksWidgetProvider.ACTION_TOGGLE_EXPAND
                 putExtra("task_id", item.id)
             }
-            views.setOnClickFillInIntent(R.id.widget_item_container, toggleExpandFillInIntent)
-            views.setOnClickFillInIntent(R.id.widget_item_chevron, toggleExpandFillInIntent)
-            views.setOnClickFillInIntent(R.id.widget_item_title, toggleExpandFillInIntent)
-            views.setOnClickFillInIntent(R.id.widget_item_subtitle, toggleExpandFillInIntent)
-            views.setOnClickFillInIntent(R.id.widget_item_notes, toggleExpandFillInIntent)
 
-            return views
+            when (viewMode) {
+                "compact" -> {
+                    // ONE-LINER VIEW
+                    val views = RemoteViews(context.packageName, R.layout.gtasks_widget_item_compact)
+                    views.setTextViewText(R.id.widget_item_title, item.title)
+
+                    // Priority
+                    val priority = item.priority.lowercase()
+                    when (priority) {
+                        "critical" -> {
+                            views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
+                            views.setTextViewText(R.id.widget_item_priority, "CRIT")
+                            views.setTextColor(R.id.widget_item_priority, Color.parseColor("#EF4444"))
+                        }
+                        "high" -> {
+                            views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
+                            views.setTextViewText(R.id.widget_item_priority, "HIGH")
+                            views.setTextColor(R.id.widget_item_priority, Color.parseColor("#F97316"))
+                        }
+                        "medium" -> {
+                            views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
+                            views.setTextViewText(R.id.widget_item_priority, "MED")
+                            views.setTextColor(R.id.widget_item_priority, Color.parseColor("#EAB308"))
+                        }
+                        else -> {
+                            views.setViewVisibility(R.id.widget_item_priority, View.GONE)
+                        }
+                    }
+
+                    // Compact right-side label: Due date or Space or List
+                    val rightLabel = when {
+                        !item.due.isNullOrBlank() -> {
+                            val d = item.due
+                            if (d.length >= 10) d.substring(5, 10) else d
+                        }
+                        !item.spacesJson.isNullOrBlank() && item.spacesJson != "{}" -> {
+                            try {
+                                val json = JSONObject(item.spacesJson)
+                                val keys = json.keys()
+                                if (keys.hasNext()) keys.next() else null
+                            } catch (_: Exception) { null }
+                        }
+                        !item.listTitle.isNullOrBlank() && item.listTitle != "My Tasks" -> item.listTitle
+                        else -> null
+                    }
+
+                    if (rightLabel != null) {
+                        views.setViewVisibility(R.id.widget_item_subtitle, View.VISIBLE)
+                        views.setTextViewText(R.id.widget_item_subtitle, rightLabel)
+                    } else {
+                        views.setViewVisibility(R.id.widget_item_subtitle, View.GONE)
+                    }
+
+                    views.setOnClickFillInIntent(R.id.widget_item_check, completeFillInIntent)
+                    views.setOnClickFillInIntent(R.id.widget_item_container, toggleExpandFillInIntent)
+                    views.setOnClickFillInIntent(R.id.widget_item_title, toggleExpandFillInIntent)
+
+                    return views
+                }
+
+                "two_column" -> {
+                    // 2-COLUMN GRID VIEW
+                    val views = RemoteViews(context.packageName, R.layout.gtasks_widget_item_grid)
+                    views.setTextViewText(R.id.widget_item_title, item.title)
+
+                    // Priority
+                    val priority = item.priority.lowercase()
+                    when (priority) {
+                        "critical" -> {
+                            views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
+                            views.setTextViewText(R.id.widget_item_priority, "CRIT")
+                            views.setTextColor(R.id.widget_item_priority, Color.parseColor("#EF4444"))
+                        }
+                        "high" -> {
+                            views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
+                            views.setTextViewText(R.id.widget_item_priority, "HIGH")
+                            views.setTextColor(R.id.widget_item_priority, Color.parseColor("#F97316"))
+                        }
+                        "medium" -> {
+                            views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
+                            views.setTextViewText(R.id.widget_item_priority, "MED")
+                            views.setTextColor(R.id.widget_item_priority, Color.parseColor("#EAB308"))
+                        }
+                        else -> {
+                            views.setViewVisibility(R.id.widget_item_priority, View.GONE)
+                        }
+                    }
+
+                    // Subtitle for Grid: Space or Due
+                    val subParts = mutableListOf<String>()
+                    if (!item.due.isNullOrBlank()) {
+                        val d = item.due
+                        subParts.add(if (d.length >= 10) d.substring(5, 10) else d)
+                    }
+                    if (!item.spacesJson.isNullOrBlank() && item.spacesJson != "{}") {
+                        try {
+                            val json = JSONObject(item.spacesJson)
+                            val keys = json.keys()
+                            if (keys.hasNext()) subParts.add(keys.next())
+                        } catch (_: Exception) {}
+                    }
+                    if (subParts.isNotEmpty()) {
+                        views.setViewVisibility(R.id.widget_item_subtitle, View.VISIBLE)
+                        views.setTextViewText(R.id.widget_item_subtitle, subParts.joinToString(" • "))
+                    } else {
+                        views.setViewVisibility(R.id.widget_item_subtitle, View.GONE)
+                    }
+
+                    views.setOnClickFillInIntent(R.id.widget_item_check, completeFillInIntent)
+                    views.setOnClickFillInIntent(R.id.widget_item_container, toggleExpandFillInIntent)
+                    views.setOnClickFillInIntent(R.id.widget_item_title, toggleExpandFillInIntent)
+
+                    return views
+                }
+
+                else -> {
+                    // DETAILED CARD VIEW
+                    val views = RemoteViews(context.packageName, R.layout.gtasks_widget_item)
+                    views.setTextViewText(R.id.widget_item_title, item.title)
+
+                    // Priority badge styling
+                    val priority = item.priority.lowercase()
+                    when (priority) {
+                        "critical" -> {
+                            views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
+                            views.setTextViewText(R.id.widget_item_priority, "CRITICAL")
+                            views.setTextColor(R.id.widget_item_priority, Color.parseColor("#EF4444"))
+                        }
+                        "high" -> {
+                            views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
+                            views.setTextViewText(R.id.widget_item_priority, "HIGH")
+                            views.setTextColor(R.id.widget_item_priority, Color.parseColor("#F97316"))
+                        }
+                        "medium" -> {
+                            views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
+                            views.setTextViewText(R.id.widget_item_priority, "MED")
+                            views.setTextColor(R.id.widget_item_priority, Color.parseColor("#EAB308"))
+                        }
+                        else -> {
+                            views.setViewVisibility(R.id.widget_item_priority, View.GONE)
+                        }
+                    }
+
+                    // Subtitle: Space › Subspace • Due • List
+                    val parts = mutableListOf<String>()
+
+                    if (!item.spacesJson.isNullOrBlank() && item.spacesJson != "{}") {
+                        try {
+                            val json = JSONObject(item.spacesJson)
+                            val keys = json.keys()
+                            if (keys.hasNext()) {
+                                val space = keys.next()
+                                val subs = json.optJSONArray(space)
+                                if (subs != null && subs.length() > 0) {
+                                    parts.add("$space › ${subs.getString(0)}")
+                                } else {
+                                    parts.add(space)
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    if (!item.listTitle.isNullOrBlank() && item.listTitle != "My Tasks") {
+                        parts.add(item.listTitle)
+                    }
+
+                    if (!item.due.isNullOrBlank()) {
+                        val dueFormatted = if (item.due.length >= 10) item.due.substring(0, 10) else item.due
+                        parts.add("Due $dueFormatted")
+                    }
+
+                    if (parts.isNotEmpty()) {
+                        views.setViewVisibility(R.id.widget_item_subtitle, View.VISIBLE)
+                        views.setTextViewText(R.id.widget_item_subtitle, parts.joinToString(" • "))
+                    } else {
+                        views.setViewVisibility(R.id.widget_item_subtitle, View.GONE)
+                    }
+
+                    // Expand / Collapse details logic
+                    val isExpanded = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                        prefs.getBoolean("expand_${appWidgetId}_${item.id}", false)
+                    } else false
+
+                    if (isExpanded) {
+                        views.setViewVisibility(R.id.widget_item_notes, View.VISIBLE)
+                        views.setImageViewResource(R.id.widget_item_chevron, R.drawable.ic_widget_chevron_up)
+
+                        val detailBuilder = StringBuilder()
+                        if (!item.description.isNullOrBlank()) {
+                            detailBuilder.append(item.description.trim())
+                        }
+                        if (!item.tagsJson.isNullOrBlank() && item.tagsJson != "[]") {
+                            try {
+                                val tagArray = JSONArray(item.tagsJson)
+                                val tagList = mutableListOf<String>()
+                                for (i in 0 until tagArray.length()) {
+                                    val tag = tagArray.getString(i).trim()
+                                    if (tag.isNotEmpty()) tagList.add("#$tag")
+                                }
+                                if (tagList.isNotEmpty()) {
+                                    if (detailBuilder.isNotEmpty()) detailBuilder.append("\n")
+                                    detailBuilder.append(tagList.joinToString(" "))
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        if (detailBuilder.isEmpty()) {
+                            detailBuilder.append("No additional details")
+                        }
+                        views.setTextViewText(R.id.widget_item_notes, detailBuilder.toString())
+                    } else {
+                        views.setViewVisibility(R.id.widget_item_notes, View.GONE)
+                        views.setImageViewResource(R.id.widget_item_chevron, R.drawable.ic_widget_chevron)
+                    }
+
+                    views.setOnClickFillInIntent(R.id.widget_item_check, completeFillInIntent)
+                    views.setOnClickFillInIntent(R.id.widget_item_container, toggleExpandFillInIntent)
+                    views.setOnClickFillInIntent(R.id.widget_item_chevron, toggleExpandFillInIntent)
+                    views.setOnClickFillInIntent(R.id.widget_item_title, toggleExpandFillInIntent)
+                    views.setOnClickFillInIntent(R.id.widget_item_subtitle, toggleExpandFillInIntent)
+                    views.setOnClickFillInIntent(R.id.widget_item_notes, toggleExpandFillInIntent)
+
+                    return views
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error in getViewAt for position $position", e)
             return RemoteViews(context.packageName, R.layout.gtasks_widget_item)
@@ -360,7 +486,7 @@ class GTasksRemoteViewsFactory(
 
     override fun getLoadingView(): RemoteViews? = null
 
-    override fun getViewTypeCount(): Int = 1
+    override fun getViewTypeCount(): Int = 3
 
     override fun getItemId(position: Int): Long = position.toLong()
 

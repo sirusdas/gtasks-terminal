@@ -10,6 +10,7 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyOnboarded = 'gtasks_onboarded';
   static const String _keyGoogleAccessToken = 'gtasks_google_access_token';
   static const String _keyGoogleRefreshToken = 'gtasks_google_refresh_token';
+  static const String _keyTaskViewMode = 'gtasks_task_view_mode'; // 'detailed', 'compact', 'two_column'
 
   // Common quick presets
   static const List<String> presetUrls = [
@@ -27,6 +28,7 @@ class SettingsProvider with ChangeNotifier {
   bool _isOnboardingCompleted = false;
   String? _googleAccessToken;
   String? _googleRefreshToken;
+  String _taskViewMode = 'detailed'; // 'detailed', 'compact', 'two_column'
 
   String get baseUrl => _baseUrl;
   bool get isDevMode => _isDevMode;
@@ -36,6 +38,7 @@ class SettingsProvider with ChangeNotifier {
   bool get isOnboardingCompleted => _isOnboardingCompleted;
   String? get googleAccessToken => _googleAccessToken;
   String? get googleRefreshToken => _googleRefreshToken;
+  String get taskViewMode => _taskViewMode;
 
   SettingsProvider() {
     _loadSettings();
@@ -64,6 +67,7 @@ class SettingsProvider with ChangeNotifier {
     _isOnboardingCompleted = prefs.getBool(_keyOnboarded) ?? false;
     _googleAccessToken = prefs.getString(_keyGoogleAccessToken);
     _googleRefreshToken = prefs.getString(_keyGoogleRefreshToken);
+    _taskViewMode = prefs.getString(_keyTaskViewMode) ?? 'detailed';
 
     final rawDeleted = prefs.getStringList(_keyDeletedAccounts);
     if (rawDeleted != null) {
@@ -220,5 +224,12 @@ class SettingsProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyDevMode, enabled);
     notifyListeners();
+  }
+
+  Future<void> setTaskViewMode(String mode) async {
+    _taskViewMode = mode;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyTaskViewMode, mode);
   }
 }

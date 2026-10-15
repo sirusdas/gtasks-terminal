@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
 import '../widgets/task_card.dart';
+import '../widgets/task_compact_row.dart';
+import '../widgets/task_grid_card.dart';
 import '../widgets/settings_modal.dart';
 import '../widgets/add_account_modal.dart';
 import '../widgets/tasks_sidebar_drawer.dart';
@@ -10,6 +12,7 @@ import '../widgets/task_filter_modal.dart';
 import '../widgets/task_editor_dialog.dart';
 import '../widgets/sync_progress_dialog.dart';
 import '../../services/widget_service.dart';
+import '../../providers/settings_provider.dart';
 import 'reports_screen.dart';
 
 class TasksScreen extends StatefulWidget {
@@ -228,6 +231,53 @@ class _TasksScreenState extends State<TasksScreen> {
                 ),
               ),
             ],
+          ),
+          Consumer<SettingsProvider>(
+            builder: (context, settings, _) {
+              final mode = settings.taskViewMode;
+              final icon = mode == 'two_column'
+                  ? Icons.grid_view
+                  : mode == 'compact'
+                      ? Icons.view_headline
+                      : Icons.view_agenda;
+              return PopupMenuButton<String>(
+                icon: Icon(icon),
+                tooltip: 'Switch View (Detailed, Compact, 2-Column)',
+                onSelected: (newMode) => settings.setTaskViewMode(newMode),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'detailed',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.view_agenda, color: Colors.blueAccent),
+                      title: Text('Detailed Card View', style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Full cards with notes & tag chips'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'compact',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.view_headline, color: Colors.teal),
+                      title: Text('Compact View (One-liner)', style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Single-line tasks to fit more on screen'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'two_column',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.grid_view, color: Colors.deepPurpleAccent),
+                      title: Text('2-Column Grid View', style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Side-by-side cards in two columns'),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -538,26 +588,82 @@ class _TasksScreenState extends State<TasksScreen> {
                               ),
                             ),
                           )
-                        : RefreshIndicator(
-                            onRefresh: () => provider.refreshTasks(),
-                            child: ListView.builder(
-                              physics: const AlwaysScrollableScrollPhysics(
-                                parent: BouncingScrollPhysics(),
-                              ),
-                              cacheExtent: 1200,
-                              addRepaintBoundaries: true,
-                              itemCount: provider.tasks.length,
-                              itemBuilder: (ctx, index) {
-                                final task = provider.tasks[index];
-                                return TaskCard(
-                                  key: ValueKey(task.id),
-                                  task: task,
-                                  onToggleComplete: () => provider.completeTask(task.id),
-                                  onEdit: () => _showEditTaskSheet(context, task),
-                                  onDelete: () => provider.deleteTask(task.id),
+                        : Consumer<SettingsProvider>(
+                            builder: (context, settings, _) {
+                              final mode = settings.taskViewMode;
+                              if (mode == 'two_column') {
+                                return RefreshIndicator(
+                                  onRefresh: () => provider.refreshTasks(),
+                                  child: GridView.builder(
+                                    physics: const AlwaysScrollableScrollPhysics(
+                                      parent: BouncingScrollPhysics(),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      crossAxisSpacing: 8,
+                                      mainAxisSpacing: 8,
+                                      childAspectRatio: 1.55,
+                                    ),
+                                    addRepaintBoundaries: true,
+                                    itemCount: provider.tasks.length,
+                                    itemBuilder: (ctx, index) {
+                                      final task = provider.tasks[index];
+                                      return TaskGridCard(
+                                        key: ValueKey(task.id),
+                                        task: task,
+                                        onToggleComplete: () => provider.completeTask(task.id),
+                                        onEdit: () => _showEditTaskSheet(context, task),
+                                        onDelete: () => provider.deleteTask(task.id),
+                                      );
+                                    },
+                                  ),
                                 );
-                              },
-                            ),
+                              } else if (mode == 'compact') {
+                                return RefreshIndicator(
+                                  onRefresh: () => provider.refreshTasks(),
+                                  child: ListView.builder(
+                                    physics: const AlwaysScrollableScrollPhysics(
+                                      parent: BouncingScrollPhysics(),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    addRepaintBoundaries: true,
+                                    itemCount: provider.tasks.length,
+                                    itemBuilder: (ctx, index) {
+                                      final task = provider.tasks[index];
+                                      return TaskCompactRow(
+                                        key: ValueKey(task.id),
+                                        task: task,
+                                        onToggleComplete: () => provider.completeTask(task.id),
+                                        onEdit: () => _showEditTaskSheet(context, task),
+                                        onDelete: () => provider.deleteTask(task.id),
+                                      );
+                                    },
+                                  ),
+                                );
+                              } else {
+                                return RefreshIndicator(
+                                  onRefresh: () => provider.refreshTasks(),
+                                  child: ListView.builder(
+                                    physics: const AlwaysScrollableScrollPhysics(
+                                      parent: BouncingScrollPhysics(),
+                                    ),
+                                    addRepaintBoundaries: true,
+                                    itemCount: provider.tasks.length,
+                                    itemBuilder: (ctx, index) {
+                                      final task = provider.tasks[index];
+                                      return TaskCard(
+                                        key: ValueKey(task.id),
+                                        task: task,
+                                        onToggleComplete: () => provider.completeTask(task.id),
+                                        onEdit: () => _showEditTaskSheet(context, task),
+                                        onDelete: () => provider.deleteTask(task.id),
+                                      );
+                                    },
+                                  ),
+                                );
+                              }
+                            },
                           ),
           ),
         ],
