@@ -41,17 +41,19 @@ class TaskItem {
     String? formattedDueDate,
   })  : formattedDueDate = formattedDueDate ??
             (due != null ? (due.length > 10 ? due.substring(0, 10) : due) : null),
-        cleanNotes = cleanNotes ??
-            (allTags == null || spaces == null
-                ? NotesParser.splitNotesAndMetadata(description).cleanNotes
-                : NotesParser.splitNotesAndMetadata(description).cleanNotes),
-        allTags = allTags ??
-            (() {
-              final extracted = NotesParser.splitNotesAndMetadata(description).tags;
-              final set = <String>{...tags, ...extracted};
-              return set.toList();
-            })(),
-        spaces = spaces ?? NotesParser.splitNotesAndMetadata(description).spaces;
+        cleanNotes = (cleanNotes != null && cleanNotes.isNotEmpty)
+            ? cleanNotes
+            : NotesParser.splitNotesAndMetadata(description).cleanNotes,
+        allTags = (allTags != null && allTags.isNotEmpty)
+            ? allTags
+            : (() {
+                final extracted = NotesParser.splitNotesAndMetadata(description).tags;
+                final set = <String>{...tags, ...extracted};
+                return set.toList();
+              })(),
+        spaces = (spaces != null && spaces.isNotEmpty)
+            ? spaces
+            : NotesParser.splitNotesAndMetadata(description).spaces;
 
   bool get isCompleted => status.toLowerCase() == 'completed';
   bool get hasSpaces => spaces.isNotEmpty;
@@ -90,7 +92,10 @@ class TaskItem {
       });
     }
 
-    final rawDescription = json['description']?.toString() ?? (json['notes']?.toString() ?? '');
+    String rawDescription = json['description']?.toString() ?? '';
+    if (rawDescription.trim().isEmpty) {
+      rawDescription = json['notes']?.toString() ?? '';
+    }
     final parsed = NotesParser.splitNotesAndMetadata(rawDescription);
     for (final t in parsed.tags) {
       tagSet.add(t);

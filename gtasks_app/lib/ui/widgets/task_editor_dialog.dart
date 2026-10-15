@@ -35,10 +35,18 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     final task = widget.task;
     if (task != null) {
       _titleController = TextEditingController(text: task.title);
-      _notesController = TextEditingController(text: task.cleanNotes);
-      _selectedTags = Set.from(task.allTags);
+      final parsedNotes = NotesParser.splitNotesAndMetadata(task.description);
+      _notesController = TextEditingController(
+        text: task.cleanNotes.isNotEmpty ? task.cleanNotes : parsedNotes.cleanNotes,
+      );
+      _selectedTags = <String>{
+        ...task.allTags,
+        ...task.tags,
+        ...parsedNotes.tags,
+      };
       _tagsController = TextEditingController(text: _selectedTags.join(', '));
-      _selectedSpaces = Map.from(task.spaces.map((k, v) => MapEntry(k, List<String>.from(v))));
+      final taskSpaces = task.spaces.isNotEmpty ? task.spaces : parsedNotes.spaces;
+      _selectedSpaces = Map.from(taskSpaces.map((k, v) => MapEntry(k, List<String>.from(v))));
       _spacesController = TextEditingController(text: NotesParser.formatSpacesInput(_selectedSpaces));
       _listController = TextEditingController(text: task.listTitle ?? 'My Tasks');
       _selectedAccount = task.account;
@@ -193,7 +201,6 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     if (!availableLists.contains('My Tasks')) {
       availableLists.insert(0, 'My Tasks');
     }
-    final availableTags = provider.tagsWithCounts.keys.toList();
 
     // If notes is expanded to full screen mode:
     if (_isFullscreenNotes) {
@@ -615,45 +622,6 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                           ],
                         ),
                       ),
-
-                    // Quick suggestions from existing tags
-                    if (availableTags.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: availableTags.take(10).map((tag) {
-                          final isSelected = _selectedTags.contains(tag);
-                          final count = provider.tagsWithCounts[tag] ?? 0;
-                          return FilterChip(
-                            avatar: const Text('#', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.teal)),
-                            label: Text(
-                              count > 0 ? '$tag ($count)' : tag,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                color: isSelected ? Colors.teal : null,
-                              ),
-                            ),
-                            selected: isSelected,
-                            selectedColor: Colors.teal.withValues(alpha: 0.15),
-                            checkmarkColor: Colors.teal,
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            onSelected: (selected) {
-                              setState(() {
-                                if (selected) {
-                                  _selectedTags.add(tag);
-                                } else {
-                                  _selectedTags.remove(tag);
-                                }
-                                _syncTagsText();
-                              });
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    ],
                     const SizedBox(height: 14),
 
                     // Spaces & Sub-spaces Header
@@ -813,39 +781,6 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                           ],
                         ),
                       ),
-
-                    // Quick suggestions from existing spaces
-                    if (provider.spacesWithCounts.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: provider.spacesWithCounts.keys.take(8).map((space) {
-                          final isSelected = _selectedSpaces.containsKey(space);
-                          final subsCount = provider.subspacesWithCounts[space]?.length ?? 0;
-                          return FilterChip(
-                            avatar: const Icon(Icons.rocket_launch, size: 12, color: Colors.deepPurpleAccent),
-                            label: Text(
-                              subsCount > 0 ? '$space ($subsCount subs)' : space,
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            selected: isSelected,
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            onSelected: (selected) {
-                              setState(() {
-                                if (selected) {
-                                  _selectedSpaces.putIfAbsent(space, () => []);
-                                } else {
-                                  _selectedSpaces.remove(space);
-                                }
-                                _syncSpacesText();
-                              });
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    ],
                   ],
                 ),
               ),

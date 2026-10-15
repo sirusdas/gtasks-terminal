@@ -156,18 +156,21 @@ class GoogleTasksDirectClient {
           if (raw['title'] == null && raw['notes'] == null) continue;
           final isCompleted = raw['status'] == 'completed';
           final notes = raw['notes']?.toString() ?? '';
-          final split = NotesParser.splitNotesAndTags(notes);
+          final split = NotesParser.splitNotesAndMetadata(notes);
 
           allTasks.add(TaskItem(
             id: raw['id'].toString(),
             title: raw['title']?.toString() ?? 'Untitled',
-            description: split.cleanNotes,
+            description: notes,
+            cleanNotes: split.cleanNotes,
             status: isCompleted ? 'completed' : 'pending',
             due: raw['due']?.toString(),
             listId: listId,
             listTitle: listTitle,
             account: account,
             tags: split.tags,
+            allTags: split.tags,
+            spaces: split.spaces,
             calculatedPriority: calculatePriorityFromTags(split.tags),
             createdAt: raw['updated']?.toString(), // Google uses 'updated'
             completedAt: raw['completed']?.toString(),
@@ -207,18 +210,21 @@ class GoogleTasksDirectClient {
     if (response.statusCode == 200 || response.statusCode == 201) {
       final raw = jsonDecode(response.body);
       final taskNotes = raw['notes']?.toString() ?? '';
-      final split = NotesParser.splitNotesAndTags(taskNotes);
+      final split = NotesParser.splitNotesAndMetadata(taskNotes);
 
       return TaskItem(
         id: raw['id'].toString(),
         title: raw['title']?.toString() ?? title,
-        description: split.cleanNotes,
+        description: taskNotes,
+        cleanNotes: split.cleanNotes,
         status: raw['status']?.toString() ?? 'pending',
         due: raw['due']?.toString(),
         listId: listId,
         listTitle: listTitle,
         account: account,
         tags: split.tags,
+        allTags: split.tags,
+        spaces: split.spaces,
         calculatedPriority: calculatePriorityFromTags(split.tags),
         createdAt: raw['updated']?.toString(),
       );
