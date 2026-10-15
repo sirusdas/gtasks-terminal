@@ -22,8 +22,8 @@ import {
     splitNotesAndTags,
     combineNotesAndTags,
     extractSpacesFromText
-} from './utils.js';
-import { createTaskCard, renderTasksGrid } from './task-card.js?v=39';
+} from './utils.js?v=45';
+import { createTaskCard, renderTasksGrid } from './task-card.js?v=45';
 import { createMultiselect, getUniqueLists, getUniqueTags, getListsWithCounts, getTagsWithCounts, getStatusWithCounts, getFilteredTagsByLists, getFilteredListsByTags, getFilteredTasksBySearchAndDate, getFilteredListsByTagsAndCriteria, getFilteredTagsByListsAndCriteria } from './multiselect.js';
 import { 
     renderHierarchy,

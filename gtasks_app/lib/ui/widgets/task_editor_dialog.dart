@@ -4,6 +4,7 @@ import '../../models/task_item.dart';
 import '../../providers/task_provider.dart';
 import '../../utils/notes_parser.dart';
 import 'searchable_picker_modal.dart';
+import 'searchable_space_picker_modal.dart';
 
 class TaskEditorDialog extends StatefulWidget {
   final TaskItem? task; // null when adding a new task
@@ -20,6 +21,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
   late TextEditingController _tagsController;
   late TextEditingController _spacesController;
   late TextEditingController _listController;
+  Map<String, List<String>> _selectedSpaces = {};
   String? _selectedAccount;
   String _selectedPriority = 'medium';
   DateTime? _selectedDueDate;
@@ -34,7 +36,8 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       _titleController = TextEditingController(text: task.title);
       _notesController = TextEditingController(text: task.cleanNotes);
       _tagsController = TextEditingController(text: task.allTags.join(', '));
-      _spacesController = TextEditingController(text: NotesParser.formatSpacesInput(task.spaces));
+      _selectedSpaces = Map.from(task.spaces.map((k, v) => MapEntry(k, List<String>.from(v))));
+      _spacesController = TextEditingController(text: NotesParser.formatSpacesInput(_selectedSpaces));
       _listController = TextEditingController(text: task.listTitle ?? 'My Tasks');
       _selectedAccount = task.account;
       _selectedPriority = task.calculatedPriority.toLowerCase();
@@ -47,8 +50,30 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       _titleController = TextEditingController();
       _notesController = TextEditingController();
       _tagsController = TextEditingController();
+      _selectedSpaces = {};
       _spacesController = TextEditingController();
       _listController = TextEditingController(text: 'My Tasks');
+    }
+  }
+
+  void _syncSpacesText() {
+    _spacesController.text = NotesParser.formatSpacesInput(_selectedSpaces);
+  }
+
+  Future<void> _openSpacePicker() async {
+    final provider = context.read<TaskProvider>();
+    final result = await SearchableSpacePickerModal.show(
+      context: context,
+      spacesWithCounts: provider.spacesWithCounts,
+      subspacesWithCounts: provider.subspacesWithCounts,
+      initialSelected: _selectedSpaces,
+      isSingleSelect: false,
+    );
+    if (result != null) {
+      setState(() {
+        _selectedSpaces = result;
+        _syncSpacesText();
+      });
     }
   }
 
@@ -87,7 +112,9 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
         .where((t) => t.isNotEmpty)
         .toList();
 
-    final spaces = NotesParser.parseSpacesInput(_spacesController.text.trim());
+    final spaces = _selectedSpaces.isNotEmpty
+        ? _selectedSpaces
+        : NotesParser.parseSpacesInput(_spacesController.text.trim());
 
     final combinedNotes = NotesParser.combineNotesAndMetadata(
       _notesController.text.trim(),
@@ -558,24 +585,197 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                       ),
                     ],
                     const SizedBox(height: 14),
-                    const Row(
+
+                    // Spaces & Sub-spaces Header
+                    Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Spaces & Sub-spaces',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        Row(
+                          children: [
+                            const Text(
+                              'Spaces & Sub-spaces',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            if (_selectedSpaces.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '${_selectedSpaces.length}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.deepPurple,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        TextButton.icon(
+                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                          icon: const Icon(Icons.tune, size: 16),
+                          label: const Text('Browse & Manage', style: TextStyle(fontSize: 12)),
+                          onPressed: _openSpacePicker,
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    TextField(
-                      controller: _spacesController,
-                      decoration: const InputDecoration(
-                        hintText: 'e.g. work: dev, ops | personal',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.rocket_launch_outlined, size: 18),
+
+                    // Interactive Spaces Box
+                    if (_selectedSpaces.isEmpty)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: _openSpacePicker,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: theme.colorScheme.outlineVariant),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.rocket_launch_outlined, size: 18, color: theme.hintColor),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Tap to assign spaces & sub-spaces (e.g. work › dev)',
+                                  style: TextStyle(color: theme.hintColor, fontSize: 13),
+                                ),
+                              ),
+                              Icon(Icons.arrow_drop_down, color: theme.hintColor),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.deepPurple.withValues(alpha: 0.03),
+                          border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.3)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ..._selectedSpaces.entries.map((entry) {
+                              final space = entry.key;
+                              final subs = entry.value;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.surface,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.rocket_launch, size: 14, color: Colors.deepPurpleAccent),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            space,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.deepPurple),
+                                          ),
+                                          const Spacer(),
+                                          InkWell(
+                                            onTap: () {
+                                              setState(() {
+                                                _selectedSpaces.remove(space);
+                                                _syncSpacesText();
+                                              });
+                                            },
+                                            child: Icon(Icons.close, size: 16, color: theme.hintColor),
+                                          ),
+                                        ],
+                                      ),
+                                      if (subs.isNotEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 4,
+                                          children: subs.map((sub) {
+                                            return Chip(
+                                              avatar: const Icon(Icons.subdirectory_arrow_right, size: 12, color: Colors.deepPurpleAccent),
+                                              visualDensity: VisualDensity.compact,
+                                              padding: EdgeInsets.zero,
+                                              labelPadding: const EdgeInsets.only(left: 2, right: 4),
+                                              backgroundColor: Colors.deepPurple.withValues(alpha: 0.08),
+                                              label: Text(sub, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                                              deleteIcon: const Icon(Icons.close, size: 12),
+                                              onDeleted: () {
+                                                setState(() {
+                                                  _selectedSpaces[space]!.remove(sub);
+                                                  _syncSpacesText();
+                                                });
+                                              },
+                                            );
+                                          }).toList(),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton.icon(
+                                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                                  icon: const Icon(Icons.add, size: 14),
+                                  label: const Text('Add / Edit More Spaces', style: TextStyle(fontSize: 11)),
+                                  onPressed: _openSpacePicker,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+
+                    // Quick suggestions from existing spaces
+                    if (provider.spacesWithCounts.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: provider.spacesWithCounts.keys.take(8).map((space) {
+                          final isSelected = _selectedSpaces.containsKey(space);
+                          final subsCount = provider.subspacesWithCounts[space]?.length ?? 0;
+                          return FilterChip(
+                            avatar: const Icon(Icons.rocket_launch, size: 12, color: Colors.deepPurpleAccent),
+                            label: Text(
+                              subsCount > 0 ? '$space ($subsCount subs)' : space,
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            selected: isSelected,
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedSpaces.putIfAbsent(space, () => []);
+                                } else {
+                                  _selectedSpaces.remove(space);
+                                }
+                                _syncSpacesText();
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ],
                   ],
                 ),
               ),

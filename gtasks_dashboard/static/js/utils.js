@@ -4,6 +4,39 @@
  */
 
 /**
+ * Escape HTML special characters for safe rendering in DOM
+ * @param {string} text - String to escape
+ * @returns {string} - Escaped string
+ */
+export function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+/**
+ * Escape string for safe insertion into inline JS function calls
+ * @param {string} str - String to escape
+ * @returns {string} - Escaped string
+ */
+export function escapeJsString(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"');
+}
+
+if (typeof window !== 'undefined') {
+    window.escapeHtml = escapeHtml;
+    window.escapeJsString = escapeJsString;
+}
+
+/**
  * Debounce function to limit how often a function can be called
  * @param {Function} func - The function to debounce
  * @param {number} wait - The number of milliseconds to wait

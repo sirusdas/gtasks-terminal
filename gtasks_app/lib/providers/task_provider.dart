@@ -811,6 +811,9 @@ class TaskProvider with ChangeNotifier {
     String? statusFilter,
     Set<String>? selectedLists,
     Set<String>? selectedTags,
+    String? selectedSpace,
+    String? selectedSubspace,
+    bool clearSpace = false,
     String? selectedPriority,
     bool clearPriority = false,
     Set<String>? hiddenLists,
@@ -825,6 +828,13 @@ class TaskProvider with ChangeNotifier {
     if (statusFilter != null) _statusFilter = statusFilter;
     if (selectedLists != null) _selectedLists = Set.from(selectedLists);
     if (selectedTags != null) _selectedTags = Set.from(selectedTags);
+    if (clearSpace) {
+      _selectedSpace = null;
+      _selectedSubspace = null;
+    } else if (selectedSpace != null) {
+      _selectedSpace = selectedSpace;
+      _selectedSubspace = selectedSubspace;
+    }
     if (clearPriority) {
       _selectedPriority = null;
     } else if (selectedPriority != null) {

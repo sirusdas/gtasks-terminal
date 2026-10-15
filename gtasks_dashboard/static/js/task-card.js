@@ -14,7 +14,7 @@ import {
     getPriorityIcon,
     getStatusClass,
     splitNotesAndTags
-} from './utils.js';
+} from './utils.js?v=45';
 
 /**
  * Create a task card element

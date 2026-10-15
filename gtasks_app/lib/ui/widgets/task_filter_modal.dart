@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
 import 'searchable_multiselect_modal.dart';
+import 'searchable_space_picker_modal.dart';
 
 class TaskFilterModal extends StatefulWidget {
   const TaskFilterModal({super.key});
@@ -15,6 +16,8 @@ class _TaskFilterModalState extends State<TaskFilterModal> {
   String? _selectedPriority;
   late Set<String> _selectedLists;
   late Set<String> _selectedTags;
+  String? _selectedSpace;
+  String? _selectedSubspace;
   late Set<String> _hiddenLists;
   late Set<String> _hiddenTags;
   late bool _hideRecurring;
@@ -31,6 +34,8 @@ class _TaskFilterModalState extends State<TaskFilterModal> {
     _selectedPriority = p.selectedPriority;
     _selectedLists = Set.from(p.selectedLists);
     _selectedTags = Set.from(p.selectedTags);
+    _selectedSpace = p.selectedSpace;
+    _selectedSubspace = p.selectedSubspace;
     _hiddenLists = Set.from(p.hiddenLists);
     _hiddenTags = Set.from(p.hiddenTags);
     _hideRecurring = p.hideRecurring;
@@ -176,6 +181,124 @@ class _TaskFilterModalState extends State<TaskFilterModal> {
     );
   }
 
+  Widget _buildSpaceFilterCard({
+    required BuildContext context,
+    required Map<String, int> spacesWithCounts,
+    required Map<String, Map<String, int>> subspacesWithCounts,
+  }) {
+    final theme = Theme.of(context);
+    final hasSpace = _selectedSpace != null;
+    final displayLabel = hasSpace
+        ? (_selectedSubspace != null ? '$_selectedSpace › $_selectedSubspace' : _selectedSpace!)
+        : 'All Spaces';
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: hasSpace
+              ? Colors.deepPurpleAccent.withValues(alpha: 0.5)
+              : theme.colorScheme.outlineVariant,
+        ),
+        borderRadius: BorderRadius.circular(10),
+        color: hasSpace ? Colors.deepPurpleAccent.withValues(alpha: 0.04) : null,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () async {
+            final initial = <String, List<String>>{};
+            if (_selectedSpace != null) {
+              initial[_selectedSpace!] = _selectedSubspace != null ? [_selectedSubspace!] : [];
+            }
+            final result = await SearchableSpacePickerModal.show(
+              context: context,
+              spacesWithCounts: spacesWithCounts,
+              subspacesWithCounts: subspacesWithCounts,
+              initialSelected: initial,
+              isSingleSelect: true,
+            );
+            if (result != null) {
+              setState(() {
+                if (result.isEmpty) {
+                  _selectedSpace = null;
+                  _selectedSubspace = null;
+                } else {
+                  final sp = result.keys.first;
+                  final subs = result[sp] ?? [];
+                  _selectedSpace = sp;
+                  _selectedSubspace = subs.isNotEmpty ? subs.first : null;
+                }
+              });
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.rocket_launch,
+                      size: 18,
+                      color: hasSpace ? Colors.deepPurpleAccent : theme.hintColor,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Filter by Space & Sub-space',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: hasSpace ? Colors.deepPurpleAccent : theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        displayLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: hasSpace ? Colors.white : theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.arrow_drop_down, size: 20),
+                  ],
+                ),
+                if (hasSpace) ...[
+                  const SizedBox(height: 8),
+                  Chip(
+                    avatar: const Icon(Icons.rocket_launch, size: 12, color: Colors.deepPurpleAccent),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                    label: Text(
+                      displayLabel,
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                    ),
+                    backgroundColor: Colors.deepPurple.withValues(alpha: 0.12),
+                    deleteIcon: const Icon(Icons.close, size: 12),
+                    onDeleted: () {
+                      setState(() {
+                        _selectedSpace = null;
+                        _selectedSubspace = null;
+                      });
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TaskProvider>();
@@ -219,6 +342,8 @@ class _TaskFilterModalState extends State<TaskFilterModal> {
                           _selectedPriority = null;
                           _selectedLists.clear();
                           _selectedTags.clear();
+                          _selectedSpace = null;
+                          _selectedSubspace = null;
                           _hiddenLists.clear();
                           _hiddenTags.clear();
                           _hideRecurring = false;
@@ -324,6 +449,15 @@ class _TaskFilterModalState extends State<TaskFilterModal> {
                       isExclusion: false,
                       isTag: true,
                       onSelectionChanged: (res) => setState(() => _selectedTags = res),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // 3. Filter by Spaces & Sub-spaces
+                    _buildSpaceFilterCard(
+                      context: context,
+                      spacesWithCounts: provider.spacesWithCounts,
+                      subspacesWithCounts: provider.subspacesWithCounts,
                     ),
 
                     const SizedBox(height: 16),
@@ -495,6 +629,9 @@ class _TaskFilterModalState extends State<TaskFilterModal> {
                         statusFilter: _status,
                         selectedLists: _selectedLists,
                         selectedTags: _selectedTags,
+                        selectedSpace: _selectedSpace,
+                        selectedSubspace: _selectedSubspace,
+                        clearSpace: _selectedSpace == null,
                         selectedPriority: _selectedPriority,
                         clearPriority: _selectedPriority == null,
                         hiddenLists: _hiddenLists,
