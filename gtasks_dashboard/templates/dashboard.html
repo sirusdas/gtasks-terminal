@@ -1175,12 +1175,21 @@
                     </div>
                     <div id="edit-task-tags-container" class="task-tags-selector-wrapper"></div>
                 </div>
-                <div class="edit-form-group edit-spaces-group">
-                    <div class="edit-tags-header">
-                        <label><i class="fas fa-layer-group" style="color: #6366f1;"></i> Spaces & Sub-spaces (Super-Tags)</label>
-                        <span class="tags-hint">Search, select, or type new (format: space or space:subspace)</span>
+                <div class="edit-form-row edit-spaces-row">
+                    <div class="edit-form-group edit-spaces-group">
+                        <div class="edit-tags-header">
+                            <label><i class="fas fa-layer-group" style="color: #6366f1;"></i> Space</label>
+                            <span class="tags-hint">Super-Tag (e.g. work, personal)</span>
+                        </div>
+                        <div id="edit-task-spaces-container" class="task-tags-selector-wrapper"></div>
                     </div>
-                    <div id="edit-task-spaces-container" class="task-tags-selector-wrapper"></div>
+                    <div class="edit-form-group edit-subspaces-group">
+                        <div class="edit-tags-header">
+                            <label><i class="fas fa-sitemap" style="color: #8b5cf6;"></i> Sub-space</label>
+                            <span class="tags-hint">Context under space (e.g. frontend)</span>
+                        </div>
+                        <div id="edit-task-subspaces-container" class="task-tags-selector-wrapper"></div>
+                    </div>
                 </div>
                 <div class="edit-form-group edit-notes-group">
                     <div class="edit-notes-header">
@@ -1270,12 +1279,21 @@
                     </div>
                     <div id="add-task-tags-container" class="task-tags-selector-wrapper"></div>
                 </div>
-                <div class="edit-form-group edit-spaces-group">
-                    <div class="edit-tags-header">
-                        <label><i class="fas fa-layer-group" style="color: #6366f1;"></i> Spaces & Sub-spaces (Super-Tags)</label>
-                        <span class="tags-hint">Search, select, or type new (format: space or space:subspace)</span>
+                <div class="edit-form-row edit-spaces-row">
+                    <div class="edit-form-group edit-spaces-group">
+                        <div class="edit-tags-header">
+                            <label><i class="fas fa-layer-group" style="color: #6366f1;"></i> Space</label>
+                            <span class="tags-hint">Super-Tag (e.g. work, personal)</span>
+                        </div>
+                        <div id="add-task-spaces-container" class="task-tags-selector-wrapper"></div>
                     </div>
-                    <div id="add-task-spaces-container" class="task-tags-selector-wrapper"></div>
+                    <div class="edit-form-group edit-subspaces-group">
+                        <div class="edit-tags-header">
+                            <label><i class="fas fa-sitemap" style="color: #8b5cf6;"></i> Sub-space</label>
+                            <span class="tags-hint">Context under space (e.g. frontend)</span>
+                        </div>
+                        <div id="add-task-subspaces-container" class="task-tags-selector-wrapper"></div>
+                    </div>
                 </div>
                 <div class="edit-form-group edit-notes-group">
                     <div class="edit-notes-header">
@@ -1526,10 +1544,10 @@
         <p>Loading...</p>
     </div>
 
-    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=43"></script>
-    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=43"></script>
-    <script type="module" src="{{ base_path }}/static/js/reports.js?v=43"></script>
-    <script type="module" src="{{ base_path }}/static/js/notifications.js?v=43"></script>
-    <script type="module" src="{{ base_path }}/static/js/debugger.js?v=43"></script>
+    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=44"></script>
+    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=44"></script>
+    <script type="module" src="{{ base_path }}/static/js/reports.js?v=44"></script>
+    <script type="module" src="{{ base_path }}/static/js/notifications.js?v=44"></script>
+    <script type="module" src="{{ base_path }}/static/js/debugger.js?v=44"></script>
 </body>
 </html>

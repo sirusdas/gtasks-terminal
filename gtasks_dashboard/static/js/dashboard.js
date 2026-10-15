@@ -1180,6 +1180,53 @@ export function getFlatSpacesAndSubspacesWithCounts(tasks) {
 }
 
 /**
+ * Convert spaces hierarchy to unique space options for multiselect
+ * @param {Array} tasks
+ * @returns {Array}
+ */
+export function getUniqueSpacesWithCounts(tasks) {
+    const spacesHierarchy = getSpacesWithCounts(tasks);
+    return spacesHierarchy.map(sp => ({
+        value: sp.label,
+        label: sp.label,
+        count: sp.count,
+        type: 'space'
+    }));
+}
+
+/**
+ * Convert spaces hierarchy to unique sub-space options, optionally filtered by active parent spaces
+ * @param {Array} tasks
+ * @param {Array<string>|null} filterSpaces
+ * @returns {Array}
+ */
+export function getUniqueSubspacesWithCounts(tasks, filterSpaces = null) {
+    const spacesHierarchy = getSpacesWithCounts(tasks);
+    const options = [];
+    const filterSet = (filterSpaces && Array.isArray(filterSpaces) && filterSpaces.length > 0)
+        ? new Set(filterSpaces.map(s => String(s).toLowerCase()))
+        : null;
+
+    spacesHierarchy.forEach(sp => {
+        if (filterSet && !filterSet.has(sp.label.toLowerCase())) {
+            return;
+        }
+        (sp.subspaces || []).forEach(sub => {
+            options.push({
+                value: `${sp.label}:${sub.label}`,
+                label: `${sp.label} › ${sub.label}`,
+                space: sp.label,
+                sub: sub.label,
+                count: sub.count,
+                type: 'subspace'
+            });
+        });
+    });
+    return options;
+}
+
+
+/**
  * Convert spaces object to multiselect values array: ['spa:sub1', 'spa2']
  * @param {Object} spaces
  * @returns {Array<string>}
@@ -2888,23 +2935,27 @@ window.saveNewTask = saveNewTask;
 window.onAddAccountChange = onAddAccountChange;
 window.switchAddNotesTab = switchAddNotesTab;
 
-// Tag and Space Multiselect instances for Add and Edit modals
+// Tag, Space, and Sub-space Multiselect instances for Add and Edit modals
 let addTaskTagsMultiselect = null;
 let editTaskTagsMultiselect = null;
 let addTaskSpacesMultiselect = null;
 let editTaskSpacesMultiselect = null;
+let addTaskSubspacesMultiselect = null;
+let editTaskSubspacesMultiselect = null;
 
 export function initModalTagSelectors() {
     const tasks = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
     const allTags = getTagsWithCounts(tasks);
-    const allSpaces = getFlatSpacesAndSubspacesWithCounts(tasks);
+    const allSpaces = getUniqueSpacesWithCounts(tasks);
+    const allSubspaces = getUniqueSubspacesWithCounts(tasks, []);
 
+    // 1. Tags Selectors
     const addContainer = document.getElementById('add-task-tags-container');
     if (addContainer && !addTaskTagsMultiselect) {
         addContainer.innerHTML = '';
         addTaskTagsMultiselect = createMultiselect({
             id: 'add-task-tags',
-            placeholder: 'Type tag & press Enter, or browse...',
+            placeholder: 'Click to browse or add tags...',
             options: allTags,
             initialValues: [],
             allowAddNew: true,
@@ -2919,7 +2970,7 @@ export function initModalTagSelectors() {
         editContainer.innerHTML = '';
         editTaskTagsMultiselect = createMultiselect({
             id: 'edit-task-tags',
-            placeholder: 'Type tag & press Enter, or browse...',
+            placeholder: 'Click to browse or add tags...',
             options: allTags,
             initialValues: [],
             allowAddNew: true,
@@ -2929,16 +2980,31 @@ export function initModalTagSelectors() {
         editContainer.appendChild(editTaskTagsMultiselect);
     }
 
+    // 2. Spaces Selectors (Connected with Sub-spaces)
     const addSpacesContainer = document.getElementById('add-task-spaces-container');
     if (addSpacesContainer && !addTaskSpacesMultiselect) {
         addSpacesContainer.innerHTML = '';
         addTaskSpacesMultiselect = createMultiselect({
             id: 'add-task-spaces',
-            placeholder: 'Type space or space:subspace & press Enter...',
+            placeholder: 'Click to browse or add spaces...',
             options: allSpaces,
             initialValues: [],
             allowAddNew: true,
-            showCounts: true
+            showCounts: true,
+            onChange: (selectedSpaces) => {
+                if (addTaskSubspacesMultiselect) {
+                    const currentSubs = addTaskSubspacesMultiselect.getSelectedValues();
+                    const filteredSubs = currentSubs.filter(subVal => {
+                        const spa = subVal.includes(':') ? subVal.split(':')[0] : null;
+                        return !spa || selectedSpaces.includes(spa);
+                    });
+                    if (filteredSubs.length !== currentSubs.length) {
+                        addTaskSubspacesMultiselect.setSelectedValues(filteredSubs);
+                    }
+                    const tasksNow = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
+                    addTaskSubspacesMultiselect.setOptions(getUniqueSubspacesWithCounts(tasksNow, selectedSpaces));
+                }
+            }
         });
         addSpacesContainer.appendChild(addTaskSpacesMultiselect);
     }
@@ -2948,13 +3014,96 @@ export function initModalTagSelectors() {
         editSpacesContainer.innerHTML = '';
         editTaskSpacesMultiselect = createMultiselect({
             id: 'edit-task-spaces',
-            placeholder: 'Type space or space:subspace & press Enter...',
+            placeholder: 'Click to browse or add spaces...',
             options: allSpaces,
             initialValues: [],
             allowAddNew: true,
-            showCounts: true
+            showCounts: true,
+            onChange: (selectedSpaces) => {
+                if (editTaskSubspacesMultiselect) {
+                    const currentSubs = editTaskSubspacesMultiselect.getSelectedValues();
+                    const filteredSubs = currentSubs.filter(subVal => {
+                        const spa = subVal.includes(':') ? subVal.split(':')[0] : null;
+                        return !spa || selectedSpaces.includes(spa);
+                    });
+                    if (filteredSubs.length !== currentSubs.length) {
+                        editTaskSubspacesMultiselect.setSelectedValues(filteredSubs);
+                    }
+                    const tasksNow = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
+                    editTaskSubspacesMultiselect.setOptions(getUniqueSubspacesWithCounts(tasksNow, selectedSpaces));
+                }
+            }
         });
         editSpacesContainer.appendChild(editTaskSpacesMultiselect);
+    }
+
+    // 3. Sub-spaces Selectors (Connected with Spaces)
+    const addSubspacesContainer = document.getElementById('add-task-subspaces-container');
+    if (addSubspacesContainer && !addTaskSubspacesMultiselect) {
+        addSubspacesContainer.innerHTML = '';
+        addTaskSubspacesMultiselect = createMultiselect({
+            id: 'add-task-subspaces',
+            placeholder: 'Click to browse sub-spaces...',
+            options: allSubspaces,
+            initialValues: [],
+            allowAddNew: true,
+            showCounts: true,
+            getParentSpaces: () => addTaskSpacesMultiselect ? addTaskSpacesMultiselect.getSelectedValues() : [],
+            onChange: (selectedSubspaces) => {
+                if (addTaskSpacesMultiselect) {
+                    const currentSpaces = addTaskSpacesMultiselect.getSelectedValues();
+                    let spacesChanged = false;
+                    const updatedSpaces = [...currentSpaces];
+                    selectedSubspaces.forEach(subVal => {
+                        if (subVal.includes(':')) {
+                            const spa = subVal.split(':')[0];
+                            if (spa && !updatedSpaces.includes(spa)) {
+                                updatedSpaces.push(spa);
+                                spacesChanged = true;
+                            }
+                        }
+                    });
+                    if (spacesChanged) {
+                        addTaskSpacesMultiselect.setSelectedValues(updatedSpaces);
+                    }
+                }
+            }
+        });
+        addSubspacesContainer.appendChild(addTaskSubspacesMultiselect);
+    }
+
+    const editSubspacesContainer = document.getElementById('edit-task-subspaces-container');
+    if (editSubspacesContainer && !editTaskSubspacesMultiselect) {
+        editSubspacesContainer.innerHTML = '';
+        editTaskSubspacesMultiselect = createMultiselect({
+            id: 'edit-task-subspaces',
+            placeholder: 'Click to browse sub-spaces...',
+            options: allSubspaces,
+            initialValues: [],
+            allowAddNew: true,
+            showCounts: true,
+            getParentSpaces: () => editTaskSpacesMultiselect ? editTaskSpacesMultiselect.getSelectedValues() : [],
+            onChange: (selectedSubspaces) => {
+                if (editTaskSpacesMultiselect) {
+                    const currentSpaces = editTaskSpacesMultiselect.getSelectedValues();
+                    let spacesChanged = false;
+                    const updatedSpaces = [...currentSpaces];
+                    selectedSubspaces.forEach(subVal => {
+                        if (subVal.includes(':')) {
+                            const spa = subVal.split(':')[0];
+                            if (spa && !updatedSpaces.includes(spa)) {
+                                updatedSpaces.push(spa);
+                                spacesChanged = true;
+                            }
+                        }
+                    });
+                    if (spacesChanged) {
+                        editTaskSpacesMultiselect.setSelectedValues(updatedSpaces);
+                    }
+                }
+            }
+        });
+        editSubspacesContainer.appendChild(editTaskSubspacesMultiselect);
     }
 }
 
@@ -2965,10 +3114,8 @@ function openAddModal() {
     document.getElementById('add-task-status').value = 'pending';
     document.getElementById('add-task-due').value = '';
     document.getElementById('add-task-notes').value = '';
-    const addSpacesEl = document.getElementById('add-task-spaces');
-    if (addSpacesEl) addSpacesEl.value = '';
 
-    // Initialize or refresh tags and spaces multiselect
+    // Initialize or refresh tags, spaces, and sub-spaces multiselect
     initModalTagSelectors();
     const tasks = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
     if (addTaskTagsMultiselect) {
@@ -2976,8 +3123,12 @@ function openAddModal() {
         addTaskTagsMultiselect.clear();
     }
     if (addTaskSpacesMultiselect) {
-        addTaskSpacesMultiselect.setOptions(getFlatSpacesAndSubspacesWithCounts(tasks));
+        addTaskSpacesMultiselect.setOptions(getUniqueSpacesWithCounts(tasks));
         addTaskSpacesMultiselect.clear();
+    }
+    if (addTaskSubspacesMultiselect) {
+        addTaskSubspacesMultiselect.setOptions(getUniqueSubspacesWithCounts(tasks, []));
+        addTaskSubspacesMultiselect.clear();
     }
 
     // Populate Account select
@@ -3112,8 +3263,10 @@ async function saveNewTask() {
     const cleanNotesInput = document.getElementById('add-task-notes').value;
     const selectedTags = addTaskTagsMultiselect ? addTaskTagsMultiselect.getSelectedValues() : [];
     let parsedSpaces = {};
-    if (addTaskSpacesMultiselect) {
-        parsedSpaces = multiselectValuesToSpacesObject(addTaskSpacesMultiselect.getSelectedValues());
+    if (addTaskSpacesMultiselect || addTaskSubspacesMultiselect) {
+        const selectedSpaces = addTaskSpacesMultiselect ? addTaskSpacesMultiselect.getSelectedValues() : [];
+        const selectedSubspaces = addTaskSubspacesMultiselect ? addTaskSubspacesMultiselect.getSelectedValues() : [];
+        parsedSpaces = multiselectValuesToSpacesObject([...selectedSpaces, ...selectedSubspaces]);
     } else {
         const spacesInput = document.getElementById('add-task-spaces')?.value || '';
         parsedSpaces = parseSpacesInput(spacesInput);
@@ -3212,10 +3365,26 @@ function openEditModal(taskId) {
         editTaskTagsMultiselect.setSelectedValues(Array.from(activeTags));
     }
 
+    const activeSpacesList = Object.keys(taskSpaces || {});
+    const activeSubspacesList = [];
+    if (taskSpaces && typeof taskSpaces === 'object') {
+        Object.entries(taskSpaces).forEach(([spa, subs]) => {
+            if (Array.isArray(subs)) {
+                subs.forEach(sub => {
+                    activeSubspacesList.push(`${spa}:${sub}`);
+                });
+            }
+        });
+    }
+
     if (editTaskSpacesMultiselect) {
-        const allSpaces = getFlatSpacesAndSubspacesWithCounts(tasks);
-        editTaskSpacesMultiselect.setOptions(allSpaces);
-        editTaskSpacesMultiselect.setSelectedValues(spacesObjectToMultiselectValues(taskSpaces));
+        editTaskSpacesMultiselect.setOptions(getUniqueSpacesWithCounts(tasks));
+        editTaskSpacesMultiselect.setSelectedValues(activeSpacesList);
+    }
+
+    if (editTaskSubspacesMultiselect) {
+        editTaskSubspacesMultiselect.setOptions(getUniqueSubspacesWithCounts(tasks, activeSpacesList));
+        editTaskSubspacesMultiselect.setSelectedValues(activeSubspacesList);
     }
 
     // Populate list dropdown with all available lists
@@ -3273,8 +3442,10 @@ async function saveTaskEdit() {
     const cleanNotesInput = document.getElementById('edit-task-notes').value;
     const selectedTags = editTaskTagsMultiselect ? editTaskTagsMultiselect.getSelectedValues() : [];
     let parsedSpaces = {};
-    if (editTaskSpacesMultiselect) {
-        parsedSpaces = multiselectValuesToSpacesObject(editTaskSpacesMultiselect.getSelectedValues());
+    if (editTaskSpacesMultiselect || editTaskSubspacesMultiselect) {
+        const selectedSpaces = editTaskSpacesMultiselect ? editTaskSpacesMultiselect.getSelectedValues() : [];
+        const selectedSubspaces = editTaskSubspacesMultiselect ? editTaskSubspacesMultiselect.getSelectedValues() : [];
+        parsedSpaces = multiselectValuesToSpacesObject([...selectedSpaces, ...selectedSubspaces]);
     } else {
         const spacesInput = document.getElementById('edit-task-spaces')?.value || '';
         parsedSpaces = parseSpacesInput(spacesInput);
@@ -3871,6 +4042,8 @@ window.updateFullscreenIcons = updateFullscreenIcons;
 window.toggleModalFullscreen = toggleModalFullscreen;
 window.initModalTagSelectors = initModalTagSelectors;
 window.getFlatSpacesAndSubspacesWithCounts = getFlatSpacesAndSubspacesWithCounts;
+window.getUniqueSpacesWithCounts = getUniqueSpacesWithCounts;
+window.getUniqueSubspacesWithCounts = getUniqueSubspacesWithCounts;
 window.spacesObjectToMultiselectValues = spacesObjectToMultiselectValues;
 window.multiselectValuesToSpacesObject = multiselectValuesToSpacesObject;
 
@@ -3914,6 +4087,8 @@ export default {
     toggleModalFullscreen,
     initModalTagSelectors,
     getFlatSpacesAndSubspacesWithCounts,
+    getUniqueSpacesWithCounts,
+    getUniqueSubspacesWithCounts,
     spacesObjectToMultiselectValues,
     multiselectValuesToSpacesObject,
     populateSidebarTasksSubmenu,

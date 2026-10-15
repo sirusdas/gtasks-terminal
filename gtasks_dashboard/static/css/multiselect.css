@@ -101,6 +101,49 @@
     background: rgba(251, 191, 36, 0.3);
 }
 
+/* Space & Sub-space specific tag chips */
+.multiselect-tag-space {
+    background: #e0e7ff !important;
+    color: #4338ca !important;
+    border: 1px solid #c7d2fe !important;
+    font-weight: 600 !important;
+}
+
+.dark-mode .multiselect-tag-space {
+    background: rgba(99, 102, 241, 0.22) !important;
+    color: #c7d2fe !important;
+    border-color: rgba(99, 102, 241, 0.4) !important;
+}
+
+.multiselect-tag-space .multiselect-remove {
+    color: #4338ca !important;
+}
+
+.dark-mode .multiselect-tag-space .multiselect-remove {
+    color: #c7d2fe !important;
+}
+
+.multiselect-tag-subspace {
+    background: #ede9fe !important;
+    color: #6d28d9 !important;
+    border: 1px solid #ddd6fe !important;
+    font-weight: 600 !important;
+}
+
+.dark-mode .multiselect-tag-subspace {
+    background: rgba(139, 92, 246, 0.22) !important;
+    color: #ddd6fe !important;
+    border-color: rgba(139, 92, 246, 0.4) !important;
+}
+
+.multiselect-tag-subspace .multiselect-remove {
+    color: #6d28d9 !important;
+}
+
+.dark-mode .multiselect-tag-subspace .multiselect-remove {
+    color: #ddd6fe !important;
+}
+
 /* Input trigger wrapper */
 .multiselect-input-wrapper {
     position: relative;
@@ -186,7 +229,7 @@ body.multiselect-modal-open {
     bottom: 0;
     width: 100vw;
     height: 100vh;
-    z-index: 2500;
+    z-index: 3500;
     display: flex;
     align-items: center;
     justify-content: center;

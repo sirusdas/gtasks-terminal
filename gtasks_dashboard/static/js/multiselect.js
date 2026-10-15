@@ -28,7 +28,8 @@ export function createMultiselect(config) {
         showCounts = false,
         title = '',
         allowAddNew = false,
-        tagFormat = 'hash' // 'hash' for #tag or 'bracket' for [tag]
+        tagFormat = 'hash', // 'hash' for #tag or 'bracket' for [tag]
+        getParentSpaces = null // Function returning array of selected parent spaces for context
     } = config;
 
     // Filter metadata mapping for rich headers, icons, and subtitles
@@ -65,27 +66,39 @@ export function createMultiselect(config) {
         },
         'add-task-tags': {
             title: 'Task Tags',
-            subtitle: 'Select existing tags or create new tags',
+            subtitle: 'Select existing tags or type to create new tags',
             icon: 'fas fa-tags',
             type: 'tag'
         },
         'edit-task-tags': {
             title: 'Task Tags',
-            subtitle: 'Select existing tags or create new tags',
+            subtitle: 'Select existing tags or type to create new tags',
             icon: 'fas fa-tags',
             type: 'tag'
         },
         'add-task-spaces': {
-            title: 'Spaces & Sub-spaces',
-            subtitle: 'Select spaces or type to add (format: space or space:subspace)',
+            title: 'Spaces (Super-Tags)',
+            subtitle: 'Select spaces or type to create a new space (e.g. work, personal)',
             icon: 'fas fa-layer-group',
             type: 'space'
         },
         'edit-task-spaces': {
-            title: 'Spaces & Sub-spaces',
-            subtitle: 'Select spaces or type to add (format: space or space:subspace)',
+            title: 'Spaces (Super-Tags)',
+            subtitle: 'Select spaces or type to create a new space (e.g. work, personal)',
             icon: 'fas fa-layer-group',
             type: 'space'
+        },
+        'add-task-subspaces': {
+            title: 'Sub-spaces',
+            subtitle: 'Select sub-spaces or type to create a new sub-space',
+            icon: 'fas fa-sitemap',
+            type: 'subspace'
+        },
+        'edit-task-subspaces': {
+            title: 'Sub-spaces',
+            subtitle: 'Select sub-spaces or type to create a new sub-space',
+            icon: 'fas fa-sitemap',
+            type: 'subspace'
         }
     };
 
@@ -156,7 +169,7 @@ export function createMultiselect(config) {
         if (found && typeof found === 'object') {
             return found.label;
         }
-        if (meta.type === 'space' && String(val).includes(':')) {
+        if ((meta.type === 'space' || meta.type === 'subspace') && String(val).includes(':')) {
             const [s, sub] = String(val).split(':', 2);
             return `${s} › ${sub}`;
         }
@@ -173,25 +186,27 @@ export function createMultiselect(config) {
             triggerInput.placeholder = placeholder;
         } else {
             selectionArea.style.display = 'flex';
-            triggerInput.placeholder = `${selectedValues.length} selected — click to edit`;
+            triggerInput.placeholder = `${selectedValues.length} selected — click to change`;
 
             selectedValues.forEach(value => {
                 const tag = document.createElement('span');
                 tag.className = 'multiselect-tag';
-                if (meta.type === 'space') {
+                let prefix = '';
+                if (meta.type === 'subspace') {
+                    tag.classList.add('multiselect-tag-subspace');
+                    tag.style.cssText = 'background: rgba(139, 92, 246, 0.12); color: #6d28d9; border: 1px solid rgba(139, 92, 246, 0.28); font-weight: 500;';
+                    prefix = '<i class="fas fa-sitemap" style="margin-right: 4px; font-size: 0.75rem; color: #8b5cf6;"></i>';
+                } else if (meta.type === 'space') {
                     tag.classList.add('multiselect-tag-space');
                     tag.style.cssText = 'background: rgba(99, 102, 241, 0.12); color: #4338ca; border: 1px solid rgba(99, 102, 241, 0.28); font-weight: 500;';
-                }
-                const displayLabel = getOptionLabel(value);
-                let prefix = '';
-                if (meta.type === 'space') {
                     prefix = '<i class="fas fa-layer-group" style="margin-right: 4px; font-size: 0.75rem; color: #6366f1;"></i>';
                 } else if (tagFormat === 'bracket') {
                     prefix = '[';
                 } else if (meta.type === 'tag') {
                     prefix = '#';
                 }
-                const suffix = (meta.type !== 'space' && tagFormat === 'bracket') ? ']' : '';
+                const suffix = (meta.type !== 'space' && meta.type !== 'subspace' && tagFormat === 'bracket') ? ']' : '';
+                const displayLabel = getOptionLabel(value);
                 tag.innerHTML = `
                     <span class="multiselect-tag-label">${prefix}${escapeHtml(displayLabel)}${suffix}</span>
                     <button type="button" class="multiselect-remove" data-value="${escapeHtml(String(value))}" title="Remove">&times;</button>
@@ -323,19 +338,22 @@ export function createMultiselect(config) {
         }
     }
 
-    // Helper to add a new custom tag or space
+    // Helper to add a new custom tag, space, or sub-space
     function addNewTag(newTag) {
         let clean = newTag.trim();
-        if (meta.type === 'space') {
+        if (meta.type === 'subspace') {
+            clean = clean.replace(/[{}\(\)]/g, '').replace(/^sub::/i, '').trim();
+            const parentSpaces = typeof getParentSpaces === 'function' ? getParentSpaces() : [];
+            if (!clean.includes(':') && parentSpaces.length > 0) {
+                clean = `${parentSpaces[0]}:${clean}`;
+            }
+        } else if (meta.type === 'space') {
             clean = clean.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').trim();
             if (clean.includes(':')) {
-                const [spa, sub] = clean.split(':', 2);
-                const cleanSpa = spa.trim().replace(/^spa::/i, '');
-                const cleanSub = sub.trim().replace(/^sub::/i, '');
-                clean = cleanSub ? `${cleanSpa}:${cleanSub}` : cleanSpa;
+                clean = clean.split(':')[0].trim();
             }
         } else {
-            clean = clean.toLowerCase().replace(/^\[|\]$/g, '').replace(/^#/, '');
+            clean = clean.toLowerCase().replace(/^\[|\]$/g, '').replace(/^#/, '').trim();
         }
         if (!clean) return;
         const exists = currentOptions.some(opt => {
@@ -344,16 +362,22 @@ export function createMultiselect(config) {
         });
         if (!exists) {
             let label = clean;
-            if (meta.type === 'space' && clean.includes(':')) {
+            if (clean.includes(':')) {
                 const [s, sub] = clean.split(':', 2);
                 label = `${s} › ${sub}`;
             }
-            currentOptions.unshift({ label: label, value: clean, count: 0, type: meta.type === 'space' ? (clean.includes(':') ? 'subspace' : 'space') : 'tag' });
+            currentOptions.unshift({
+                label: label,
+                value: clean,
+                count: 0,
+                type: meta.type
+            });
         }
         pendingSelections.add(clean);
         modalSearchInput.value = '';
         if (modalSearchClear) modalSearchClear.style.display = 'none';
         renderCards('');
+        updateModalStats(currentOptions.length, currentOptions.length);
     }
 
     // Render option cards in multi-column grid
@@ -361,21 +385,39 @@ export function createMultiselect(config) {
         const term = searchTerm.toLowerCase().trim();
         modalGrid.innerHTML = '';
 
-        const cleanTerm = meta.type === 'space'
-            ? term.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').trim()
+        const cleanTerm = (meta.type === 'space' || meta.type === 'subspace')
+            ? term.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').replace(/^sub::/i, '').trim()
             : term.replace(/^\[|\]$/g, '').replace(/^#/, '').trim();
         const exists = currentOptions.some(opt => {
             const l = (typeof opt === 'object' ? opt.value !== undefined ? opt.value : opt.label : opt);
             return String(l).toLowerCase() === cleanTerm.toLowerCase();
         });
 
-        // Add custom new tag/space card if allowAddNew is enabled and term is not empty and doesn't match an existing option
+        // Add custom new tag/space/sub-space card if allowAddNew is enabled and term is not empty and doesn't match an existing option
         if (allowAddNew && cleanTerm && !exists) {
             const addCard = document.createElement('div');
             addCard.className = 'multiselect-grid-card multiselect-card-add-new';
             addCard.style.cssText = 'border: 2px dashed #6366f1; background: rgba(99, 102, 241, 0.08); cursor: pointer; grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 10px; margin-bottom: 6px;';
-            const actionText = meta.type === 'space' ? 'Add new space/sub-space: ' : 'Add new tag: ';
-            const displayBadge = meta.type === 'space' ? (cleanTerm.includes(':') ? cleanTerm.replace(':', ' › ') : cleanTerm) : `[${cleanTerm}]`;
+            
+            let actionText = 'Add new tag: ';
+            let displayBadge = `[${cleanTerm}]`;
+            if (meta.type === 'space') {
+                actionText = 'Add new space: ';
+                displayBadge = cleanTerm;
+            } else if (meta.type === 'subspace') {
+                const parentSpaces = typeof getParentSpaces === 'function' ? getParentSpaces() : [];
+                if (!cleanTerm.includes(':') && parentSpaces.length > 0) {
+                    actionText = `Add new sub-space under "${parentSpaces[0]}": `;
+                    displayBadge = `${parentSpaces[0]} › ${cleanTerm}`;
+                } else if (cleanTerm.includes(':')) {
+                    actionText = 'Add new sub-space: ';
+                    displayBadge = cleanTerm.replace(':', ' › ');
+                } else {
+                    actionText = 'Add new sub-space: ';
+                    displayBadge = cleanTerm;
+                }
+            }
+
             addCard.innerHTML = `
                 <div style="width: 28px; height: 28px; border-radius: 50%; background: #6366f1; color: white; display: flex; align-items: center; justify-content: center; font-size: 0.85rem;">
                     <i class="fas fa-plus"></i>
@@ -416,12 +458,10 @@ export function createMultiselect(config) {
 
             // Prefix icon / symbol
             let prefixHtml = '';
-            if (meta.type === 'space') {
-                if (strVal.includes(':') || (typeof opt === 'object' && opt.type === 'subspace')) {
-                    prefixHtml = '<i class="fas fa-angle-right multiselect-card-prefix space-sub-ico" style="color:#818cf8; font-size: 0.8rem; margin-right: 4px;"></i>';
-                } else {
-                    prefixHtml = '<i class="fas fa-layer-group multiselect-card-prefix space-ico" style="color:#6366f1; font-size: 0.85rem;"></i>';
-                }
+            if (meta.type === 'subspace') {
+                prefixHtml = '<i class="fas fa-sitemap multiselect-card-prefix subspace-ico" style="color:#8b5cf6; font-size: 0.85rem; margin-right: 4px;"></i>';
+            } else if (meta.type === 'space') {
+                prefixHtml = '<i class="fas fa-layer-group multiselect-card-prefix space-ico" style="color:#6366f1; font-size: 0.85rem; margin-right: 4px;"></i>';
             } else if (tagFormat === 'bracket') {
                 prefixHtml = '<span class="multiselect-card-prefix tag-bracket-prefix" style="color:#6366f1;font-weight:700;font-family:monospace;font-size:0.85rem;">[ ]</span>';
             } else if (meta.type === 'tag') {
@@ -563,8 +603,8 @@ export function createMultiselect(config) {
         } else if (e.key === 'Enter' && e.target === modalSearchInput) {
             e.preventDefault();
             const term = modalSearchInput.value.trim();
-            const cleanTerm = meta.type === 'space'
-                ? term.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').trim()
+            const cleanTerm = (meta.type === 'space' || meta.type === 'subspace')
+                ? term.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').replace(/^sub::/i, '').trim()
                 : term.replace(/^\[|\]$/g, '').replace(/^#/, '').trim();
             if (allowAddNew && cleanTerm) {
                 addNewTag(cleanTerm);
@@ -574,57 +614,12 @@ export function createMultiselect(config) {
         }
     });
 
-    // Inline typing and browse button handling
-    if (allowAddNew) {
-        triggerInput.readOnly = false;
-        triggerInput.placeholder = placeholder || (meta.type === 'space' ? 'Search or add space:subspace...' : 'Search or add tags...');
-        triggerInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                e.stopPropagation();
-                let term = triggerInput.value.trim();
-                if (meta.type === 'space') {
-                    term = term.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').trim();
-                    if (term.includes(':')) {
-                        const [spa, sub] = term.split(':', 2);
-                        const cleanSpa = spa.trim().replace(/^spa::/i, '');
-                        const cleanSub = sub.trim().replace(/^sub::/i, '');
-                        term = cleanSub ? `${cleanSpa}:${cleanSub}` : cleanSpa;
-                    }
-                } else {
-                    term = term.toLowerCase().replace(/^\[|\]$/g, '').replace(/^#/, '');
-                }
-                if (term) {
-                    if (!selectedValues.includes(term)) {
-                        selectedValues.push(term);
-                        pendingSelections.add(term);
-                        if (!currentOptions.some(opt => (typeof opt === 'object' ? opt.value !== undefined ? opt.value : opt.label : opt).toLowerCase() === term.toLowerCase())) {
-                            let label = term;
-                            if (meta.type === 'space' && term.includes(':')) {
-                                const [s, sub] = term.split(':', 2);
-                                label = `${s} › ${sub}`;
-                            }
-                            currentOptions.unshift({ label: label, value: term, count: 0, type: meta.type === 'space' ? (term.includes(':') ? 'subspace' : 'space') : 'tag' });
-                        }
-                        updateDisplay();
-                        onChange(selectedValues);
-                    }
-                    triggerInput.value = '';
-                }
-            }
-        });
-        toggleBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openModal();
-        });
-    }
+    // Trigger input (acts as clickable browse field opening full-screen modal taking up the screen)
+    triggerInput.readOnly = true;
+    triggerInput.style.cursor = 'pointer';
 
-    // Form/drawer trigger clicks
     inputWrapper.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (allowAddNew && e.target === triggerInput) {
-            return;
-        }
         openModal();
     });
 
