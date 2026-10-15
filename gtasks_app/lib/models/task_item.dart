@@ -18,6 +18,7 @@ class TaskItem {
   final String? recurrenceType;
   final String cleanNotes;
   final List<String> allTags;
+  final String? formattedDueDate;
 
   TaskItem({
     required this.id,
@@ -37,7 +38,13 @@ class TaskItem {
     this.recurrenceType,
     String? cleanNotes,
     List<String>? allTags,
-  })  : cleanNotes = cleanNotes ?? NotesParser.splitNotesAndMetadata(description).cleanNotes,
+    String? formattedDueDate,
+  })  : formattedDueDate = formattedDueDate ??
+            (due != null ? (due.length > 10 ? due.substring(0, 10) : due) : null),
+        cleanNotes = cleanNotes ??
+            (allTags == null || spaces == null
+                ? NotesParser.splitNotesAndMetadata(description).cleanNotes
+                : NotesParser.splitNotesAndMetadata(description).cleanNotes),
         allTags = allTags ??
             (() {
               final extracted = NotesParser.splitNotesAndMetadata(description).tags;
@@ -83,22 +90,34 @@ class TaskItem {
       });
     }
 
+    final rawDescription = json['description']?.toString() ?? (json['notes']?.toString() ?? '');
+    final parsed = NotesParser.splitNotesAndMetadata(rawDescription);
+    for (final t in parsed.tags) {
+      tagSet.add(t);
+    }
+    final effectiveSpaces = parsedSpaces.isNotEmpty ? parsedSpaces : parsed.spaces;
+    final rawDue = json['due']?.toString();
+    final formattedDue = rawDue != null ? (rawDue.length > 10 ? rawDue.substring(0, 10) : rawDue) : null;
+
     return TaskItem(
       id: json['id']?.toString() ?? '',
       title: json['title']?.toString() ?? 'Untitled Task',
-      description: json['description']?.toString() ?? (json['notes']?.toString() ?? ''),
+      description: rawDescription,
       status: json['status']?.toString() ?? 'pending',
-      due: json['due']?.toString(),
+      due: rawDue,
       listId: json['list_id']?.toString() ?? json['tasklist_id']?.toString(),
       listTitle: json['list_title']?.toString() ?? json['list_name']?.toString(),
       account: json['account']?.toString() ?? 'default',
       tags: tagSet.toList(),
-      spaces: parsedSpaces.isNotEmpty ? parsedSpaces : null,
+      spaces: effectiveSpaces,
       calculatedPriority: json['calculated_priority']?.toString() ?? (json['priority']?.toString() ?? 'medium'),
       createdAt: json['created_at']?.toString() ?? json['created']?.toString(),
       completedAt: json['completed_at']?.toString() ?? json['completed']?.toString(),
       isRecurring: json['is_recurring'] == true || json['is_recurring'] == 1,
       recurrenceType: json['recurrence_type']?.toString(),
+      cleanNotes: parsed.cleanNotes,
+      allTags: tagSet.toList(),
+      formattedDueDate: formattedDue,
     );
   }
 

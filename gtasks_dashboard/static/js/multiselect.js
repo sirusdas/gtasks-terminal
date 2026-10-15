@@ -74,6 +74,18 @@ export function createMultiselect(config) {
             subtitle: 'Select existing tags or create new tags',
             icon: 'fas fa-tags',
             type: 'tag'
+        },
+        'add-task-spaces': {
+            title: 'Spaces & Sub-spaces',
+            subtitle: 'Select spaces or type to add (format: space or space:subspace)',
+            icon: 'fas fa-layer-group',
+            type: 'space'
+        },
+        'edit-task-spaces': {
+            title: 'Spaces & Sub-spaces',
+            subtitle: 'Select spaces or type to add (format: space or space:subspace)',
+            icon: 'fas fa-layer-group',
+            type: 'space'
         }
     };
 
@@ -144,6 +156,10 @@ export function createMultiselect(config) {
         if (found && typeof found === 'object') {
             return found.label;
         }
+        if (meta.type === 'space' && String(val).includes(':')) {
+            const [s, sub] = String(val).split(':', 2);
+            return `${s} › ${sub}`;
+        }
         return val;
     }
 
@@ -162,9 +178,20 @@ export function createMultiselect(config) {
             selectedValues.forEach(value => {
                 const tag = document.createElement('span');
                 tag.className = 'multiselect-tag';
+                if (meta.type === 'space') {
+                    tag.classList.add('multiselect-tag-space');
+                    tag.style.cssText = 'background: rgba(99, 102, 241, 0.12); color: #4338ca; border: 1px solid rgba(99, 102, 241, 0.28); font-weight: 500;';
+                }
                 const displayLabel = getOptionLabel(value);
-                const prefix = tagFormat === 'bracket' ? '[' : (meta.type === 'tag' ? '#' : '');
-                const suffix = tagFormat === 'bracket' ? ']' : '';
+                let prefix = '';
+                if (meta.type === 'space') {
+                    prefix = '<i class="fas fa-layer-group" style="margin-right: 4px; font-size: 0.75rem; color: #6366f1;"></i>';
+                } else if (tagFormat === 'bracket') {
+                    prefix = '[';
+                } else if (meta.type === 'tag') {
+                    prefix = '#';
+                }
+                const suffix = (meta.type !== 'space' && tagFormat === 'bracket') ? ']' : '';
                 tag.innerHTML = `
                     <span class="multiselect-tag-label">${prefix}${escapeHtml(displayLabel)}${suffix}</span>
                     <button type="button" class="multiselect-remove" data-value="${escapeHtml(String(value))}" title="Remove">&times;</button>
@@ -296,12 +323,32 @@ export function createMultiselect(config) {
         }
     }
 
-    // Helper to add a new custom tag
+    // Helper to add a new custom tag or space
     function addNewTag(newTag) {
-        const clean = newTag.trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/^#/, '');
+        let clean = newTag.trim();
+        if (meta.type === 'space') {
+            clean = clean.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').trim();
+            if (clean.includes(':')) {
+                const [spa, sub] = clean.split(':', 2);
+                const cleanSpa = spa.trim().replace(/^spa::/i, '');
+                const cleanSub = sub.trim().replace(/^sub::/i, '');
+                clean = cleanSub ? `${cleanSpa}:${cleanSub}` : cleanSpa;
+            }
+        } else {
+            clean = clean.toLowerCase().replace(/^\[|\]$/g, '').replace(/^#/, '');
+        }
         if (!clean) return;
-        if (!currentOptions.some(opt => (typeof opt === 'object' ? opt.value || opt.label : opt).toLowerCase() === clean)) {
-            currentOptions.unshift({ label: clean, value: clean, count: 0 });
+        const exists = currentOptions.some(opt => {
+            const l = (typeof opt === 'object' ? opt.value !== undefined ? opt.value : opt.label : opt);
+            return String(l).toLowerCase() === clean.toLowerCase();
+        });
+        if (!exists) {
+            let label = clean;
+            if (meta.type === 'space' && clean.includes(':')) {
+                const [s, sub] = clean.split(':', 2);
+                label = `${s} › ${sub}`;
+            }
+            currentOptions.unshift({ label: label, value: clean, count: 0, type: meta.type === 'space' ? (clean.includes(':') ? 'subspace' : 'space') : 'tag' });
         }
         pendingSelections.add(clean);
         modalSearchInput.value = '';
@@ -314,24 +361,28 @@ export function createMultiselect(config) {
         const term = searchTerm.toLowerCase().trim();
         modalGrid.innerHTML = '';
 
-        const cleanTerm = term.replace(/^\[|\]$/g, '').replace(/^#/, '').trim();
+        const cleanTerm = meta.type === 'space'
+            ? term.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').trim()
+            : term.replace(/^\[|\]$/g, '').replace(/^#/, '').trim();
         const exists = currentOptions.some(opt => {
-            const l = (typeof opt === 'object' ? opt.value || opt.label : opt).toLowerCase();
-            return l === cleanTerm;
+            const l = (typeof opt === 'object' ? opt.value !== undefined ? opt.value : opt.label : opt);
+            return String(l).toLowerCase() === cleanTerm.toLowerCase();
         });
 
-        // Add custom new tag card if allowAddNew is enabled and term is not empty and doesn't match an existing option
+        // Add custom new tag/space card if allowAddNew is enabled and term is not empty and doesn't match an existing option
         if (allowAddNew && cleanTerm && !exists) {
             const addCard = document.createElement('div');
             addCard.className = 'multiselect-grid-card multiselect-card-add-new';
             addCard.style.cssText = 'border: 2px dashed #6366f1; background: rgba(99, 102, 241, 0.08); cursor: pointer; grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 10px; margin-bottom: 6px;';
+            const actionText = meta.type === 'space' ? 'Add new space/sub-space: ' : 'Add new tag: ';
+            const displayBadge = meta.type === 'space' ? (cleanTerm.includes(':') ? cleanTerm.replace(':', ' › ') : cleanTerm) : `[${cleanTerm}]`;
             addCard.innerHTML = `
                 <div style="width: 28px; height: 28px; border-radius: 50%; background: #6366f1; color: white; display: flex; align-items: center; justify-content: center; font-size: 0.85rem;">
                     <i class="fas fa-plus"></i>
                 </div>
                 <div style="flex: 1;">
-                    <span style="color: #4f46e5; font-weight: 600; font-size: 0.92rem;">Add new tag: </span>
-                    <span style="background: rgba(99,102,241,0.18); color: #4338ca; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-family: monospace;">[${escapeHtml(cleanTerm)}]</span>
+                    <span style="color: #4f46e5; font-weight: 600; font-size: 0.92rem;">${escapeHtml(actionText)}</span>
+                    <span style="background: rgba(99,102,241,0.18); color: #4338ca; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-family: monospace;">${escapeHtml(displayBadge)}</span>
                 </div>
             `;
             addCard.addEventListener('click', () => {
@@ -365,7 +416,13 @@ export function createMultiselect(config) {
 
             // Prefix icon / symbol
             let prefixHtml = '';
-            if (tagFormat === 'bracket') {
+            if (meta.type === 'space') {
+                if (strVal.includes(':') || (typeof opt === 'object' && opt.type === 'subspace')) {
+                    prefixHtml = '<i class="fas fa-angle-right multiselect-card-prefix space-sub-ico" style="color:#818cf8; font-size: 0.8rem; margin-right: 4px;"></i>';
+                } else {
+                    prefixHtml = '<i class="fas fa-layer-group multiselect-card-prefix space-ico" style="color:#6366f1; font-size: 0.85rem;"></i>';
+                }
+            } else if (tagFormat === 'bracket') {
                 prefixHtml = '<span class="multiselect-card-prefix tag-bracket-prefix" style="color:#6366f1;font-weight:700;font-family:monospace;font-size:0.85rem;">[ ]</span>';
             } else if (meta.type === 'tag') {
                 prefixHtml = '<span class="multiselect-card-prefix hash-prefix">#</span>';
@@ -506,7 +563,9 @@ export function createMultiselect(config) {
         } else if (e.key === 'Enter' && e.target === modalSearchInput) {
             e.preventDefault();
             const term = modalSearchInput.value.trim();
-            const cleanTerm = term.replace(/^\[|\]$/g, '').replace(/^#/, '').trim();
+            const cleanTerm = meta.type === 'space'
+                ? term.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').trim()
+                : term.replace(/^\[|\]$/g, '').replace(/^#/, '').trim();
             if (allowAddNew && cleanTerm) {
                 addNewTag(cleanTerm);
             } else {
@@ -518,18 +577,34 @@ export function createMultiselect(config) {
     // Inline typing and browse button handling
     if (allowAddNew) {
         triggerInput.readOnly = false;
-        triggerInput.placeholder = placeholder || 'Search or add tags...';
+        triggerInput.placeholder = placeholder || (meta.type === 'space' ? 'Search or add space:subspace...' : 'Search or add tags...');
         triggerInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 e.stopPropagation();
-                const term = triggerInput.value.trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/^#/, '');
+                let term = triggerInput.value.trim();
+                if (meta.type === 'space') {
+                    term = term.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').trim();
+                    if (term.includes(':')) {
+                        const [spa, sub] = term.split(':', 2);
+                        const cleanSpa = spa.trim().replace(/^spa::/i, '');
+                        const cleanSub = sub.trim().replace(/^sub::/i, '');
+                        term = cleanSub ? `${cleanSpa}:${cleanSub}` : cleanSpa;
+                    }
+                } else {
+                    term = term.toLowerCase().replace(/^\[|\]$/g, '').replace(/^#/, '');
+                }
                 if (term) {
                     if (!selectedValues.includes(term)) {
                         selectedValues.push(term);
                         pendingSelections.add(term);
-                        if (!currentOptions.some(opt => (typeof opt === 'object' ? opt.value || opt.label : opt).toLowerCase() === term)) {
-                            currentOptions.unshift({ label: term, value: term, count: 0 });
+                        if (!currentOptions.some(opt => (typeof opt === 'object' ? opt.value !== undefined ? opt.value : opt.label : opt).toLowerCase() === term.toLowerCase())) {
+                            let label = term;
+                            if (meta.type === 'space' && term.includes(':')) {
+                                const [s, sub] = term.split(':', 2);
+                                label = `${s} › ${sub}`;
+                            }
+                            currentOptions.unshift({ label: label, value: term, count: 0, type: meta.type === 'space' ? (term.includes(':') ? 'subspace' : 'space') : 'tag' });
                         }
                         updateDisplay();
                         onChange(selectedValues);

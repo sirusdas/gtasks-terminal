@@ -515,6 +515,11 @@ class _TasksScreenState extends State<TasksScreen> {
                         : RefreshIndicator(
                             onRefresh: () => provider.refreshTasks(),
                             child: ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(
+                                parent: BouncingScrollPhysics(),
+                              ),
+                              cacheExtent: 1200,
+                              addRepaintBoundaries: true,
                               itemCount: provider.tasks.length,
                               itemBuilder: (ctx, index) {
                                 final task = provider.tasks[index];

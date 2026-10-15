@@ -56,8 +56,8 @@ class _TaskCardState extends State<TaskCard> {
     final tags = task.allTags;
 
     return Card(
-      elevation: 0.5,
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      elevation: 0,
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
@@ -131,16 +131,13 @@ class _TaskCardState extends State<TaskCard> {
                       runSpacing: 4,
                       children: [
                         if (task.listTitle != null)
-                          Chip(
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            label: Text(task.listTitle!, style: const TextStyle(fontSize: 11)),
+                          _TaskBadge(
                             backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                            label: Text(task.listTitle!, style: const TextStyle(fontSize: 11)),
                           ),
                         if (task.calculatedPriority.isNotEmpty && task.calculatedPriority != 'normal')
-                          Chip(
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
+                          _TaskBadge(
+                            backgroundColor: _getPriorityColor(task.calculatedPriority).withValues(alpha: 0.15),
                             label: Text(
                               task.calculatedPriority.toUpperCase(),
                               style: TextStyle(
@@ -149,35 +146,29 @@ class _TaskCardState extends State<TaskCard> {
                                 color: _getPriorityColor(task.calculatedPriority),
                               ),
                             ),
-                            backgroundColor: _getPriorityColor(task.calculatedPriority).withValues(alpha: 0.15),
                           ),
                         ...task.spaces.entries.map(
-                          (entry) => Chip(
+                          (entry) => _TaskBadge(
                             avatar: const Icon(Icons.rocket_launch, size: 12, color: Colors.deepPurpleAccent),
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
+                            backgroundColor: Colors.deepPurple.withValues(alpha: 0.1),
                             label: Text(
                               entry.value.isEmpty ? entry.key : '${entry.key} › ${entry.value.join(', ')}',
                               style: const TextStyle(fontSize: 11, color: Colors.deepPurple, fontWeight: FontWeight.w500),
                             ),
-                            backgroundColor: Colors.deepPurple.withValues(alpha: 0.1),
                           ),
                         ),
                         ...tags.map(
-                          (tag) => Chip(
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            label: Text('#$tag', style: const TextStyle(fontSize: 11, color: Colors.blueAccent)),
+                          (tag) => _TaskBadge(
                             backgroundColor: Colors.blue.withValues(alpha: 0.1),
+                            label: Text('#$tag', style: const TextStyle(fontSize: 11, color: Colors.blueAccent)),
                           ),
                         ),
-                        if (task.due != null)
-                          Chip(
-                            avatar: const Icon(Icons.event, size: 14),
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
+                        if (task.formattedDueDate != null)
+                          _TaskBadge(
+                            avatar: const Icon(Icons.event, size: 13),
+                            backgroundColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
                             label: Text(
-                              task.due!.substring(0, task.due!.length > 10 ? 10 : task.due!.length),
+                              task.formattedDueDate!,
                               style: const TextStyle(fontSize: 11),
                             ),
                           ),
@@ -229,6 +220,42 @@ class _TaskCardState extends State<TaskCard> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TaskBadge extends StatelessWidget {
+  final Widget label;
+  final Widget? avatar;
+  final Color? backgroundColor;
+  final Border? border;
+
+  const _TaskBadge({
+    required this.label,
+    this.avatar,
+    this.backgroundColor,
+    this.border,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(6),
+        border: border,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (avatar != null) ...[
+            avatar!,
+            const SizedBox(width: 4),
+          ],
+          label,
+        ],
       ),
     );
   }

@@ -54,6 +54,10 @@ let isSyncing = false;
 let syncProgress = { percentage: 0, message: '', status: 'idle' };
 let syncPollInterval = null;
 
+// Space filter state variables
+export let activeSpaceFilter = null;
+export let activeSubspaceFilter = null;
+
 // Export for backward compatibility
 export function getDashboardData() {
     return dashboardData;
@@ -1107,10 +1111,6 @@ function escapeJsString(str) {
 }
 
 /**
-let activeSpaceFilter = null;
-let activeSubspaceFilter = null;
-
-/**
  * Get unique spaces and sub-spaces with counts from tasks
  * @param {Array} tasks
  * @returns {Array}
@@ -1151,6 +1151,90 @@ export function getSpacesWithCounts(tasks) {
         }))
         .sort((a, b) => a.label.localeCompare(b.label));
 }
+
+/**
+ * Convert spaces hierarchy to flat options array for multiselect
+ * @param {Array} tasks
+ * @returns {Array}
+ */
+export function getFlatSpacesAndSubspacesWithCounts(tasks) {
+    const spacesHierarchy = getSpacesWithCounts(tasks);
+    const options = [];
+    spacesHierarchy.forEach(sp => {
+        options.push({
+            value: sp.label,
+            label: sp.label,
+            count: sp.count,
+            type: 'space'
+        });
+        (sp.subspaces || []).forEach(sub => {
+            options.push({
+                value: `${sp.label}:${sub.label}`,
+                label: `${sp.label} › ${sub.label}`,
+                count: sub.count,
+                type: 'subspace'
+            });
+        });
+    });
+    return options;
+}
+
+/**
+ * Convert spaces object to multiselect values array: ['spa:sub1', 'spa2']
+ * @param {Object} spaces
+ * @returns {Array<string>}
+ */
+export function spacesObjectToMultiselectValues(spaces) {
+    if (!spaces || typeof spaces !== 'object') return [];
+    const values = [];
+    for (const [spaceName, subs] of Object.entries(spaces)) {
+        const spa = String(spaceName).trim();
+        if (!spa) continue;
+        if (Array.isArray(subs) && subs.length > 0) {
+            subs.forEach(sub => {
+                const s = String(sub).trim();
+                if (s) {
+                    values.push(`${spa}:${s}`);
+                }
+            });
+        } else {
+            values.push(spa);
+        }
+    }
+    return values;
+}
+
+/**
+ * Convert multiselect values array ['spa:sub1', 'spa2'] to spaces object { spa: ['sub1'], spa2: [] }
+ * @param {Array<string>} values
+ * @returns {Object}
+ */
+export function multiselectValuesToSpacesObject(values) {
+    if (!values || !Array.isArray(values)) return {};
+    const spaces = {};
+    for (const val of values) {
+        if (!val || typeof val !== 'string') continue;
+        const clean = val.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').trim();
+        const colonIdx = clean.indexOf(':');
+        if (colonIdx !== -1) {
+            const spa = clean.substring(0, colonIdx).trim().replace(/^spa::/i, '');
+            const sub = clean.substring(colonIdx + 1).trim().replace(/^sub::/i, '');
+            if (spa && isValidTag(spa)) {
+                if (!spaces[spa]) spaces[spa] = [];
+                if (sub && isValidTag(sub) && !spaces[spa].includes(sub)) {
+                    spaces[spa].push(sub);
+                }
+            }
+        } else {
+            const spa = clean.replace(/^spa::/i, '').trim();
+            if (spa && isValidTag(spa)) {
+                if (!spaces[spa]) spaces[spa] = [];
+            }
+        }
+    }
+    return spaces;
+}
+
 
 /**
  * Populate the sidebar nested lists, spaces, and tags under /tasks with counts
@@ -1334,13 +1418,19 @@ export function syncSidebarActiveFilter(filters) {
     if (!filters) return;
     const lists = filters.list || [];
     const tags = filters.tags || [];
+    const space = filters.space || null;
+    const subspace = filters.subspace || null;
 
-    if (lists.length === 0 && tags.length === 0) {
-        updateSidebarActiveItem('all');
+    if (subspace && space) {
+        updateSidebarActiveItem('subspace', subspace, space);
+    } else if (space) {
+        updateSidebarActiveItem('space', space);
     } else if (lists.length === 1 && tags.length === 0) {
         updateSidebarActiveItem('list', lists[0]);
     } else if (tags.length === 1 && lists.length === 0) {
         updateSidebarActiveItem('tag', tags[0]);
+    } else if (lists.length === 0 && tags.length === 0 && !space && !subspace) {
+        updateSidebarActiveItem('all');
     } else {
         document.querySelectorAll('#sidebar-tasks-submenu .sidebar-subitem').forEach(el => el.classList.remove('active'));
     }
@@ -1360,24 +1450,32 @@ export function filterSidebarListItems(query) {
     const subitems = document.querySelectorAll('#sidebar-tasks-submenu .sidebar-subitem[data-value]');
     let visibleLists = 0;
     let visibleTags = 0;
+    let visibleSpaces = 0;
 
     subitems.forEach(item => {
         const val = (item.getAttribute('data-value') || '').toLowerCase();
-        const matches = !q || val.includes(q);
+        const spa = (item.getAttribute('data-space') || '').toLowerCase();
+        const matches = !q || val.includes(q) || spa.includes(q);
         item.style.display = matches ? 'flex' : 'none';
         if (matches) {
             if (item.getAttribute('data-type') === 'list') visibleLists++;
             if (item.getAttribute('data-type') === 'tag') visibleTags++;
+            if (item.getAttribute('data-type') === 'space' || item.getAttribute('data-type') === 'subspace') visibleSpaces++;
         }
     });
 
     const listsContainer = document.getElementById('sidebar-lists-container');
+    const spacesContainer = document.getElementById('sidebar-spaces-container');
     const tagsContainer = document.getElementById('sidebar-tags-container');
 
     // Remove old no-match hints
     listsContainer?.querySelectorAll('.sidebar-no-match').forEach(e => e.remove());
+    spacesContainer?.querySelectorAll('.sidebar-no-match').forEach(e => e.remove());
     tagsContainer?.querySelectorAll('.sidebar-no-match').forEach(e => e.remove());
 
+    if (q && visibleSpaces === 0 && spacesContainer) {
+        spacesContainer.insertAdjacentHTML('beforeend', '<div class="sidebar-empty-hint sidebar-no-match">No matching spaces</div>');
+    }
     if (q && visibleLists === 0 && listsContainer) {
         listsContainer.insertAdjacentHTML('beforeend', '<div class="sidebar-empty-hint sidebar-no-match">No matching lists</div>');
     }
@@ -1626,6 +1724,19 @@ export function removeFilterChip(filterType, value = null) {
             if (value) tagsMultiselect.deselect(value);
             else tagsMultiselect.clear();
         }
+    } else if (filterType === 'space') {
+        activeSpaceFilter = null;
+        activeSubspaceFilter = null;
+        if (typeof updateSidebarActiveItem === 'function') {
+            updateSidebarActiveItem('all');
+        }
+    } else if (filterType === 'subspace') {
+        activeSubspaceFilter = null;
+        if (activeSpaceFilter && typeof updateSidebarActiveItem === 'function') {
+            updateSidebarActiveItem('space', activeSpaceFilter);
+        } else if (typeof updateSidebarActiveItem === 'function') {
+            updateSidebarActiveItem('all');
+        }
     }
     saveFilterState();
     updateFilteredMultiselect();
@@ -1727,6 +1838,22 @@ export function updateActiveFilterChips(filters) {
                 label: `Tag: #${item}`,
                 remove: `window.removeFilterChip('tags', '${item.replace(/'/g, "\\'")}')`
             });
+        });
+    }
+    if (filters.space) {
+        activeCount++;
+        chips.push({
+            type: 'space',
+            label: `Space: ${filters.space}`,
+            remove: "window.removeFilterChip('space')"
+        });
+    }
+    if (filters.subspace) {
+        activeCount++;
+        chips.push({
+            type: 'subspace',
+            label: `Sub-space: ${filters.subspace}`,
+            remove: "window.removeFilterChip('subspace')"
         });
     }
     if (filters.dateStart || filters.dateEnd) {
@@ -2761,13 +2888,16 @@ window.saveNewTask = saveNewTask;
 window.onAddAccountChange = onAddAccountChange;
 window.switchAddNotesTab = switchAddNotesTab;
 
-// Tag Multiselect instances for Add and Edit modals
+// Tag and Space Multiselect instances for Add and Edit modals
 let addTaskTagsMultiselect = null;
 let editTaskTagsMultiselect = null;
+let addTaskSpacesMultiselect = null;
+let editTaskSpacesMultiselect = null;
 
 export function initModalTagSelectors() {
     const tasks = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
     const allTags = getTagsWithCounts(tasks);
+    const allSpaces = getFlatSpacesAndSubspacesWithCounts(tasks);
 
     const addContainer = document.getElementById('add-task-tags-container');
     if (addContainer && !addTaskTagsMultiselect) {
@@ -2798,6 +2928,34 @@ export function initModalTagSelectors() {
         });
         editContainer.appendChild(editTaskTagsMultiselect);
     }
+
+    const addSpacesContainer = document.getElementById('add-task-spaces-container');
+    if (addSpacesContainer && !addTaskSpacesMultiselect) {
+        addSpacesContainer.innerHTML = '';
+        addTaskSpacesMultiselect = createMultiselect({
+            id: 'add-task-spaces',
+            placeholder: 'Type space or space:subspace & press Enter...',
+            options: allSpaces,
+            initialValues: [],
+            allowAddNew: true,
+            showCounts: true
+        });
+        addSpacesContainer.appendChild(addTaskSpacesMultiselect);
+    }
+
+    const editSpacesContainer = document.getElementById('edit-task-spaces-container');
+    if (editSpacesContainer && !editTaskSpacesMultiselect) {
+        editSpacesContainer.innerHTML = '';
+        editTaskSpacesMultiselect = createMultiselect({
+            id: 'edit-task-spaces',
+            placeholder: 'Type space or space:subspace & press Enter...',
+            options: allSpaces,
+            initialValues: [],
+            allowAddNew: true,
+            showCounts: true
+        });
+        editSpacesContainer.appendChild(editTaskSpacesMultiselect);
+    }
 }
 
 function openAddModal() {
@@ -2810,12 +2968,16 @@ function openAddModal() {
     const addSpacesEl = document.getElementById('add-task-spaces');
     if (addSpacesEl) addSpacesEl.value = '';
 
-    // Initialize or refresh tags multiselect
+    // Initialize or refresh tags and spaces multiselect
     initModalTagSelectors();
+    const tasks = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
     if (addTaskTagsMultiselect) {
-        const tasks = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
         addTaskTagsMultiselect.setOptions(getTagsWithCounts(tasks));
         addTaskTagsMultiselect.clear();
+    }
+    if (addTaskSpacesMultiselect) {
+        addTaskSpacesMultiselect.setOptions(getFlatSpacesAndSubspacesWithCounts(tasks));
+        addTaskSpacesMultiselect.clear();
     }
 
     // Populate Account select
@@ -2949,8 +3111,13 @@ async function saveNewTask() {
 
     const cleanNotesInput = document.getElementById('add-task-notes').value;
     const selectedTags = addTaskTagsMultiselect ? addTaskTagsMultiselect.getSelectedValues() : [];
-    const spacesInput = document.getElementById('add-task-spaces')?.value || '';
-    const parsedSpaces = parseSpacesInput(spacesInput);
+    let parsedSpaces = {};
+    if (addTaskSpacesMultiselect) {
+        parsedSpaces = multiselectValuesToSpacesObject(addTaskSpacesMultiselect.getSelectedValues());
+    } else {
+        const spacesInput = document.getElementById('add-task-spaces')?.value || '';
+        parsedSpaces = parseSpacesInput(spacesInput);
+    }
     const finalNotes = combineNotesAndTags(cleanNotesInput, selectedTags, parsedSpaces);
 
     const payload = {
@@ -3045,6 +3212,12 @@ function openEditModal(taskId) {
         editTaskTagsMultiselect.setSelectedValues(Array.from(activeTags));
     }
 
+    if (editTaskSpacesMultiselect) {
+        const allSpaces = getFlatSpacesAndSubspacesWithCounts(tasks);
+        editTaskSpacesMultiselect.setOptions(allSpaces);
+        editTaskSpacesMultiselect.setSelectedValues(spacesObjectToMultiselectValues(taskSpaces));
+    }
+
     // Populate list dropdown with all available lists
     const listSelect = document.getElementById('edit-task-list');
     listSelect.innerHTML = '';
@@ -3099,8 +3272,13 @@ async function saveTaskEdit() {
 
     const cleanNotesInput = document.getElementById('edit-task-notes').value;
     const selectedTags = editTaskTagsMultiselect ? editTaskTagsMultiselect.getSelectedValues() : [];
-    const spacesInput = document.getElementById('edit-task-spaces')?.value || '';
-    const parsedSpaces = parseSpacesInput(spacesInput);
+    let parsedSpaces = {};
+    if (editTaskSpacesMultiselect) {
+        parsedSpaces = multiselectValuesToSpacesObject(editTaskSpacesMultiselect.getSelectedValues());
+    } else {
+        const spacesInput = document.getElementById('edit-task-spaces')?.value || '';
+        parsedSpaces = parseSpacesInput(spacesInput);
+    }
     const finalNotes = combineNotesAndTags(cleanNotesInput, selectedTags, parsedSpaces);
 
     const payload = {
@@ -3691,6 +3869,10 @@ window.formatAddTaskJson = formatAddTaskJson;
 
 window.updateFullscreenIcons = updateFullscreenIcons;
 window.toggleModalFullscreen = toggleModalFullscreen;
+window.initModalTagSelectors = initModalTagSelectors;
+window.getFlatSpacesAndSubspacesWithCounts = getFlatSpacesAndSubspacesWithCounts;
+window.spacesObjectToMultiselectValues = spacesObjectToMultiselectValues;
+window.multiselectValuesToSpacesObject = multiselectValuesToSpacesObject;
 
 // Export for use in other modules
 export default {
@@ -3730,6 +3912,10 @@ export default {
     saveNewTask,
     formatAddTaskJson,
     toggleModalFullscreen,
+    initModalTagSelectors,
+    getFlatSpacesAndSubspacesWithCounts,
+    spacesObjectToMultiselectValues,
+    multiselectValuesToSpacesObject,
     populateSidebarTasksSubmenu,
     selectSidebarFilter,
     updateSidebarActiveItem,

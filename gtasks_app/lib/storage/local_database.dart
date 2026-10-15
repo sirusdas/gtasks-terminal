@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import '../models/task_item.dart';
+import '../utils/notes_parser.dart';
 
 class LocalDatabase {
   static final LocalDatabase instance = LocalDatabase._init();
@@ -285,22 +286,32 @@ class LocalDatabase {
       } catch (_) {}
     }
 
+    final rawDesc = row['description']?.toString() ?? '';
+    final parsed = NotesParser.splitNotesAndMetadata(rawDesc);
+    final allTagsSet = <String>{...parsedTags, ...parsed.tags};
+    final effectiveSpaces = parsedSpaces.isNotEmpty ? parsedSpaces : parsed.spaces;
+    final rawDue = row['due']?.toString();
+    final formattedDue = rawDue != null ? (rawDue.length > 10 ? rawDue.substring(0, 10) : rawDue) : null;
+
     return TaskItem(
       id: row['id']?.toString() ?? '',
       title: row['title']?.toString() ?? 'Untitled',
-      description: row['description']?.toString() ?? '',
+      description: rawDesc,
       status: row['status']?.toString() ?? 'pending',
-      due: row['due']?.toString(),
+      due: rawDue,
       listId: row['list_id']?.toString(),
       listTitle: row['list_title']?.toString(),
       account: row['account']?.toString() ?? 'default',
       tags: parsedTags,
-      spaces: parsedSpaces.isNotEmpty ? parsedSpaces : null,
+      spaces: effectiveSpaces,
       calculatedPriority: row['priority']?.toString() ?? 'medium',
       createdAt: row['created_at']?.toString(),
       completedAt: row['completed_at']?.toString(),
       isRecurring: row['is_recurring'] == 1,
       recurrenceType: row['recurrence_type']?.toString(),
+      cleanNotes: parsed.cleanNotes,
+      allTags: allTagsSet.toList(),
+      formattedDueDate: formattedDue,
     );
   }
 
