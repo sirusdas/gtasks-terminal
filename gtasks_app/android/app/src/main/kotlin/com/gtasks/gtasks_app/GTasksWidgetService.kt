@@ -454,10 +454,9 @@ class GTasksRemoteViewsFactory(
                 return views
             }
 
-                else -> {
-                    // DETAILED CARD VIEW
-                    val views = RemoteViews(context.packageName, R.layout.gtasks_widget_item)
-                    views.setTextViewText(R.id.widget_item_title, item.title)
+            // DETAILED CARD VIEW
+            val views = RemoteViews(context.packageName, R.layout.gtasks_widget_item)
+            views.setTextViewText(R.id.widget_item_title, item.title)
 
                     // Priority badge styling
                     val priority = item.priority.lowercase()
@@ -560,9 +559,7 @@ class GTasksRemoteViewsFactory(
                     views.setOnClickFillInIntent(R.id.widget_item_subtitle, toggleExpandFillInIntent)
                     views.setOnClickFillInIntent(R.id.widget_item_notes, toggleExpandFillInIntent)
 
-                    return views
-                }
-            }
+            return views
         } catch (e: Exception) {
             Log.e(TAG, "Error in getViewAt for position $position", e)
             return RemoteViews(context.packageName, R.layout.gtasks_widget_item)
