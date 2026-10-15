@@ -46,6 +46,10 @@
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.gtasks.gtasks_app.ACTION_REFRESH_WIDGET" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_QUICK_SYNC_WIDGET" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_COMPLETE_TASK" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_TOGGLE_EXPAND" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_CLEAR_FILTER" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -57,6 +61,20 @@
             android:name=".GTasksWidgetService"
             android:permission="android.permission.BIND_REMOTEVIEWS"
             android:exported="true" />
+
+        <!-- Home Screen Widget Quick Add Task Dialog (Google Tasks style) -->
+        <activity
+            android:name=".QuickAddActivity"
+            android:theme="@style/Theme.TranslucentDialog"
+            android:exported="false"
+            android:windowSoftInputMode="stateVisible|adjustResize" />
+
+        <!-- Home Screen Widget Filter Selector Dialog -->
+        <activity
+            android:name=".WidgetFilterActivity"
+            android:theme="@style/Theme.TranslucentDialog"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

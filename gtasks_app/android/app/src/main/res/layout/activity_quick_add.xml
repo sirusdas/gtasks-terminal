@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/dialog_rounded_bg"
+    android:padding="20dp"
+    android:layout_margin="16dp">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="12dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@mipmap/ic_launcher"
+            android:contentDescription="GTasks" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="Quick Add Task"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/btn_quick_add_close"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_widget_close"
+            android:contentDescription="Close"
+            android:clickable="true" />
+    </LinearLayout>
+
+    <!-- Task Title Input -->
+    <EditText
+        android:id="@+id/et_quick_add_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="What needs to be done?"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#64748B"
+        android:textSize="15sp"
+        android:background="#252D3D"
+        android:padding="12dp"
+        android:inputType="textCapSentences|textAutoCorrect"
+        android:maxLines="3" />
+
+    <!-- Task Description Input (Optional) -->
+    <EditText
+        android:id="@+id/et_quick_add_notes"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="Notes / details (optional)"
+        android:textColor="#CBD5E1"
+        android:textColorHint="#475569"
+        android:textSize="13sp"
+        android:background="#252D3D"
+        android:padding="10dp"
+        android:inputType="textMultiLine"
+        android:maxLines="2" />
+
+    <!-- Due Date & Priority Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="12dp"
+        android:gravity="center_vertical">
+
+        <!-- Due Date Selector -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Due:"
+            android:textColor="#94A3B8"
+            android:textSize="12sp"
+            android:layout_marginEnd="6dp" />
+
+        <Spinner
+            android:id="@+id/spinner_quick_add_due"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="#252D3D"
+            android:padding="6dp" />
+
+        <!-- Priority Selector -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Priority:"
+            android:textColor="#94A3B8"
+            android:textSize="12sp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="6dp" />
+
+        <Spinner
+            android:id="@+id/spinner_quick_add_priority"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="#252D3D"
+            android:padding="6dp" />
+    </LinearLayout>
+
+    <!-- Action Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end"
+        android:layout_marginTop="16dp">
+
+        <Button
+            android:id="@+id/btn_quick_add_cancel"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Cancel"
+            android:textColor="#94A3B8" />
+
+        <Button
+            android:id="@+id/btn_quick_add_save"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Save Task"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#3B82F6"
+            android:layout_marginStart="8dp" />
+    </LinearLayout>
+</LinearLayout>

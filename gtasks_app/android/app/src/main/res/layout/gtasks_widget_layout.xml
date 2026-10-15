@@ -48,9 +48,20 @@
         </LinearLayout>
 
         <ImageView
+            android:id="@+id/widget_btn_sync"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_sync"
+            android:contentDescription="Quick Sync"
+            android:clickable="true"
+            android:padding="6dp" />
+
+        <ImageView
             android:id="@+id/widget_btn_refresh"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_refresh"
             android:contentDescription="Refresh"
@@ -59,14 +70,115 @@
 
         <ImageView
             android:id="@+id/widget_btn_add"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_add"
             android:contentDescription="Add Task"
             android:clickable="true"
             android:padding="6dp" />
+    </LinearLayout>
+
+    <!-- Filter Icons Strip -->
+    <LinearLayout
+        android:id="@+id/widget_filter_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="6dp">
+
+        <ImageView
+            android:id="@+id/widget_filter_list"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_list"
+            android:contentDescription="Filter by List"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/widget_filter_tag"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_tag"
+            android:contentDescription="Filter by Tag"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/widget_filter_space"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_space"
+            android:contentDescription="Filter by Workspace"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/widget_filter_subspace"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_subspace"
+            android:contentDescription="Filter by Sub-workspace"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/widget_filter_account"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_account"
+            android:contentDescription="Filter by Account"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <!-- Active Filter Badge Pill (Visible when a filter is applied) -->
+        <LinearLayout
+            android:id="@+id/widget_active_filter_container"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/widget_filter_pill_bg"
+            android:paddingStart="8dp"
+            android:paddingEnd="4dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/widget_active_filter_text"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Space: Work"
+                android:textColor="#38BDF8"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <ImageView
+                android:id="@+id/widget_btn_clear_filter"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_widget_close"
+                android:contentDescription="Clear Filter"
+                android:clickable="true" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Divider -->

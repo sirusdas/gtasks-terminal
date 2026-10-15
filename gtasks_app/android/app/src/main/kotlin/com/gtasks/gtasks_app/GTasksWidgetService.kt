@@ -1,5 +1,6 @@
 package com.gtasks.gtasks_app
 
+import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
@@ -8,15 +9,23 @@ import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
+import org.json.JSONArray
 import org.json.JSONObject
 
 class GTasksWidgetService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory {
-        return GTasksRemoteViewsFactory(applicationContext)
+        val appWidgetId = intent.getIntExtra(
+            AppWidgetManager.EXTRA_APPWIDGET_ID,
+            AppWidgetManager.INVALID_APPWIDGET_ID
+        )
+        return GTasksRemoteViewsFactory(applicationContext, appWidgetId)
     }
 }
 
-class GTasksRemoteViewsFactory(private val context: Context) : RemoteViewsService.RemoteViewsFactory {
+class GTasksRemoteViewsFactory(
+    private val context: Context,
+    private val appWidgetId: Int
+) : RemoteViewsService.RemoteViewsFactory {
 
     companion object {
         private const val TAG = "GTasksWidgetService"
@@ -25,10 +34,13 @@ class GTasksRemoteViewsFactory(private val context: Context) : RemoteViewsServic
     data class WidgetTaskItem(
         val id: String,
         val title: String,
+        val description: String?,
         val priority: String,
         val due: String?,
         val listTitle: String?,
-        val spacesJson: String?
+        val spacesJson: String?,
+        val tagsJson: String?,
+        val account: String?
     )
 
     private val tasks = mutableListOf<WidgetTaskItem>()
@@ -41,6 +53,14 @@ class GTasksRemoteViewsFactory(private val context: Context) : RemoteViewsServic
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (!dbFile.exists()) return
 
+            val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+            val filterType = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                prefs.getString("filter_type_$appWidgetId", null)
+            } else null
+            val filterVal = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                prefs.getString("filter_val_$appWidgetId", null)
+            } else null
+
             SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
                 val checkCursor = db.rawQuery(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'",
@@ -49,12 +69,50 @@ class GTasksRemoteViewsFactory(private val context: Context) : RemoteViewsServic
                 val tableExists = checkCursor.use { it.moveToFirst() }
                 if (!tableExists) return
 
-                val cursor = db.rawQuery(
+                val queryBuilder = StringBuilder(
                     """
-                    SELECT id, title, priority, due, list_title, spaces 
+                    SELECT id, title, description, priority, due, list_title, spaces, tags, account 
                     FROM tasks 
                     WHERE status != 'completed' AND sync_status != 'pending_delete'
-                    ORDER BY 
+                    """.trimIndent()
+                )
+                val args = mutableListOf<String>()
+
+                if (!filterType.isNullOrBlank() && !filterVal.isNullOrBlank()) {
+                    when (filterType) {
+                        "list" -> {
+                            queryBuilder.append(" AND list_title = ?")
+                            args.add(filterVal)
+                        }
+                        "account" -> {
+                            queryBuilder.append(" AND account = ?")
+                            args.add(filterVal)
+                        }
+                        "tag" -> {
+                            queryBuilder.append(" AND tags LIKE ?")
+                            args.add("%\"$filterVal\"%")
+                        }
+                        "space" -> {
+                            queryBuilder.append(" AND spaces LIKE ?")
+                            args.add("%\"$filterVal\"%")
+                        }
+                        "subspace" -> {
+                            val parts = filterVal.split(" › ")
+                            if (parts.size >= 2) {
+                                queryBuilder.append(" AND spaces LIKE ? AND spaces LIKE ?")
+                                args.add("%\"${parts[0]}\"%")
+                                args.add("%\"${parts[1]}\"%")
+                            } else {
+                                queryBuilder.append(" AND spaces LIKE ?")
+                                args.add("%\"$filterVal\"%")
+                            }
+                        }
+                    }
+                }
+
+                queryBuilder.append(
+                    """
+                     ORDER BY 
                         CASE priority 
                             WHEN 'critical' THEN 1 
                             WHEN 'high' THEN 2 
@@ -64,20 +122,23 @@ class GTasksRemoteViewsFactory(private val context: Context) : RemoteViewsServic
                         END, 
                         CASE WHEN due IS NOT NULL AND due != '' THEN 0 ELSE 1 END,
                         due ASC 
-                    LIMIT 40
-                    """.trimIndent(),
-                    null
+                    LIMIT 50
+                    """.trimIndent()
                 )
 
+                val cursor = db.rawQuery(queryBuilder.toString(), args.toTypedArray())
                 cursor.use {
                     while (it.moveToNext()) {
                         val id = it.getString(0) ?: ""
                         val title = it.getString(1) ?: "Untitled Task"
-                        val priority = it.getString(2) ?: "normal"
-                        val due = it.getString(3)
-                        val listTitle = it.getString(4)
-                        val spacesJson = it.getString(5)
-                        tasks.add(WidgetTaskItem(id, title, priority, due, listTitle, spacesJson))
+                        val desc = it.getString(2)
+                        val priority = it.getString(3) ?: "normal"
+                        val due = it.getString(4)
+                        val listTitle = it.getString(5)
+                        val spacesJson = it.getString(6)
+                        val tagsJson = it.getString(7)
+                        val account = it.getString(8)
+                        tasks.add(WidgetTaskItem(id, title, desc, priority, due, listTitle, spacesJson, tagsJson, account))
                     }
                 }
             }
@@ -123,10 +184,10 @@ class GTasksRemoteViewsFactory(private val context: Context) : RemoteViewsServic
                 }
             }
 
-            // Subtitle: format Space › Subspace | List | Due
+            // Subtitle: Space › Subspace • Due • List
             val parts = mutableListOf<String>()
 
-            // Extract primary space if present
+            // Extract primary space & subspace if present
             if (!item.spacesJson.isNullOrBlank() && item.spacesJson != "{}") {
                 try {
                     val json = JSONObject(item.spacesJson)
@@ -159,12 +220,60 @@ class GTasksRemoteViewsFactory(private val context: Context) : RemoteViewsServic
                 views.setViewVisibility(R.id.widget_item_subtitle, View.GONE)
             }
 
-            // Fill-in Intent for clicking this item (handled by MainActivity)
-            val fillInIntent = Intent().apply {
-                putExtra("task_id", item.id)
-                putExtra("task_title", item.title)
+            // Expand / Collapse details logic
+            val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+            val isExpanded = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                prefs.getBoolean("expand_${appWidgetId}_${item.id}", false)
+            } else false
+
+            if (isExpanded) {
+                views.setViewVisibility(R.id.widget_item_notes, View.VISIBLE)
+                views.setImageViewResource(R.id.widget_item_chevron, R.drawable.ic_widget_chevron_up)
+
+                val detailBuilder = StringBuilder()
+                if (!item.description.isNullOrBlank()) {
+                    detailBuilder.append(item.description.trim())
+                }
+                if (!item.tagsJson.isNullOrBlank() && item.tagsJson != "[]") {
+                    try {
+                        val tagArray = JSONArray(item.tagsJson)
+                        val tagList = mutableListOf<String>()
+                        for (i in 0 until tagArray.length()) {
+                            val tag = tagArray.getString(i).trim()
+                            if (tag.isNotEmpty()) tagList.add("#$tag")
+                        }
+                        if (tagList.isNotEmpty()) {
+                            if (detailBuilder.isNotEmpty()) detailBuilder.append("\n")
+                            detailBuilder.append(tagList.joinToString(" "))
+                        }
+                    } catch (_: Exception) {}
+                }
+                if (detailBuilder.isEmpty()) {
+                    detailBuilder.append("No additional details")
+                }
+                views.setTextViewText(R.id.widget_item_notes, detailBuilder.toString())
+            } else {
+                views.setViewVisibility(R.id.widget_item_notes, View.GONE)
+                views.setImageViewResource(R.id.widget_item_chevron, R.drawable.ic_widget_chevron)
             }
-            views.setOnClickFillInIntent(R.id.widget_item_container, fillInIntent)
+
+            // Fill-in Intent for completing task directly from widget
+            val completeFillInIntent = Intent().apply {
+                action = GTasksWidgetProvider.ACTION_COMPLETE_TASK
+                putExtra("task_id", item.id)
+            }
+            views.setOnClickFillInIntent(R.id.widget_item_check, completeFillInIntent)
+
+            // Fill-in Intent for expanding/collapsing details
+            val toggleExpandFillInIntent = Intent().apply {
+                action = GTasksWidgetProvider.ACTION_TOGGLE_EXPAND
+                putExtra("task_id", item.id)
+            }
+            views.setOnClickFillInIntent(R.id.widget_item_container, toggleExpandFillInIntent)
+            views.setOnClickFillInIntent(R.id.widget_item_chevron, toggleExpandFillInIntent)
+            views.setOnClickFillInIntent(R.id.widget_item_title, toggleExpandFillInIntent)
+            views.setOnClickFillInIntent(R.id.widget_item_subtitle, toggleExpandFillInIntent)
+            views.setOnClickFillInIntent(R.id.widget_item_notes, toggleExpandFillInIntent)
 
             return views
         } catch (e: Exception) {

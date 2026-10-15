@@ -5,7 +5,7 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/widget_item_bg"
-    android:padding="8dp">
+    android:padding="6dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -13,26 +13,31 @@
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
+        <!-- Checkbox / Complete Task Button -->
         <ImageView
-            android:id="@+id/widget_item_bullet"
-            android:layout_width="8dp"
-            android:layout_height="8dp"
-            android:src="@drawable/widget_item_bullet"
-            android:contentDescription="Status" />
+            android:id="@+id/widget_item_check"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:padding="4dp"
+            android:src="@drawable/ic_widget_check_circle"
+            android:contentDescription="Complete Task"
+            android:clickable="true" />
 
+        <!-- Title -->
         <TextView
             android:id="@+id/widget_item_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="4dp"
             android:text="Task Title"
             android:textColor="#E6EDF3"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end" />
 
+        <!-- Priority Badge -->
         <TextView
             android:id="@+id/widget_item_priority"
             android:layout_width="wrap_content"
@@ -45,18 +50,41 @@
             android:paddingEnd="4dp"
             android:paddingTop="1dp"
             android:paddingBottom="1dp"
-            android:layout_marginStart="6dp" />
+            android:layout_marginStart="4dp" />
+
+        <!-- Expand / Collapse chevron indicator -->
+        <ImageView
+            android:id="@+id/widget_item_chevron"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:src="@drawable/ic_widget_chevron"
+            android:layout_marginStart="2dp"
+            android:contentDescription="Expand" />
     </LinearLayout>
 
+    <!-- Subtitle: Space › Subspace • Due • List -->
     <TextView
         android:id="@+id/widget_item_subtitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="2dp"
+        android:layout_marginStart="32dp"
+        android:layout_marginTop="1dp"
         android:text="Work › Dev • Due Tomorrow"
         android:textColor="#8B949E"
         android:textSize="10sp"
         android:maxLines="1"
         android:ellipsize="end" />
+
+    <!-- Expandable Notes / Description snippet -->
+    <TextView
+        android:id="@+id/widget_item_notes"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="32dp"
+        android:layout_marginTop="2dp"
+        android:textColor="#64748B"
+        android:textSize="10sp"
+        android:maxLines="3"
+        android:ellipsize="end"
+        android:visibility="gone" />
 </LinearLayout>

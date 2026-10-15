@@ -4,19 +4,29 @@ import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.util.Log
+import android.view.View
 import android.widget.RemoteViews
+import android.widget.Toast
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class GTasksWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private const val TAG = "GTasksWidgetProvider"
         const val ACTION_REFRESH = "com.gtasks.gtasks_app.ACTION_REFRESH_WIDGET"
-        const val ACTION_ADD_TASK = "com.gtasks.gtasks_app.ACTION_ADD_TASK"
+        const val ACTION_QUICK_SYNC = "com.gtasks.gtasks_app.ACTION_QUICK_SYNC_WIDGET"
+        const val ACTION_COMPLETE_TASK = "com.gtasks.gtasks_app.ACTION_COMPLETE_TASK"
+        const val ACTION_TOGGLE_EXPAND = "com.gtasks.gtasks_app.ACTION_TOGGLE_EXPAND"
+        const val ACTION_CLEAR_FILTER = "com.gtasks.gtasks_app.ACTION_CLEAR_FILTER"
 
         fun updateAllWidgets(context: Context) {
             try {
@@ -25,18 +35,17 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                 val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget) ?: intArrayOf()
                 if (appWidgetIds.isNotEmpty()) {
                     appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list_view)
-                    val intent = Intent(context, GTasksWidgetProvider::class.java).apply {
-                        action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
-                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, appWidgetIds)
+                    for (appWidgetId in appWidgetIds) {
+                        val provider = GTasksWidgetProvider()
+                        provider.updateAppWidget(context, appWidgetManager, appWidgetId)
                     }
-                    context.sendBroadcast(intent)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error in updateAllWidgets", e)
             }
         }
 
-        fun getPendingTaskCount(context: Context): Int {
+        fun getFilteredTaskCount(context: Context, filterType: String?, filterVal: String?): Int {
             return try {
                 val dbFile = context.getDatabasePath("gtasks_local.db")
                 if (!dbFile.exists()) return 0
@@ -48,17 +57,75 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                     val tableExists = checkCursor.use { it.moveToFirst() }
                     if (!tableExists) return 0
 
-                    val cursor = db.rawQuery(
-                        "SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete'",
-                        null
+                    val queryBuilder = StringBuilder(
+                        "SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete'"
                     )
+                    val args = mutableListOf<String>()
+
+                    if (!filterType.isNullOrBlank() && !filterVal.isNullOrBlank()) {
+                        when (filterType) {
+                            "list" -> {
+                                queryBuilder.append(" AND list_title = ?")
+                                args.add(filterVal)
+                            }
+                            "account" -> {
+                                queryBuilder.append(" AND account = ?")
+                                args.add(filterVal)
+                            }
+                            "tag" -> {
+                                queryBuilder.append(" AND tags LIKE ?")
+                                args.add("%\"$filterVal\"%")
+                            }
+                            "space" -> {
+                                queryBuilder.append(" AND spaces LIKE ?")
+                                args.add("%\"$filterVal\"%")
+                            }
+                            "subspace" -> {
+                                val parts = filterVal.split(" › ")
+                                if (parts.size >= 2) {
+                                    queryBuilder.append(" AND spaces LIKE ? AND spaces LIKE ?")
+                                    args.add("%\"${parts[0]}\"%")
+                                    args.add("%\"${parts[1]}\"%")
+                                } else {
+                                    queryBuilder.append(" AND spaces LIKE ?")
+                                    args.add("%\"$filterVal\"%")
+                                }
+                            }
+                        }
+                    }
+
+                    val cursor = db.rawQuery(queryBuilder.toString(), args.toTypedArray())
                     cursor.use {
                         if (it.moveToFirst()) it.getInt(0) else 0
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error reading pending task count", e)
+                Log.e(TAG, "Error reading filtered task count", e)
                 0
+            }
+        }
+
+        private fun completeTaskInDb(context: Context, taskId: String) {
+            try {
+                val dbFile = context.getDatabasePath("gtasks_local.db")
+                if (!dbFile.exists()) return
+
+                SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+                    val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+                        timeZone = TimeZone.getTimeZone("UTC")
+                    }
+                    val nowStr = isoFormat.format(Date())
+
+                    val cv = ContentValues().apply {
+                        put("status", "completed")
+                        put("completed_at", nowStr)
+                        put("modified_at", nowStr)
+                        put("sync_status", "pending_update")
+                    }
+                    db.update("tasks", cv, "id = ?", arrayOf(taskId))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error completing task $taskId", e)
             }
         }
     }
@@ -77,13 +144,45 @@ class GTasksWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         try {
-            if (intent.action == ACTION_REFRESH || intent.action == AppWidgetManager.ACTION_APPWIDGET_UPDATE) {
-                val appWidgetManager = AppWidgetManager.getInstance(context) ?: return
-                val thisWidget = ComponentName(context, GTasksWidgetProvider::class.java)
-                val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget) ?: intArrayOf()
-                appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list_view)
-                for (appWidgetId in appWidgetIds) {
-                    updateAppWidget(context, appWidgetManager, appWidgetId)
+            when (intent.action) {
+                ACTION_REFRESH, AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
+                    updateAllWidgets(context)
+                }
+                ACTION_QUICK_SYNC -> {
+                    Toast.makeText(context, "Syncing tasks...", Toast.LENGTH_SHORT).show()
+                    updateAllWidgets(context)
+                }
+                ACTION_COMPLETE_TASK -> {
+                    val taskId = intent.getStringExtra("task_id")
+                    if (!taskId.isNullOrEmpty()) {
+                        completeTaskInDb(context, taskId)
+                        Toast.makeText(context, "Task completed! ✓", Toast.LENGTH_SHORT).show()
+                        updateAllWidgets(context)
+                    }
+                }
+                ACTION_TOGGLE_EXPAND -> {
+                    val taskId = intent.getStringExtra("task_id")
+                    val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+                    if (!taskId.isNullOrEmpty() && appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                        val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                        val key = "expand_${appWidgetId}_$taskId"
+                        val isExpanded = prefs.getBoolean(key, false)
+                        prefs.edit().putBoolean(key, !isExpanded).apply()
+
+                        val appWidgetManager = AppWidgetManager.getInstance(context) ?: return
+                        appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list_view)
+                    }
+                }
+                ACTION_CLEAR_FILTER -> {
+                    val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+                    if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                        val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                        prefs.edit()
+                            .remove("filter_type_$appWidgetId")
+                            .remove("filter_val_$appWidgetId")
+                            .apply()
+                        updateAllWidgets(context)
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -94,28 +193,49 @@ class GTasksWidgetProvider : AppWidgetProvider() {
     private fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
         val views = RemoteViews(context.packageName, R.layout.gtasks_widget_layout)
 
-        // Count pending tasks
-        val count = getPendingTaskCount(context)
-        views.setTextViewText(R.id.widget_task_count, if (count == 0) "All caught up" else "$count pending tasks")
+        // Read active filter
+        val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+        val filterType = prefs.getString("filter_type_$appWidgetId", null)
+        val filterVal = prefs.getString("filter_val_$appWidgetId", null)
 
-        // Explicitly set visibility so the widget is never blank on fresh install/empty list
-        if (count == 0) {
-            views.setViewVisibility(R.id.widget_empty_view, android.view.View.VISIBLE)
-            views.setViewVisibility(R.id.widget_list_view, android.view.View.GONE)
+        val count = getFilteredTaskCount(context, filterType, filterVal)
+
+        // Update header & active filter pill
+        if (!filterType.isNullOrBlank() && !filterVal.isNullOrBlank()) {
+            val label = when (filterType) {
+                "space" -> "Space: $filterVal"
+                "subspace" -> filterVal
+                "tag" -> "#$filterVal"
+                "list" -> "List: $filterVal"
+                "account" -> "@$filterVal"
+                else -> filterVal
+            }
+            views.setViewVisibility(R.id.widget_active_filter_container, View.VISIBLE)
+            views.setTextViewText(R.id.widget_active_filter_text, label)
+            views.setTextViewText(R.id.widget_task_count, "$count tasks")
         } else {
-            views.setViewVisibility(R.id.widget_empty_view, android.view.View.GONE)
-            views.setViewVisibility(R.id.widget_list_view, android.view.View.VISIBLE)
+            views.setViewVisibility(R.id.widget_active_filter_container, View.GONE)
+            views.setTextViewText(R.id.widget_task_count, if (count == 0) "All caught up" else "$count pending tasks")
+        }
+
+        // Toggle Empty View vs List View
+        if (count == 0) {
+            views.setViewVisibility(R.id.widget_empty_view, View.VISIBLE)
+            views.setViewVisibility(R.id.widget_list_view, View.GONE)
+        } else {
+            views.setViewVisibility(R.id.widget_empty_view, View.GONE)
+            views.setViewVisibility(R.id.widget_list_view, View.VISIBLE)
         }
 
         // Set up service adapter for the ListView
         val serviceIntent = Intent(context, GTasksWidgetService::class.java).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            data = Uri.parse("gtasks-widget://widget/id/$appWidgetId")
+            data = Uri.parse("gtasks-widget://widget/id/$appWidgetId?t=${System.currentTimeMillis()}")
         }
         views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
         views.setEmptyView(R.id.widget_list_view, R.id.widget_empty_view)
 
-        // PendingIntent for clicking anywhere on the widget (opens app)
+        // Header click -> opens MainActivity
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_MAIN
             addCategory(Intent.CATEGORY_LAUNCHER)
@@ -123,7 +243,7 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         }
         val openAppPendingIntent = PendingIntent.getActivity(
             context,
-            appWidgetId * 10 + 0,
+            appWidgetId * 100 + 0,
             openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -131,44 +251,90 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         views.setOnClickPendingIntent(R.id.widget_header, openAppPendingIntent)
         views.setOnClickPendingIntent(R.id.widget_empty_view, openAppPendingIntent)
 
-        // PendingIntent for Add Task button
-        val addTaskIntent = Intent(context, MainActivity::class.java).apply {
-            action = ACTION_ADD_TASK
+        // Add Task Button -> Opens QuickAddActivity directly on home screen (Does NOT open main app!)
+        val quickAddIntent = Intent(context, QuickAddActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val addTaskPendingIntent = PendingIntent.getActivity(
+        val quickAddPendingIntent = PendingIntent.getActivity(
             context,
-            appWidgetId * 10 + 1,
-            addTaskIntent,
+            appWidgetId * 100 + 1,
+            quickAddIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        views.setOnClickPendingIntent(R.id.widget_btn_add, addTaskPendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_btn_add, quickAddPendingIntent)
 
-        // PendingIntent for Refresh button
+        // Refresh Button
         val refreshIntent = Intent(context, GTasksWidgetProvider::class.java).apply {
             action = ACTION_REFRESH
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(appWidgetId))
         }
         val refreshPendingIntent = PendingIntent.getBroadcast(
             context,
-            appWidgetId * 10 + 2,
+            appWidgetId * 100 + 2,
             refreshIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         views.setOnClickPendingIntent(R.id.widget_btn_refresh, refreshPendingIntent)
 
-        // PendingIntent template for clicking list items
-        val clickItemIntent = Intent(context, MainActivity::class.java).apply {
-            action = Intent.ACTION_VIEW
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        // Quick Sync Button
+        val syncIntent = Intent(context, GTasksWidgetProvider::class.java).apply {
+            action = ACTION_QUICK_SYNC
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(appWidgetId))
         }
-        val clickItemPendingIntent = PendingIntent.getActivity(
+        val syncPendingIntent = PendingIntent.getBroadcast(
             context,
-            appWidgetId * 10 + 3,
-            clickItemIntent,
+            appWidgetId * 100 + 3,
+            syncIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_btn_sync, syncPendingIntent)
+
+        // Clear Filter Button on Active Filter Pill
+        val clearFilterIntent = Intent(context, GTasksWidgetProvider::class.java).apply {
+            action = ACTION_CLEAR_FILTER
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        }
+        val clearFilterPendingIntent = PendingIntent.getBroadcast(
+            context,
+            appWidgetId * 100 + 4,
+            clearFilterIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_btn_clear_filter, clearFilterPendingIntent)
+
+        // Filter Buttons -> Open WidgetFilterActivity
+        fun setupFilterButton(viewId: Int, filterTypeStr: String, reqCodeOffset: Int) {
+            val filterIntent = Intent(context, WidgetFilterActivity::class.java).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                putExtra("filter_type", filterTypeStr)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val filterPendingIntent = PendingIntent.getActivity(
+                context,
+                appWidgetId * 100 + reqCodeOffset,
+                filterIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(viewId, filterPendingIntent)
+        }
+
+        setupFilterButton(R.id.widget_filter_list, "list", 10)
+        setupFilterButton(R.id.widget_filter_tag, "tag", 11)
+        setupFilterButton(R.id.widget_filter_space, "space", 12)
+        setupFilterButton(R.id.widget_filter_subspace, "subspace", 13)
+        setupFilterButton(R.id.widget_filter_account, "account", 14)
+
+        // Item click template (Broadcasts to provider to handle complete, expand, or open)
+        val itemTemplateIntent = Intent(context, GTasksWidgetProvider::class.java).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        }
+        val itemTemplatePendingIntent = PendingIntent.getBroadcast(
+            context,
+            appWidgetId * 100 + 20,
+            itemTemplateIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         )
-        views.setPendingIntentTemplate(R.id.widget_list_view, clickItemPendingIntent)
+        views.setPendingIntentTemplate(R.id.widget_list_view, itemTemplatePendingIntent)
 
         appWidgetManager.updateAppWidget(appWidgetId, views)
     }
