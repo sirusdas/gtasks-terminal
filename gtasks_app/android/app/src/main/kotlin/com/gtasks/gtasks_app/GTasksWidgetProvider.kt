@@ -249,19 +249,21 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.widget_root, openAppPendingIntent)
         views.setOnClickPendingIntent(R.id.widget_header, openAppPendingIntent)
-        views.setOnClickPendingIntent(R.id.widget_empty_view, openAppPendingIntent)
-
-        // Add Task Button -> Opens QuickAddActivity directly on home screen (Does NOT open main app!)
-        val quickAddIntent = Intent(context, QuickAddActivity::class.java).apply {
+        // Add Task Button -> Opens Full Screen In-App Task Editor with all features
+        val addTaskIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.gtasks.gtasks_app.ACTION_NEW_TASK"
+            putExtra("open_task_editor", true)
+            putExtra("is_from_widget", true)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val quickAddPendingIntent = PendingIntent.getActivity(
+        val addTaskPendingIntent = PendingIntent.getActivity(
             context,
             appWidgetId * 100 + 1,
-            quickAddIntent,
+            addTaskIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        views.setOnClickPendingIntent(R.id.widget_btn_add, quickAddPendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_btn_add, addTaskPendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_empty_view, addTaskPendingIntent)
 
         // Refresh Button
         val refreshIntent = Intent(context, GTasksWidgetProvider::class.java).apply {

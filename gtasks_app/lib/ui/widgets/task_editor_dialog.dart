@@ -1,15 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../models/task_item.dart';
 import '../../providers/task_provider.dart';
+import '../../services/widget_service.dart';
 import '../../utils/notes_parser.dart';
 import 'searchable_picker_modal.dart';
 import 'searchable_space_picker_modal.dart';
 
 class TaskEditorDialog extends StatefulWidget {
   final TaskItem? task; // null when adding a new task
+  final bool isFullScreen;
+  final bool isFromWidget;
 
-  const TaskEditorDialog({super.key, this.task});
+  const TaskEditorDialog({
+    super.key,
+    this.task,
+    this.isFullScreen = true,
+    this.isFromWidget = false,
+  });
 
   @override
   State<TaskEditorDialog> createState() => _TaskEditorDialogState();
@@ -137,6 +146,14 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     super.dispose();
   }
 
+  void _handleClose() {
+    if (widget.isFromWidget) {
+      SystemNavigator.pop();
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
   void _saveTask() {
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
@@ -187,7 +204,489 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
         spaces: spaces,
       );
     }
-    Navigator.pop(context);
+
+    // Refresh home screen widget immediately
+    WidgetService.updateWidget();
+
+    _handleClose();
+  }
+
+  List<Widget> _buildFormFields(BuildContext context, ThemeData theme, TaskProvider provider, List<dynamic> availableAccounts, bool isEditing) {
+    return [
+      const SizedBox(height: 6),
+      TextField(
+        controller: _titleController,
+        autofocus: !isEditing,
+        decoration: const InputDecoration(
+          labelText: 'Task Title *',
+          hintText: 'What needs to be done?',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      const SizedBox(height: 14),
+
+      // Account & List Row with Search / Autocomplete
+      Row(
+        children: [
+          // Account Selector
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              value: availableAccounts.any((a) => a.id == _selectedAccount)
+                  ? _selectedAccount
+                  : (availableAccounts.isNotEmpty ? availableAccounts.first.id : 'default'),
+              decoration: const InputDecoration(
+                labelText: 'Account',
+                prefixIcon: Icon(Icons.person_outline, size: 18),
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+              ),
+              items: [
+                if (availableAccounts.isEmpty)
+                  const DropdownMenuItem(value: 'default', child: Text('Personal')),
+                ...availableAccounts.map(
+                  (acc) => DropdownMenuItem(
+                    value: acc.id,
+                    child: Text(acc.name, overflow: TextOverflow.ellipsis),
+                  ),
+                ),
+              ],
+              onChanged: (val) {
+                if (val != null) setState(() => _selectedAccount = val);
+              },
+            ),
+          ),
+          const SizedBox(width: 10),
+          // List Single-Select Picker with Search & Suggest & Add
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () async {
+                final listsWithCounts = provider.listsWithCounts;
+                final initial = _listController.text.trim().isNotEmpty
+                    ? {_listController.text.trim()}
+                    : {'My Tasks'};
+                final result = await SearchablePickerModal.show(
+                  context: context,
+                  title: 'Select Task List',
+                  subtitle: 'Search existing lists or type to create a new one',
+                  icon: Icons.list_alt,
+                  optionsWithCounts: listsWithCounts,
+                  initialSelected: initial,
+                  isMultiSelect: false,
+                  isTag: false,
+                );
+                if (result != null && result.isNotEmpty) {
+                  setState(() {
+                    _listController.text = result.first;
+                  });
+                }
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'List / Project',
+                  prefixIcon: Icon(Icons.list_alt, size: 18),
+                  suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                ),
+                child: Text(
+                  _listController.text.isEmpty ? 'My Tasks' : _listController.text,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 14),
+
+      // Priority & Due Date Row
+      Row(
+        children: [
+          // Priority Selector
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              value: _selectedPriority,
+              decoration: const InputDecoration(
+                labelText: 'Priority',
+                prefixIcon: Icon(Icons.flag_outlined, size: 18),
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'critical',
+                  child: Text('🔴 Critical', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                DropdownMenuItem(
+                  value: 'high',
+                  child: Text('🟠 High', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                DropdownMenuItem(
+                  value: 'medium',
+                  child: Text('🟡 Medium'),
+                ),
+                DropdownMenuItem(
+                  value: 'low',
+                  child: Text('🟢 Low'),
+                ),
+              ],
+              onChanged: (val) {
+                if (val != null) setState(() => _selectedPriority = val);
+              },
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Due Date Selector
+          Expanded(
+            child: InkWell(
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedDueDate ?? DateTime.now(),
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(2035),
+                );
+                if (picked != null) {
+                  setState(() => _selectedDueDate = picked);
+                }
+              },
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Due Date',
+                  prefixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+                  suffixIcon: _selectedDueDate != null
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 16),
+                          onPressed: () => setState(() => _selectedDueDate = null),
+                        )
+                      : null,
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                ),
+                child: Text(
+                  _selectedDueDate != null
+                      ? '${_selectedDueDate!.year}-${_selectedDueDate!.month.toString().padLeft(2, '0')}-${_selectedDueDate!.day.toString().padLeft(2, '0')}'
+                      : 'No due date',
+                  style: TextStyle(
+                    color: _selectedDueDate != null ? theme.textTheme.bodyMedium?.color : theme.hintColor,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 14),
+
+      // Notes Section Header with Full Screen Toggle & Preview
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            'Notes / Description',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.fullscreen, size: 18),
+            label: const Text('Full Screen', style: TextStyle(fontSize: 12)),
+            onPressed: () => setState(() => _isFullscreenNotes = true),
+          ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      TextField(
+        controller: _notesController,
+        decoration: InputDecoration(
+          hintText: 'Notes, links, details... (Supports Markdown & JSON)',
+          border: const OutlineInputBorder(),
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.open_in_full, size: 18),
+            tooltip: 'Expand to Full Screen Editor',
+            onPressed: () => setState(() => _isFullscreenNotes = true),
+          ),
+        ),
+        maxLines: 4,
+      ),
+
+      const SizedBox(height: 14),
+
+      // Tags Header
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Tags',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              if (_selectedTags.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${_selectedTags.length}',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          TextButton.icon(
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            icon: const Icon(Icons.tune, size: 16),
+            label: const Text('Browse & Manage', style: TextStyle(fontSize: 12)),
+            onPressed: _openTagPicker,
+          ),
+        ],
+      ),
+      const SizedBox(height: 4),
+
+      // Interactive Tags Box
+      if (_selectedTags.isEmpty)
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: _openTagPicker,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.tag, size: 18, color: theme.hintColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Tap to assign tags (e.g. urgent, study, dev)',
+                    style: TextStyle(color: theme.hintColor, fontSize: 13),
+                  ),
+                ),
+                Icon(Icons.arrow_drop_down, color: theme.hintColor),
+              ],
+            ),
+          ),
+        )
+      else
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.teal.withValues(alpha: 0.03),
+            border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _selectedTags.map((tag) {
+                  return Chip(
+                    avatar: const Text('#', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    labelPadding: const EdgeInsets.only(left: 2, right: 4),
+                    backgroundColor: Colors.teal.withValues(alpha: 0.08),
+                    label: Text(tag, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.teal)),
+                    deleteIcon: const Icon(Icons.close, size: 14),
+                    onDeleted: () {
+                      setState(() {
+                        _selectedTags.remove(tag);
+                        _syncTagsText();
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                    icon: const Icon(Icons.add, size: 14),
+                    label: const Text('Add / Edit More Tags', style: TextStyle(fontSize: 11)),
+                    onPressed: _openTagPicker,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      const SizedBox(height: 14),
+
+      // Spaces & Sub-spaces Header
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Spaces & Sub-spaces',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              if (_selectedSpaces.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${_selectedSpaces.length}',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepPurple,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          TextButton.icon(
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            icon: const Icon(Icons.tune, size: 16),
+            label: const Text('Browse & Manage', style: TextStyle(fontSize: 12)),
+            onPressed: _openSpacePicker,
+          ),
+        ],
+      ),
+      const SizedBox(height: 4),
+
+      // Interactive Spaces Box
+      if (_selectedSpaces.isEmpty)
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: _openSpacePicker,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.rocket_launch_outlined, size: 18, color: theme.hintColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Tap to assign spaces & sub-spaces (e.g. work › dev)',
+                    style: TextStyle(color: theme.hintColor, fontSize: 13),
+                  ),
+                ),
+                Icon(Icons.arrow_drop_down, color: theme.hintColor),
+              ],
+            ),
+          ),
+        )
+      else
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.deepPurple.withValues(alpha: 0.03),
+            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.3)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ..._selectedSpaces.entries.map((entry) {
+                final space = entry.key;
+                final subs = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.rocket_launch, size: 14, color: Colors.deepPurpleAccent),
+                            const SizedBox(width: 6),
+                            Text(
+                              space,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.deepPurple),
+                            ),
+                            const Spacer(),
+                            InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _selectedSpaces.remove(space);
+                                  _syncSpacesText();
+                                });
+                              },
+                              child: Icon(Icons.close, size: 16, color: theme.hintColor),
+                            ),
+                          ],
+                        ),
+                        if (subs.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: subs.map((sub) {
+                              return Chip(
+                                avatar: const Icon(Icons.subdirectory_arrow_right, size: 12, color: Colors.deepPurpleAccent),
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                labelPadding: const EdgeInsets.only(left: 2, right: 4),
+                                backgroundColor: Colors.deepPurple.withValues(alpha: 0.08),
+                                label: Text(sub, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                                deleteIcon: const Icon(Icons.close, size: 12),
+                                onDeleted: () {
+                                  setState(() {
+                                    _selectedSpaces[space]!.remove(sub);
+                                    _syncSpacesText();
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                    icon: const Icon(Icons.add, size: 14),
+                    label: const Text('Add / Edit More Spaces', style: TextStyle(fontSize: 11)),
+                    onPressed: _openSpacePicker,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+    ];
   }
 
   @override
@@ -197,10 +696,6 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     final provider = context.watch<TaskProvider>();
 
     final availableAccounts = provider.accounts;
-    final availableLists = provider.listsWithCounts.keys.toList();
-    if (!availableLists.contains('My Tasks')) {
-      availableLists.insert(0, 'My Tasks');
-    }
 
     // If notes is expanded to full screen mode:
     if (_isFullscreenNotes) {
@@ -263,7 +758,71 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       );
     }
 
-    // Default Modal Sheet / Dialog mode
+    final formFields = _buildFormFields(context, theme, provider, availableAccounts, isEditing);
+
+    // Full Screen Mode (Default & Widget launch)
+    if (widget.isFullScreen) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: 'Cancel',
+            onPressed: _handleClose,
+          ),
+          title: Text(
+            isEditing ? 'Edit Task' : 'New Task',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          actions: [
+            if (isEditing)
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                tooltip: 'Delete Task',
+                onPressed: () {
+                  context.read<TaskProvider>().deleteTask(widget.task!.id);
+                  WidgetService.updateWidget();
+                  _handleClose();
+                },
+              ),
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: FilledButton.icon(
+                icon: Icon(isEditing ? Icons.check : Icons.add, size: 18),
+                label: Text(isEditing ? 'Save' : 'Create'),
+                onPressed: _saveTask,
+              ),
+            ),
+          ],
+        ),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ...formFields,
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton.icon(
+                    icon: Icon(isEditing ? Icons.check : Icons.add),
+                    label: Text(
+                      isEditing ? 'Save Changes' : 'Create Task',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: _saveTask,
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Modal Sheet / Dialog mode
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -293,12 +852,13 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                     tooltip: 'Delete Task',
                     onPressed: () {
                       context.read<TaskProvider>().deleteTask(widget.task!.id);
-                      Navigator.pop(context);
+                      WidgetService.updateWidget();
+                      _handleClose();
                     },
                   ),
                 IconButton(
                   icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: _handleClose,
                 ),
               ],
             ),
@@ -307,481 +867,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _titleController,
-                      autofocus: !isEditing,
-                      decoration: const InputDecoration(
-                        labelText: 'Task Title *',
-                        hintText: 'What needs to be done?',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Account & List Row with Search / Autocomplete
-                    Row(
-                      children: [
-                        // Account Selector
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: availableAccounts.any((a) => a.id == _selectedAccount)
-                                ? _selectedAccount
-                                : (availableAccounts.isNotEmpty ? availableAccounts.first.id : 'default'),
-                            decoration: const InputDecoration(
-                              labelText: 'Account',
-                              prefixIcon: Icon(Icons.person_outline, size: 18),
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                            ),
-                            items: [
-                              if (availableAccounts.isEmpty)
-                                const DropdownMenuItem(value: 'default', child: Text('Personal')),
-                              ...availableAccounts.map(
-                                (acc) => DropdownMenuItem(
-                                  value: acc.id,
-                                  child: Text(acc.name, overflow: TextOverflow.ellipsis),
-                                ),
-                              ),
-                            ],
-                            onChanged: (val) {
-                              if (val != null) setState(() => _selectedAccount = val);
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        // List Single-Select Picker with Search & Suggest & Add
-                        Expanded(
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(8),
-                            onTap: () async {
-                              final listsWithCounts = provider.listsWithCounts;
-                              final initial = _listController.text.trim().isNotEmpty
-                                  ? {_listController.text.trim()}
-                                  : {'My Tasks'};
-                              final result = await SearchablePickerModal.show(
-                                context: context,
-                                title: 'Select Task List',
-                                subtitle: 'Search existing lists or type to create a new one',
-                                icon: Icons.list_alt,
-                                optionsWithCounts: listsWithCounts,
-                                initialSelected: initial,
-                                isMultiSelect: false,
-                                isTag: false,
-                              );
-                              if (result != null && result.isNotEmpty) {
-                                setState(() {
-                                  _listController.text = result.first;
-                                });
-                              }
-                            },
-                            child: InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'List / Project',
-                                prefixIcon: Icon(Icons.list_alt, size: 18),
-                                suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
-                                border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                              ),
-                              child: Text(
-                                _listController.text.isEmpty ? 'My Tasks' : _listController.text,
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Priority & Due Date Row
-                    Row(
-                      children: [
-                        // Priority Selector
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: _selectedPriority,
-                            decoration: const InputDecoration(
-                              labelText: 'Priority',
-                              prefixIcon: Icon(Icons.flag_outlined, size: 18),
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'critical',
-                                child: Text('🔴 Critical', style: TextStyle(fontWeight: FontWeight.bold)),
-                              ),
-                              DropdownMenuItem(
-                                value: 'high',
-                                child: Text('🟠 High', style: TextStyle(fontWeight: FontWeight.bold)),
-                              ),
-                              DropdownMenuItem(
-                                value: 'medium',
-                                child: Text('🟡 Medium'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'low',
-                                child: Text('🟢 Low'),
-                              ),
-                            ],
-                            onChanged: (val) {
-                              if (val != null) setState(() => _selectedPriority = val);
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        // Due Date Selector
-                        Expanded(
-                          child: InkWell(
-                            onTap: () async {
-                              final picked = await showDatePicker(
-                                context: context,
-                                initialDate: _selectedDueDate ?? DateTime.now(),
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime(2035),
-                              );
-                              if (picked != null) {
-                                setState(() => _selectedDueDate = picked);
-                              }
-                            },
-                            child: InputDecorator(
-                              decoration: InputDecoration(
-                                labelText: 'Due Date',
-                                prefixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
-                                suffixIcon: _selectedDueDate != null
-                                    ? IconButton(
-                                        icon: const Icon(Icons.clear, size: 16),
-                                        onPressed: () => setState(() => _selectedDueDate = null),
-                                      )
-                                    : null,
-                                border: const OutlineInputBorder(),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                              ),
-                              child: Text(
-                                _selectedDueDate != null
-                                    ? '${_selectedDueDate!.year}-${_selectedDueDate!.month.toString().padLeft(2, '0')}-${_selectedDueDate!.day.toString().padLeft(2, '0')}'
-                                    : 'No due date',
-                                style: TextStyle(
-                                  color: _selectedDueDate != null ? theme.textTheme.bodyMedium?.color : theme.hintColor,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Notes Section Header with Full Screen Toggle & Preview
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Notes / Description',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                        TextButton.icon(
-                          icon: const Icon(Icons.fullscreen, size: 18),
-                          label: const Text('Full Screen', style: TextStyle(fontSize: 12)),
-                          onPressed: () => setState(() => _isFullscreenNotes = true),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: _notesController,
-                      decoration: InputDecoration(
-                        hintText: 'Notes, links, details... (Supports Markdown & JSON)',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.open_in_full, size: 18),
-                          tooltip: 'Expand to Full Screen Editor',
-                          onPressed: () => setState(() => _isFullscreenNotes = true),
-                        ),
-                      ),
-                      maxLines: 4,
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // Tags Header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Text(
-                              'Tags',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                            if (_selectedTags.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.teal.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  '${_selectedTags.length}',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.teal,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        TextButton.icon(
-                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                          icon: const Icon(Icons.tune, size: 16),
-                          label: const Text('Browse & Manage', style: TextStyle(fontSize: 12)),
-                          onPressed: _openTagPicker,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-
-                    // Interactive Tags Box
-                    if (_selectedTags.isEmpty)
-                      InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: _openTagPicker,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: theme.colorScheme.outlineVariant),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.tag, size: 18, color: theme.hintColor),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Tap to assign tags (e.g. urgent, study, dev)',
-                                  style: TextStyle(color: theme.hintColor, fontSize: 13),
-                                ),
-                              ),
-                              Icon(Icons.arrow_drop_down, color: theme.hintColor),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.teal.withValues(alpha: 0.03),
-                          border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: _selectedTags.map((tag) {
-                                return Chip(
-                                  avatar: const Text('#', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  labelPadding: const EdgeInsets.only(left: 2, right: 4),
-                                  backgroundColor: Colors.teal.withValues(alpha: 0.08),
-                                  label: Text(tag, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.teal)),
-                                  deleteIcon: const Icon(Icons.close, size: 14),
-                                  onDeleted: () {
-                                    setState(() {
-                                      _selectedTags.remove(tag);
-                                      _syncTagsText();
-                                    });
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                TextButton.icon(
-                                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                                  icon: const Icon(Icons.add, size: 14),
-                                  label: const Text('Add / Edit More Tags', style: TextStyle(fontSize: 11)),
-                                  onPressed: _openTagPicker,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    const SizedBox(height: 14),
-
-                    // Spaces & Sub-spaces Header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Text(
-                              'Spaces & Sub-spaces',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                            if (_selectedSpaces.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  '${_selectedSpaces.length}',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.deepPurple,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        TextButton.icon(
-                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                          icon: const Icon(Icons.tune, size: 16),
-                          label: const Text('Browse & Manage', style: TextStyle(fontSize: 12)),
-                          onPressed: _openSpacePicker,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-
-                    // Interactive Spaces Box
-                    if (_selectedSpaces.isEmpty)
-                      InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: _openSpacePicker,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: theme.colorScheme.outlineVariant),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.rocket_launch_outlined, size: 18, color: theme.hintColor),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Tap to assign spaces & sub-spaces (e.g. work › dev)',
-                                  style: TextStyle(color: theme.hintColor, fontSize: 13),
-                                ),
-                              ),
-                              Icon(Icons.arrow_drop_down, color: theme.hintColor),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.deepPurple.withValues(alpha: 0.03),
-                          border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.3)),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ..._selectedSpaces.entries.map((entry) {
-                              final space = entry.key;
-                              final subs = entry.value;
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 6),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.surface,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6)),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.rocket_launch, size: 14, color: Colors.deepPurpleAccent),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            space,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.deepPurple),
-                                          ),
-                                          const Spacer(),
-                                          InkWell(
-                                            onTap: () {
-                                              setState(() {
-                                                _selectedSpaces.remove(space);
-                                                _syncSpacesText();
-                                              });
-                                            },
-                                            child: Icon(Icons.close, size: 16, color: theme.hintColor),
-                                          ),
-                                        ],
-                                      ),
-                                      if (subs.isNotEmpty) ...[
-                                        const SizedBox(height: 6),
-                                        Wrap(
-                                          spacing: 6,
-                                          runSpacing: 4,
-                                          children: subs.map((sub) {
-                                            return Chip(
-                                              avatar: const Icon(Icons.subdirectory_arrow_right, size: 12, color: Colors.deepPurpleAccent),
-                                              visualDensity: VisualDensity.compact,
-                                              padding: EdgeInsets.zero,
-                                              labelPadding: const EdgeInsets.only(left: 2, right: 4),
-                                              backgroundColor: Colors.deepPurple.withValues(alpha: 0.08),
-                                              label: Text(sub, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
-                                              deleteIcon: const Icon(Icons.close, size: 12),
-                                              onDeleted: () {
-                                                setState(() {
-                                                  _selectedSpaces[space]!.remove(sub);
-                                                  _syncSpacesText();
-                                                });
-                                              },
-                                            );
-                                          }).toList(),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                TextButton.icon(
-                                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                                  icon: const Icon(Icons.add, size: 14),
-                                  label: const Text('Add / Edit More Spaces', style: TextStyle(fontSize: 11)),
-                                  onPressed: _openSpacePicker,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
+                  children: formFields,
                 ),
               ),
             ),
@@ -790,7 +876,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: _handleClose,
                   child: const Text('Cancel'),
                 ),
                 const SizedBox(width: 8),

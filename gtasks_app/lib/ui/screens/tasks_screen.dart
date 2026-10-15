@@ -9,6 +9,7 @@ import '../widgets/tasks_sidebar_drawer.dart';
 import '../widgets/task_filter_modal.dart';
 import '../widgets/task_editor_dialog.dart';
 import '../widgets/sync_progress_dialog.dart';
+import '../../services/widget_service.dart';
 import 'reports_screen.dart';
 
 class TasksScreen extends StatefulWidget {
@@ -25,11 +26,24 @@ class _TasksScreenState extends State<TasksScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetService.init();
+    WidgetService.setActionListener((action) {
+      if (action == 'open_task_editor' && mounted) {
+        _showAddTaskSheet(context, isFromWidget: true);
+      }
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider = context.read<TaskProvider>();
       await provider.loadInitialData();
       if (!mounted) return;
       _checkAccountStatusAtStartup(provider);
+
+      // Check if launched from widget with initial action
+      final initialAction = await WidgetService.getInitialAction();
+      if (initialAction == 'open_task_editor' && mounted) {
+        _showAddTaskSheet(context, isFromWidget: true);
+      }
     });
   }
 
@@ -99,22 +113,34 @@ class _TasksScreenState extends State<TasksScreen> {
 
   @override
   void dispose() {
+    WidgetService.setActionListener(null);
     _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _showAddTaskSheet(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => const TaskEditorDialog(),
+  void _showAddTaskSheet(BuildContext context, {bool isFromWidget = false}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TaskEditorDialog(
+          isFullScreen: true,
+          isFromWidget: isFromWidget,
+        ),
+      ),
     );
   }
 
   void _showEditTaskSheet(BuildContext context, dynamic task) {
-    showDialog(
-      context: context,
-      builder: (_) => TaskEditorDialog(task: task),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TaskEditorDialog(
+          task: task,
+          isFullScreen: true,
+          isFromWidget: false,
+        ),
+      ),
     );
   }
 
