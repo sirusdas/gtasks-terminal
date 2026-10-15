@@ -229,13 +229,11 @@ class _TaskBadge extends StatelessWidget {
   final Widget label;
   final Widget? avatar;
   final Color? backgroundColor;
-  final Border? border;
 
   const _TaskBadge({
     required this.label,
     this.avatar,
     this.backgroundColor,
-    this.border,
   });
 
   @override
@@ -245,7 +243,6 @@ class _TaskBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(6),
-        border: border,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
