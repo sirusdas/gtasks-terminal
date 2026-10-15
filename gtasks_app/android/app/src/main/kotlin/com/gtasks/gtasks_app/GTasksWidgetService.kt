@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.graphics.Color
+import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
@@ -16,6 +17,10 @@ class GTasksWidgetService : RemoteViewsService() {
 }
 
 class GTasksRemoteViewsFactory(private val context: Context) : RemoteViewsService.RemoteViewsFactory {
+
+    companion object {
+        private const val TAG = "GTasksWidgetService"
+    }
 
     data class WidgetTaskItem(
         val id: String,
@@ -36,40 +41,48 @@ class GTasksRemoteViewsFactory(private val context: Context) : RemoteViewsServic
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (!dbFile.exists()) return
 
-            val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-            val cursor = db.rawQuery(
-                """
-                SELECT id, title, priority, due, list_title, spaces 
-                FROM tasks 
-                WHERE status != 'completed' AND sync_status != 'pending_delete'
-                ORDER BY 
-                    CASE priority 
-                        WHEN 'critical' THEN 1 
-                        WHEN 'high' THEN 2 
-                        WHEN 'medium' THEN 3 
-                        WHEN 'low' THEN 4 
-                        ELSE 5 
-                    END, 
-                    CASE WHEN due IS NOT NULL AND due != '' THEN 0 ELSE 1 END,
-                    due ASC 
-                LIMIT 40
-                """.trimIndent(),
-                null
-            )
+            SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                val checkCursor = db.rawQuery(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'",
+                    null
+                )
+                val tableExists = checkCursor.use { it.moveToFirst() }
+                if (!tableExists) return
 
-            while (cursor.moveToNext()) {
-                val id = cursor.getString(0) ?: ""
-                val title = cursor.getString(1) ?: "Untitled Task"
-                val priority = cursor.getString(2) ?: "normal"
-                val due = cursor.getString(3)
-                val listTitle = cursor.getString(4)
-                val spacesJson = cursor.getString(5)
-                tasks.add(WidgetTaskItem(id, title, priority, due, listTitle, spacesJson))
+                val cursor = db.rawQuery(
+                    """
+                    SELECT id, title, priority, due, list_title, spaces 
+                    FROM tasks 
+                    WHERE status != 'completed' AND sync_status != 'pending_delete'
+                    ORDER BY 
+                        CASE priority 
+                            WHEN 'critical' THEN 1 
+                            WHEN 'high' THEN 2 
+                            WHEN 'medium' THEN 3 
+                            WHEN 'low' THEN 4 
+                            ELSE 5 
+                        END, 
+                        CASE WHEN due IS NOT NULL AND due != '' THEN 0 ELSE 1 END,
+                        due ASC 
+                    LIMIT 40
+                    """.trimIndent(),
+                    null
+                )
+
+                cursor.use {
+                    while (it.moveToNext()) {
+                        val id = it.getString(0) ?: ""
+                        val title = it.getString(1) ?: "Untitled Task"
+                        val priority = it.getString(2) ?: "normal"
+                        val due = it.getString(3)
+                        val listTitle = it.getString(4)
+                        val spacesJson = it.getString(5)
+                        tasks.add(WidgetTaskItem(id, title, priority, due, listTitle, spacesJson))
+                    }
+                }
             }
-            cursor.close()
-            db.close()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Error in onDataSetChanged", e)
         }
     }
 
@@ -80,79 +93,84 @@ class GTasksRemoteViewsFactory(private val context: Context) : RemoteViewsServic
     override fun getCount(): Int = tasks.size
 
     override fun getViewAt(position: Int): RemoteViews {
-        val views = RemoteViews(context.packageName, R.layout.gtasks_widget_item)
-        if (position >= tasks.size) return views
+        try {
+            val views = RemoteViews(context.packageName, R.layout.gtasks_widget_item)
+            if (position < 0 || position >= tasks.size) return views
 
-        val item = tasks[position]
-        views.setTextViewText(R.id.widget_item_title, item.title)
+            val item = tasks[position]
+            views.setTextViewText(R.id.widget_item_title, item.title)
 
-        // Priority badge styling
-        val priority = item.priority.lowercase()
-        when (priority) {
-            "critical" -> {
-                views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
-                views.setTextViewText(R.id.widget_item_priority, "CRITICAL")
-                views.setTextColor(R.id.widget_item_priority, Color.parseColor("#EF4444"))
-            }
-            "high" -> {
-                views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
-                views.setTextViewText(R.id.widget_item_priority, "HIGH")
-                views.setTextColor(R.id.widget_item_priority, Color.parseColor("#F97316"))
-            }
-            "medium" -> {
-                views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
-                views.setTextViewText(R.id.widget_item_priority, "MED")
-                views.setTextColor(R.id.widget_item_priority, Color.parseColor("#EAB308"))
-            }
-            else -> {
-                views.setViewVisibility(R.id.widget_item_priority, View.GONE)
-            }
-        }
-
-        // Subtitle: format Space › Subspace | List | Due
-        val parts = mutableListOf<String>()
-
-        // Extract primary space if present
-        if (!item.spacesJson.isNullOrBlank() && item.spacesJson != "{}") {
-            try {
-                val json = JSONObject(item.spacesJson)
-                val keys = json.keys()
-                if (keys.hasNext()) {
-                    val space = keys.next()
-                    val subs = json.optJSONArray(space)
-                    if (subs != null && subs.length() > 0) {
-                        parts.add("$space › ${subs.getString(0)}")
-                    } else {
-                        parts.add(space)
-                    }
+            // Priority badge styling
+            val priority = item.priority.lowercase()
+            when (priority) {
+                "critical" -> {
+                    views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
+                    views.setTextViewText(R.id.widget_item_priority, "CRITICAL")
+                    views.setTextColor(R.id.widget_item_priority, Color.parseColor("#EF4444"))
                 }
-            } catch (_: Exception) {}
-        }
+                "high" -> {
+                    views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
+                    views.setTextViewText(R.id.widget_item_priority, "HIGH")
+                    views.setTextColor(R.id.widget_item_priority, Color.parseColor("#F97316"))
+                }
+                "medium" -> {
+                    views.setViewVisibility(R.id.widget_item_priority, View.VISIBLE)
+                    views.setTextViewText(R.id.widget_item_priority, "MED")
+                    views.setTextColor(R.id.widget_item_priority, Color.parseColor("#EAB308"))
+                }
+                else -> {
+                    views.setViewVisibility(R.id.widget_item_priority, View.GONE)
+                }
+            }
 
-        if (!item.listTitle.isNullOrBlank() && item.listTitle != "My Tasks") {
-            parts.add(item.listTitle)
-        }
+            // Subtitle: format Space › Subspace | List | Due
+            val parts = mutableListOf<String>()
 
-        if (!item.due.isNullOrBlank()) {
-            val dueFormatted = if (item.due.length >= 10) item.due.substring(0, 10) else item.due
-            parts.add("Due $dueFormatted")
-        }
+            // Extract primary space if present
+            if (!item.spacesJson.isNullOrBlank() && item.spacesJson != "{}") {
+                try {
+                    val json = JSONObject(item.spacesJson)
+                    val keys = json.keys()
+                    if (keys.hasNext()) {
+                        val space = keys.next()
+                        val subs = json.optJSONArray(space)
+                        if (subs != null && subs.length() > 0) {
+                            parts.add("$space › ${subs.getString(0)}")
+                        } else {
+                            parts.add(space)
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
 
-        if (parts.isNotEmpty()) {
-            views.setViewVisibility(R.id.widget_item_subtitle, View.VISIBLE)
-            views.setTextViewText(R.id.widget_item_subtitle, parts.joinToString(" • "))
-        } else {
-            views.setViewVisibility(R.id.widget_item_subtitle, View.GONE)
-        }
+            if (!item.listTitle.isNullOrBlank() && item.listTitle != "My Tasks") {
+                parts.add(item.listTitle)
+            }
 
-        // Fill-in Intent for clicking this item (handled by MainActivity)
-        val fillInIntent = Intent().apply {
-            putExtra("task_id", item.id)
-            putExtra("task_title", item.title)
-        }
-        views.setOnClickFillInIntent(R.id.widget_item_container, fillInIntent)
+            if (!item.due.isNullOrBlank()) {
+                val dueFormatted = if (item.due.length >= 10) item.due.substring(0, 10) else item.due
+                parts.add("Due $dueFormatted")
+            }
 
-        return views
+            if (parts.isNotEmpty()) {
+                views.setViewVisibility(R.id.widget_item_subtitle, View.VISIBLE)
+                views.setTextViewText(R.id.widget_item_subtitle, parts.joinToString(" • "))
+            } else {
+                views.setViewVisibility(R.id.widget_item_subtitle, View.GONE)
+            }
+
+            // Fill-in Intent for clicking this item (handled by MainActivity)
+            val fillInIntent = Intent().apply {
+                putExtra("task_id", item.id)
+                putExtra("task_title", item.title)
+            }
+            views.setOnClickFillInIntent(R.id.widget_item_container, fillInIntent)
+
+            return views
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in getViewAt for position $position", e)
+            return RemoteViews(context.packageName, R.layout.gtasks_widget_item)
+        }
     }
 
     override fun getLoadingView(): RemoteViews? = null

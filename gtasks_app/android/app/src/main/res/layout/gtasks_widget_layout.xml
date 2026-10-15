@@ -51,8 +51,7 @@
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:background="@drawable/widget_btn_bg"
-            android:src="@android:drawable/ic_popup_sync"
-            android:tint="#7C8BA1"
+            android:src="@drawable/ic_widget_refresh"
             android:contentDescription="Refresh"
             android:padding="6dp" />
 
@@ -62,18 +61,18 @@
             android:layout_height="32dp"
             android:layout_marginStart="6dp"
             android:background="@drawable/widget_btn_bg"
-            android:src="@android:drawable/ic_input_add"
-            android:tint="#3B82F6"
+            android:src="@drawable/ic_widget_add"
             android:contentDescription="Add Task"
             android:padding="6dp" />
     </LinearLayout>
 
-    <!-- Divider -->
-    <View
+    <!-- Divider (Using ImageView because android.view.View is illegal in RemoteViews) -->
+    <ImageView
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="#334155"
-        android:layout_marginBottom="6dp" />
+        android:layout_marginBottom="6dp"
+        android:contentDescription="Divider" />
 
     <!-- Content Frame -->
     <FrameLayout
@@ -87,8 +86,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:divider="@null"
-            android:dividerHeight="4dp"
-            android:nestedScrollingEnabled="true" />
+            android:dividerHeight="4dp" />
 
         <!-- Empty State View -->
         <LinearLayout

@@ -8,25 +8,31 @@ import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
+import android.util.Log
 import android.widget.RemoteViews
 
 class GTasksWidgetProvider : AppWidgetProvider() {
 
     companion object {
+        private const val TAG = "GTasksWidgetProvider"
         const val ACTION_REFRESH = "com.gtasks.gtasks_app.ACTION_REFRESH_WIDGET"
         const val ACTION_ADD_TASK = "com.gtasks.gtasks_app.ACTION_ADD_TASK"
 
         fun updateAllWidgets(context: Context) {
-            val appWidgetManager = AppWidgetManager.getInstance(context)
-            val thisWidget = ComponentName(context, GTasksWidgetProvider::class.java)
-            val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget)
-            if (appWidgetIds.isNotEmpty()) {
-                appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list_view)
-                val intent = Intent(context, GTasksWidgetProvider::class.java).apply {
-                    action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
-                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, appWidgetIds)
+            try {
+                val appWidgetManager = AppWidgetManager.getInstance(context) ?: return
+                val thisWidget = ComponentName(context, GTasksWidgetProvider::class.java)
+                val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget) ?: intArrayOf()
+                if (appWidgetIds.isNotEmpty()) {
+                    appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list_view)
+                    val intent = Intent(context, GTasksWidgetProvider::class.java).apply {
+                        action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, appWidgetIds)
+                    }
+                    context.sendBroadcast(intent)
                 }
-                context.sendBroadcast(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in updateAllWidgets", e)
             }
         }
 
@@ -34,19 +40,24 @@ class GTasksWidgetProvider : AppWidgetProvider() {
             return try {
                 val dbFile = context.getDatabasePath("gtasks_local.db")
                 if (!dbFile.exists()) return 0
-                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-                val cursor = db.rawQuery(
-                    "SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete'",
-                    null
-                )
-                var count = 0
-                if (cursor.moveToFirst()) {
-                    count = cursor.getInt(0)
+                SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                    val checkCursor = db.rawQuery(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'",
+                        null
+                    )
+                    val tableExists = checkCursor.use { it.moveToFirst() }
+                    if (!tableExists) return 0
+
+                    val cursor = db.rawQuery(
+                        "SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete'",
+                        null
+                    )
+                    cursor.use {
+                        if (it.moveToFirst()) it.getInt(0) else 0
+                    }
                 }
-                cursor.close()
-                db.close()
-                count
             } catch (e: Exception) {
+                Log.e(TAG, "Error reading pending task count", e)
                 0
             }
         }
@@ -54,21 +65,29 @@ class GTasksWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         for (appWidgetId in appWidgetIds) {
-            updateAppWidget(context, appWidgetManager, appWidgetId)
+            try {
+                updateAppWidget(context, appWidgetManager, appWidgetId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error updating widget $appWidgetId", e)
+            }
         }
         super.onUpdate(context, appWidgetManager, appWidgetIds)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == ACTION_REFRESH || intent.action == AppWidgetManager.ACTION_APPWIDGET_UPDATE) {
-            val appWidgetManager = AppWidgetManager.getInstance(context)
-            val thisWidget = ComponentName(context, GTasksWidgetProvider::class.java)
-            val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget)
-            appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list_view)
-            for (appWidgetId in appWidgetIds) {
-                updateAppWidget(context, appWidgetManager, appWidgetId)
+        try {
+            if (intent.action == ACTION_REFRESH || intent.action == AppWidgetManager.ACTION_APPWIDGET_UPDATE) {
+                val appWidgetManager = AppWidgetManager.getInstance(context) ?: return
+                val thisWidget = ComponentName(context, GTasksWidgetProvider::class.java)
+                val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget) ?: intArrayOf()
+                appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list_view)
+                for (appWidgetId in appWidgetIds) {
+                    updateAppWidget(context, appWidgetManager, appWidgetId)
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onReceive", e)
         }
     }
 
@@ -82,18 +101,20 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         // Set up service adapter for the ListView
         val serviceIntent = Intent(context, GTasksWidgetService::class.java).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+            data = Uri.parse("content://com.gtasks.gtasks_app/widget/$appWidgetId")
         }
         views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
         views.setEmptyView(R.id.widget_list_view, R.id.widget_empty_view)
 
         // PendingIntent for clicking the header (opens app)
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_MAIN
+            addCategory(Intent.CATEGORY_LAUNCHER)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val openAppPendingIntent = PendingIntent.getActivity(
             context,
-            0,
+            appWidgetId * 10 + 0,
             openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -106,7 +127,7 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         }
         val addTaskPendingIntent = PendingIntent.getActivity(
             context,
-            1,
+            appWidgetId * 10 + 1,
             addTaskIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -115,10 +136,11 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         // PendingIntent for Refresh button
         val refreshIntent = Intent(context, GTasksWidgetProvider::class.java).apply {
             action = ACTION_REFRESH
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(appWidgetId))
         }
         val refreshPendingIntent = PendingIntent.getBroadcast(
             context,
-            2,
+            appWidgetId * 10 + 2,
             refreshIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -126,11 +148,12 @@ class GTasksWidgetProvider : AppWidgetProvider() {
 
         // PendingIntent template for clicking list items
         val clickItemIntent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val clickItemPendingIntent = PendingIntent.getActivity(
             context,
-            3,
+            appWidgetId * 10 + 3,
             clickItemIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         )
