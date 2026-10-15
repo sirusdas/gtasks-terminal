@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="{{ base_path }}/static/css/modal.css?v=37">
     <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-filter.css?v=36">
     <link rel="stylesheet" href="{{ base_path }}/static/css/hierarchy-ledger.css?v=36">
-    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=36">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/multiselect.css?v=47">
     <link rel="stylesheet" href="{{ base_path }}/static/css/reports.css?v=36">
     <link rel="stylesheet" href="{{ base_path }}/static/css/notifications.css?v=36">
     <link rel="stylesheet" href="{{ base_path }}/static/css/debugger.css?v=36">
@@ -864,6 +864,12 @@
                             </div>
                         </div>
                         <div class="filter-multiselect">
+                            <label class="filter-label"><i class="fas fa-layer-group mr-1" style="color: #6366f1;"></i>Filter by Spaces & Sub-spaces</label>
+                            <div class="multiselect-container" id="task-spaces-filter-container">
+                                <!-- Spaces hierarchical multiselect initialized dynamically -->
+                            </div>
+                        </div>
+                        <div class="filter-multiselect">
                             <label class="filter-label">Filter by Tags</label>
                             <div class="multiselect-container" id="task-tags-filter-container">
                                 <!-- Multiselect will be initialized here -->
@@ -1175,21 +1181,12 @@
                     </div>
                     <div id="edit-task-tags-container" class="task-tags-selector-wrapper"></div>
                 </div>
-                <div class="edit-form-row edit-spaces-row">
-                    <div class="edit-form-group edit-spaces-group">
-                        <div class="edit-tags-header">
-                            <label><i class="fas fa-layer-group" style="color: #6366f1;"></i> Space</label>
-                            <span class="tags-hint">Super-Tag (e.g. work, personal)</span>
-                        </div>
-                        <div id="edit-task-spaces-container" class="task-tags-selector-wrapper"></div>
+                <div class="edit-form-group edit-spaces-group">
+                    <div class="edit-tags-header">
+                        <label><i class="fas fa-layer-group" style="color: #6366f1;"></i> Spaces & Sub-spaces</label>
+                        <span class="tags-hint">Hierarchical categories (e.g. work, work › frontend)</span>
                     </div>
-                    <div class="edit-form-group edit-subspaces-group">
-                        <div class="edit-tags-header">
-                            <label><i class="fas fa-sitemap" style="color: #8b5cf6;"></i> Sub-space</label>
-                            <span class="tags-hint">Context under space (e.g. frontend)</span>
-                        </div>
-                        <div id="edit-task-subspaces-container" class="task-tags-selector-wrapper"></div>
-                    </div>
+                    <div id="edit-task-spaces-container" class="task-tags-selector-wrapper"></div>
                 </div>
                 <div class="edit-form-group edit-notes-group">
                     <div class="edit-notes-header">
@@ -1279,21 +1276,12 @@
                     </div>
                     <div id="add-task-tags-container" class="task-tags-selector-wrapper"></div>
                 </div>
-                <div class="edit-form-row edit-spaces-row">
-                    <div class="edit-form-group edit-spaces-group">
-                        <div class="edit-tags-header">
-                            <label><i class="fas fa-layer-group" style="color: #6366f1;"></i> Space</label>
-                            <span class="tags-hint">Super-Tag (e.g. work, personal)</span>
-                        </div>
-                        <div id="add-task-spaces-container" class="task-tags-selector-wrapper"></div>
+                <div class="edit-form-group edit-spaces-group">
+                    <div class="edit-tags-header">
+                        <label><i class="fas fa-layer-group" style="color: #6366f1;"></i> Spaces & Sub-spaces</label>
+                        <span class="tags-hint">Hierarchical categories (e.g. work, work › frontend)</span>
                     </div>
-                    <div class="edit-form-group edit-subspaces-group">
-                        <div class="edit-tags-header">
-                            <label><i class="fas fa-sitemap" style="color: #8b5cf6;"></i> Sub-space</label>
-                            <span class="tags-hint">Context under space (e.g. frontend)</span>
-                        </div>
-                        <div id="add-task-subspaces-container" class="task-tags-selector-wrapper"></div>
-                    </div>
+                    <div id="add-task-spaces-container" class="task-tags-selector-wrapper"></div>
                 </div>
                 <div class="edit-form-group edit-notes-group">
                     <div class="edit-notes-header">
@@ -1544,10 +1532,10 @@
         <p>Loading...</p>
     </div>
 
-    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=45"></script>
-    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=45"></script>
-    <script type="module" src="{{ base_path }}/static/js/reports.js?v=45"></script>
-    <script type="module" src="{{ base_path }}/static/js/notifications.js?v=45"></script>
-    <script type="module" src="{{ base_path }}/static/js/debugger.js?v=45"></script>
+    <script type="module" src="{{ base_path }}/static/js/hierarchy.js?v=47"></script>
+    <script type="module" src="{{ base_path }}/static/js/dashboard.js?v=47"></script>
+    <script type="module" src="{{ base_path }}/static/js/reports.js?v=47"></script>
+    <script type="module" src="{{ base_path }}/static/js/notifications.js?v=47"></script>
+    <script type="module" src="{{ base_path }}/static/js/debugger.js?v=47"></script>
 </body>
 </html>

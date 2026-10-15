@@ -29,7 +29,8 @@ export function createMultiselect(config) {
         title = '',
         allowAddNew = false,
         tagFormat = 'hash', // 'hash' for #tag or 'bracket' for [tag]
-        getParentSpaces = null // Function returning array of selected parent spaces for context
+        getParentSpaces = null, // Function returning array of selected parent spaces for context
+        isSpaceHierarchy = false
     } = config;
 
     // Filter metadata mapping for rich headers, icons, and subtitles
@@ -58,6 +59,12 @@ export function createMultiselect(config) {
             icon: 'fas fa-redo-alt',
             type: 'recurring'
         },
+        'task-spaces-filter': {
+            title: 'Filter by Spaces & Sub-spaces',
+            subtitle: 'Select spaces or sub-spaces to filter tasks',
+            icon: 'fas fa-layer-group',
+            type: 'spaces-hierarchy'
+        },
         'task-tags-filter': {
             title: 'Filter by Tags',
             subtitle: 'Select tags to include in tasks view',
@@ -77,28 +84,16 @@ export function createMultiselect(config) {
             type: 'tag'
         },
         'add-task-spaces': {
-            title: 'Spaces (Super-Tags)',
-            subtitle: 'Select spaces or type to create a new space (e.g. work, personal)',
+            title: 'Spaces & Sub-spaces',
+            subtitle: 'Select hierarchical spaces to categorize this task',
             icon: 'fas fa-layer-group',
-            type: 'space'
+            type: 'spaces-hierarchy'
         },
         'edit-task-spaces': {
-            title: 'Spaces (Super-Tags)',
-            subtitle: 'Select spaces or type to create a new space (e.g. work, personal)',
+            title: 'Spaces & Sub-spaces',
+            subtitle: 'Select hierarchical spaces to categorize this task',
             icon: 'fas fa-layer-group',
-            type: 'space'
-        },
-        'add-task-subspaces': {
-            title: 'Sub-spaces',
-            subtitle: 'Select sub-spaces or type to create a new sub-space',
-            icon: 'fas fa-sitemap',
-            type: 'subspace'
-        },
-        'edit-task-subspaces': {
-            title: 'Sub-spaces',
-            subtitle: 'Select sub-spaces or type to create a new sub-space',
-            icon: 'fas fa-sitemap',
-            type: 'subspace'
+            type: 'spaces-hierarchy'
         }
     };
 
@@ -108,6 +103,8 @@ export function createMultiselect(config) {
         icon: 'fas fa-tags',
         type: 'tag'
     };
+
+    const isHierarchy = isSpaceHierarchy || meta.type === 'spaces-hierarchy';
 
     // Container in the filter form/drawer
     const container = document.createElement('div');
@@ -156,9 +153,22 @@ export function createMultiselect(config) {
     let currentOptions = [...options];
     let selectedValues = [...initialValues];
     let pendingSelections = new Set(selectedValues.map(String));
+    const expandedSpaces = new Set();
+    selectedValues.forEach(v => {
+        const str = String(v);
+        if (str.includes(':')) expandedSpaces.add(str.split(':')[0]);
+        else expandedSpaces.add(str);
+    });
 
     // Helper: get display label for a selected value
     function getOptionLabel(val) {
+        if (isHierarchy || meta.type === 'space' || meta.type === 'subspace') {
+            if (String(val).includes(':')) {
+                const [s, sub] = String(val).split(':', 2);
+                return `${s} › ${sub}`;
+            }
+            return String(val);
+        }
         const found = currentOptions.find(opt => {
             if (typeof opt === 'object') {
                 const optVal = opt.value !== undefined ? opt.value : opt.label;
@@ -168,10 +178,6 @@ export function createMultiselect(config) {
         });
         if (found && typeof found === 'object') {
             return found.label;
-        }
-        if ((meta.type === 'space' || meta.type === 'subspace') && String(val).includes(':')) {
-            const [s, sub] = String(val).split(':', 2);
-            return `${s} › ${sub}`;
         }
         return val;
     }
@@ -192,11 +198,7 @@ export function createMultiselect(config) {
                 const tag = document.createElement('span');
                 tag.className = 'multiselect-tag';
                 let prefix = '';
-                if (meta.type === 'subspace') {
-                    tag.classList.add('multiselect-tag-subspace');
-                    tag.style.cssText = 'background: rgba(139, 92, 246, 0.12); color: #6d28d9; border: 1px solid rgba(139, 92, 246, 0.28); font-weight: 500;';
-                    prefix = '<i class="fas fa-sitemap" style="margin-right: 4px; font-size: 0.75rem; color: #8b5cf6;"></i>';
-                } else if (meta.type === 'space') {
+                if (isHierarchy || meta.type === 'space' || meta.type === 'subspace') {
                     tag.classList.add('multiselect-tag-space');
                     tag.style.cssText = 'background: rgba(99, 102, 241, 0.12); color: #4338ca; border: 1px solid rgba(99, 102, 241, 0.28); font-weight: 500;';
                     prefix = '<i class="fas fa-layer-group" style="margin-right: 4px; font-size: 0.75rem; color: #6366f1;"></i>';
@@ -205,7 +207,7 @@ export function createMultiselect(config) {
                 } else if (meta.type === 'tag') {
                     prefix = '#';
                 }
-                const suffix = (meta.type !== 'space' && meta.type !== 'subspace' && tagFormat === 'bracket') ? ']' : '';
+                const suffix = (!isHierarchy && meta.type !== 'space' && meta.type !== 'subspace' && tagFormat === 'bracket') ? ']' : '';
                 const displayLabel = getOptionLabel(value);
                 tag.innerHTML = `
                     <span class="multiselect-tag-label">${prefix}${escapeHtml(displayLabel)}${suffix}</span>
@@ -287,6 +289,8 @@ export function createMultiselect(config) {
                 </div>
             </div>
 
+            <div class="multiselect-active-strip" id="${id}-modal-active-strip" style="display: none;"></div>
+
             <div class="multiselect-modal-body">
                 <div class="multiselect-modal-grid" id="${id}-modal-grid"></div>
                 <div class="multiselect-modal-empty" id="${id}-modal-empty" style="display: none;">
@@ -315,6 +319,7 @@ export function createMultiselect(config) {
     const modalCloseIcon = overlay.querySelector('.multiselect-modal-close-icon');
     const modalSearchInput = overlay.querySelector('.multiselect-modal-search-field');
     const modalSearchClear = overlay.querySelector('.multiselect-modal-search-clear');
+    const modalActiveStrip = overlay.querySelector(`#${id}-modal-active-strip`);
     const modalGrid = overlay.querySelector('.multiselect-modal-grid');
     const modalEmpty = overlay.querySelector('.multiselect-modal-empty');
     const modalSelectedPill = overlay.querySelector(`#${id}-modal-selected-pill`);
@@ -380,10 +385,274 @@ export function createMultiselect(config) {
         updateModalStats(currentOptions.length, currentOptions.length);
     }
 
-    // Render option cards in multi-column grid
-    function renderCards(searchTerm = '') {
+    // Helper to update active selection strip above cards
+    function updateActiveStrip() {
+        if (!modalActiveStrip) return;
+        if (!isHierarchy || pendingSelections.size === 0) {
+            modalActiveStrip.style.display = 'none';
+            modalActiveStrip.innerHTML = '';
+            return;
+        }
+
+        modalActiveStrip.style.display = 'flex';
+        let html = '<span class="active-strip-label"><i class="fas fa-check-circle"></i> Selected:</span>';
+
+        pendingSelections.forEach(val => {
+            let label = val;
+            if (val.includes(':')) {
+                const [s, sub] = val.split(':', 2);
+                label = `${s} › ${sub}`;
+            }
+            html += `
+                <span class="active-strip-chip">
+                    <i class="fas fa-layer-group"></i>
+                    <span>${escapeHtml(label)}</span>
+                    <button type="button" class="strip-chip-remove" data-val="${escapeHtml(val)}" title="Remove">&times;</button>
+                </span>
+            `;
+        });
+
+        modalActiveStrip.innerHTML = html;
+        modalActiveStrip.querySelectorAll('.strip-chip-remove').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const v = btn.dataset.val;
+                pendingSelections.delete(v);
+                renderCards(modalSearchInput.value);
+            });
+        });
+    }
+
+    // Render mobile-inspired hierarchical space accordion cards
+    function renderSpaceHierarchyCards(searchTerm = '') {
         const term = searchTerm.toLowerCase().trim();
         modalGrid.innerHTML = '';
+        modalGrid.className = 'multiselect-modal-grid space-hierarchy-container';
+        updateActiveStrip();
+
+        const cleanTerm = term.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').replace(/^sub::/i, '').trim();
+
+        // 1. Quick Add card if query is new space
+        if (allowAddNew && cleanTerm && !currentOptions.some(sp => sp.label && sp.label.toLowerCase() === cleanTerm)) {
+            const addCard = document.createElement('div');
+            addCard.className = 'space-quick-add-card';
+            addCard.innerHTML = `
+                <i class="fas fa-plus-circle"></i>
+                <span>Create new space "<strong>${escapeHtml(cleanTerm)}</strong>"</span>
+                <i class="fas fa-arrow-right"></i>
+            `;
+            addCard.addEventListener('click', () => {
+                const newSpaceObj = { label: cleanTerm, count: 0, subspaces: [] };
+                currentOptions.unshift(newSpaceObj);
+                pendingSelections.add(cleanTerm);
+                expandedSpaces.add(cleanTerm);
+                modalSearchInput.value = '';
+                if (modalSearchClear) modalSearchClear.style.display = 'none';
+                renderCards('');
+            });
+            modalGrid.appendChild(addCard);
+        }
+
+        // 2. Filter visible spaces based on query
+        const filtered = currentOptions.filter(sp => {
+            if (!cleanTerm) return true;
+            if (sp.label && sp.label.toLowerCase().includes(cleanTerm)) return true;
+            return (sp.subspaces || []).some(sub => sub.label && sub.label.toLowerCase().includes(cleanTerm));
+        });
+
+        updateModalStats(filtered.length, currentOptions.length);
+
+        if (filtered.length === 0 && (!allowAddNew || !cleanTerm)) {
+            modalGrid.style.display = 'none';
+            modalEmpty.style.display = 'block';
+            return;
+        }
+
+        modalGrid.style.display = 'flex';
+        modalEmpty.style.display = 'none';
+
+        // 3. Render each space accordion card
+        filtered.forEach(sp => {
+            const spaceName = sp.label;
+            const isSpaceSelected = pendingSelections.has(spaceName);
+            const allSubs = sp.subspaces || [];
+            const selectedSubs = allSubs.filter(sub => pendingSelections.has(`${spaceName}:${sub.label}`));
+            const hasSelectedSubs = selectedSubs.length > 0;
+            const matchesSub = cleanTerm && allSubs.some(sub => sub.label && sub.label.toLowerCase().includes(cleanTerm));
+            const isExpanded = expandedSpaces.has(spaceName) || hasSelectedSubs || matchesSub;
+
+            const card = document.createElement('div');
+            card.className = `space-accordion-card ${isSpaceSelected || hasSelectedSubs ? 'has-selection' : ''}`;
+
+            // Header Row
+            const header = document.createElement('div');
+            header.className = 'space-card-header';
+            header.innerHTML = `
+                <label class="space-card-check-wrap">
+                    <input type="checkbox" class="space-card-checkbox" ${isSpaceSelected ? 'checked' : ''} />
+                </label>
+                <div class="space-card-info">
+                    <i class="fas fa-layer-group space-card-ico"></i>
+                    <span class="space-card-name">${escapeHtml(spaceName)}</span>
+                </div>
+                <div class="space-card-meta">
+                    <span class="space-card-count">${sp.count !== undefined ? sp.count : 0} tasks</span>
+                    <button type="button" class="space-card-expand-toggle" aria-label="Toggle sub-spaces">
+                        <i class="fas ${isExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}"></i>
+                    </button>
+                </div>
+            `;
+
+            // Checkbox event
+            const checkbox = header.querySelector('.space-card-checkbox');
+            checkbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+                if (checkbox.checked) {
+                    pendingSelections.add(spaceName);
+                    expandedSpaces.add(spaceName);
+                } else {
+                    pendingSelections.delete(spaceName);
+                    allSubs.forEach(sub => pendingSelections.delete(`${spaceName}:${sub.label}`));
+                }
+                renderCards(modalSearchInput.value);
+            });
+
+            // Expand toggle on chevron or info click
+            const expandBtn = header.querySelector('.space-card-expand-toggle');
+            const toggleExpand = (e) => {
+                e.stopPropagation();
+                if (expandedSpaces.has(spaceName)) {
+                    expandedSpaces.delete(spaceName);
+                } else {
+                    expandedSpaces.add(spaceName);
+                }
+                renderCards(modalSearchInput.value);
+            };
+            expandBtn.addEventListener('click', toggleExpand);
+            header.querySelector('.space-card-info').addEventListener('click', toggleExpand);
+
+            card.appendChild(header);
+
+            // Collapsible Body
+            if (isExpanded) {
+                const body = document.createElement('div');
+                body.className = 'space-card-body';
+
+                const subsWrap = document.createElement('div');
+                subsWrap.className = 'space-subspaces-wrap';
+
+                if (allSubs.length === 0 && !allowAddNew) {
+                    subsWrap.innerHTML = `<span style="font-size: 0.8rem; color: #94a3b8; font-style: italic;">No sub-spaces under "${escapeHtml(spaceName)}"</span>`;
+                }
+
+                allSubs.forEach(sub => {
+                    const subVal = `${spaceName}:${sub.label}`;
+                    const isSubSelected = pendingSelections.has(subVal);
+
+                    const pill = document.createElement('button');
+                    pill.type = 'button';
+                    pill.className = `subspace-pill ${isSubSelected ? 'selected' : ''}`;
+                    pill.innerHTML = `
+                        ${isSubSelected ? '<i class="fas fa-check" style="font-size: 0.7rem;"></i>' : ''}
+                        <span>${escapeHtml(sub.label)}</span>
+                        ${sub.count !== undefined ? `<span style="opacity: 0.7; font-size: 0.72rem;">(${sub.count})</span>` : ''}
+                    `;
+                    pill.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (isSubSelected) {
+                            pendingSelections.delete(subVal);
+                        } else {
+                            pendingSelections.add(subVal);
+                            pendingSelections.add(spaceName);
+                        }
+                        renderCards(modalSearchInput.value);
+                    });
+                    subsWrap.appendChild(pill);
+                });
+
+                if (allowAddNew) {
+                    const addBtn = document.createElement('button');
+                    addBtn.type = 'button';
+                    addBtn.className = 'btn-add-subspace-inline';
+                    addBtn.innerHTML = '<i class="fas fa-plus"></i> Add sub-space';
+
+                    const creator = document.createElement('div');
+                    creator.className = 'inline-subspace-creator';
+                    creator.style.display = 'none';
+                    creator.innerHTML = `
+                        <input type="text" class="inline-subspace-input" placeholder="New sub-space under ${escapeHtml(spaceName)}..." />
+                        <button type="button" class="btn-subspace-confirm"><i class="fas fa-check"></i></button>
+                        <button type="button" class="btn-subspace-cancel"><i class="fas fa-times"></i></button>
+                    `;
+
+                    const input = creator.querySelector('.inline-subspace-input');
+                    const confirmBtn = creator.querySelector('.btn-subspace-confirm');
+                    const cancelBtn = creator.querySelector('.btn-subspace-cancel');
+
+                    addBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        addBtn.style.display = 'none';
+                        creator.style.display = 'inline-flex';
+                        input.focus();
+                    });
+
+                    const handleAddSub = () => {
+                        const newSub = input.value.trim().toLowerCase().replace(/[{}\(\)]/g, '').replace(/^sub::/i, '');
+                        if (newSub) {
+                            if (!allSubs.some(s => s.label.toLowerCase() === newSub)) {
+                                allSubs.push({ label: newSub, count: 0 });
+                            }
+                            pendingSelections.add(`${spaceName}:${newSub}`);
+                            pendingSelections.add(spaceName);
+                            expandedSpaces.add(spaceName);
+                            renderCards(modalSearchInput.value);
+                        }
+                    };
+
+                    confirmBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        handleAddSub();
+                    });
+
+                    input.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddSub();
+                        } else if (e.key === 'Escape') {
+                            creator.style.display = 'none';
+                            addBtn.style.display = 'inline-flex';
+                        }
+                    });
+
+                    cancelBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        creator.style.display = 'none';
+                        addBtn.style.display = 'inline-flex';
+                    });
+
+                    subsWrap.appendChild(addBtn);
+                    subsWrap.appendChild(creator);
+                }
+
+                body.appendChild(subsWrap);
+                card.appendChild(body);
+            }
+
+            modalGrid.appendChild(card);
+        });
+    }
+
+    // Render option cards in multi-column grid
+    function renderCards(searchTerm = '') {
+        if (isHierarchy) {
+            renderSpaceHierarchyCards(searchTerm);
+            return;
+        }
+
+        const term = searchTerm.toLowerCase().trim();
+        modalGrid.innerHTML = '';
+        modalGrid.className = 'multiselect-modal-grid';
+        if (modalActiveStrip) modalActiveStrip.style.display = 'none';
 
         const cleanTerm = (meta.type === 'space' || meta.type === 'subspace')
             ? term.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').replace(/^sub::/i, '').trim()
@@ -511,6 +780,12 @@ export function createMultiselect(config) {
     function openModal() {
         isOpen = true;
         pendingSelections = new Set(selectedValues.map(String));
+        if (isHierarchy) {
+            selectedValues.forEach(val => {
+                const spName = val.includes(':') ? val.split(':', 1)[0] : val;
+                if (spName) expandedSpaces.add(spName);
+            });
+        }
         modalSearchInput.value = '';
         modalSearchClear.style.display = 'none';
 
@@ -563,6 +838,23 @@ export function createMultiselect(config) {
     });
 
     btnSelectAll.addEventListener('click', () => {
+        if (isHierarchy) {
+            const term = modalSearchInput.value.toLowerCase().trim();
+            const cleanTerm = term.replace(/[{}\(\)]/g, '').replace(/^spa::/i, '').replace(/^sub::/i, '').trim();
+            currentOptions.forEach(sp => {
+                const spaceName = sp.label;
+                const matchesSpace = !cleanTerm || spaceName.toLowerCase().includes(cleanTerm);
+                const allSubs = sp.subspaces || [];
+                const matchingSubs = allSubs.filter(sub => !cleanTerm || sub.label.toLowerCase().includes(cleanTerm));
+                if (matchesSpace || matchingSubs.length > 0) {
+                    pendingSelections.add(spaceName);
+                    matchingSubs.forEach(sub => pendingSelections.add(`${spaceName}:${sub.label}`));
+                }
+            });
+            renderCards(modalSearchInput.value);
+            return;
+        }
+
         const term = modalSearchInput.value.toLowerCase().trim();
         const visibleOptions = currentOptions.filter(opt => {
             const optLabel = typeof opt === 'object' ? opt.label : String(opt);
@@ -639,6 +931,12 @@ export function createMultiselect(config) {
     container.setSelectedValues = (values) => {
         selectedValues = [...values];
         pendingSelections = new Set(selectedValues.map(String));
+        if (isHierarchy) {
+            selectedValues.forEach(val => {
+                const spName = val.includes(':') ? val.split(':', 1)[0] : val;
+                if (spName) expandedSpaces.add(spName);
+            });
+        }
         updateDisplay();
     };
 

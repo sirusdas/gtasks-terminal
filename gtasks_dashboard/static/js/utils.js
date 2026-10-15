@@ -699,7 +699,7 @@ export function filterTasksByCriteria(tasks, filters) {
         console.log('[Utils] Tasks after tags filter:', filteredTasks.length);
     }
     
-    // Apply space filter
+    // Apply space filter (from sidebar)
     if (filters.space) {
         const filterSpace = String(filters.space).toLowerCase().trim();
         filteredTasks = filteredTasks.filter(task => {
@@ -711,7 +711,7 @@ export function filterTasksByCriteria(tasks, filters) {
         });
     }
 
-    // Apply subspace filter
+    // Apply subspace filter (from sidebar)
     if (filters.subspace) {
         const filterSubspace = String(filters.subspace).toLowerCase().trim();
         const parentSpace = filters.space ? String(filters.space).toLowerCase().trim() : null;
@@ -723,6 +723,28 @@ export function filterTasksByCriteria(tasks, filters) {
             return Object.entries(spaces).some(([sp, subs]) => {
                 if (parentSpace && sp.toLowerCase() !== parentSpace) return false;
                 return (subs || []).some(sub => sub.toLowerCase() === filterSubspace);
+            });
+        });
+    }
+
+    // Apply spaces filter (array of space or space:subspace strings from multiselect in filter drawer)
+    if (filters.spaces && Array.isArray(filters.spaces) && filters.spaces.length > 0) {
+        filteredTasks = filteredTasks.filter(task => {
+            const spaces = (task.spaces && Object.keys(task.spaces).length > 0)
+                ? task.spaces
+                : extractSpacesFromText(task.notes || task.description || '');
+            if (!spaces || Object.keys(spaces).length === 0) return false;
+
+            return filters.spaces.some(filterItem => {
+                const clean = String(filterItem).trim().toLowerCase();
+                if (clean.includes(':')) {
+                    const [fSpa, fSub] = clean.split(':').map(s => s.trim());
+                    return Object.entries(spaces).some(([sp, subs]) => {
+                        return sp.toLowerCase() === fSpa && (subs || []).some(sub => sub.toLowerCase() === fSub);
+                    });
+                } else {
+                    return Object.keys(spaces).some(sp => sp.toLowerCase() === clean);
+                }
             });
         });
     }
