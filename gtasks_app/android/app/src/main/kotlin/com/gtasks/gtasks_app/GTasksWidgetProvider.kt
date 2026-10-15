@@ -98,15 +98,24 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         val count = getPendingTaskCount(context)
         views.setTextViewText(R.id.widget_task_count, if (count == 0) "All caught up" else "$count pending tasks")
 
+        // Explicitly set visibility so the widget is never blank on fresh install/empty list
+        if (count == 0) {
+            views.setViewVisibility(R.id.widget_empty_view, android.view.View.VISIBLE)
+            views.setViewVisibility(R.id.widget_list_view, android.view.View.GONE)
+        } else {
+            views.setViewVisibility(R.id.widget_empty_view, android.view.View.GONE)
+            views.setViewVisibility(R.id.widget_list_view, android.view.View.VISIBLE)
+        }
+
         // Set up service adapter for the ListView
         val serviceIntent = Intent(context, GTasksWidgetService::class.java).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            data = Uri.parse("content://com.gtasks.gtasks_app/widget/$appWidgetId")
+            data = Uri.parse("gtasks-widget://widget/id/$appWidgetId")
         }
         views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
         views.setEmptyView(R.id.widget_list_view, R.id.widget_empty_view)
 
-        // PendingIntent for clicking the header (opens app)
+        // PendingIntent for clicking anywhere on the widget (opens app)
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_MAIN
             addCategory(Intent.CATEGORY_LAUNCHER)
@@ -118,7 +127,9 @@ class GTasksWidgetProvider : AppWidgetProvider() {
             openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        views.setOnClickPendingIntent(R.id.widget_root, openAppPendingIntent)
         views.setOnClickPendingIntent(R.id.widget_header, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_empty_view, openAppPendingIntent)
 
         // PendingIntent for Add Task button
         val addTaskIntent = Intent(context, MainActivity::class.java).apply {

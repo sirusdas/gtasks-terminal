@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -41,21 +42,22 @@
                 android:id="@+id/widget_task_count"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Loading..."
+                android:text="All caught up"
                 android:textColor="#9EABB8"
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <ImageButton
+        <ImageView
             android:id="@+id/widget_btn_refresh"
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_refresh"
             android:contentDescription="Refresh"
+            android:clickable="true"
             android:padding="6dp" />
 
-        <ImageButton
+        <ImageView
             android:id="@+id/widget_btn_add"
             android:layout_width="32dp"
             android:layout_height="32dp"
@@ -63,14 +65,15 @@
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_add"
             android:contentDescription="Add Task"
+            android:clickable="true"
             android:padding="6dp" />
     </LinearLayout>
 
-    <!-- Divider (Using ImageView because android.view.View is illegal in RemoteViews) -->
+    <!-- Divider -->
     <ImageView
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#334155"
+        android:src="@drawable/widget_divider"
         android:layout_marginBottom="6dp"
         android:contentDescription="Divider" />
 
@@ -95,7 +98,7 @@
             android:layout_height="match_parent"
             android:orientation="vertical"
             android:gravity="center"
-            android:visibility="gone">
+            android:clickable="true">
 
             <TextView
                 android:layout_width="wrap_content"
