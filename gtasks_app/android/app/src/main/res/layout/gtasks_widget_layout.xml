@@ -49,8 +49,8 @@
 
         <ImageView
             android:id="@+id/widget_btn_sync"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_sync"
             android:contentDescription="Quick Sync"
@@ -59,9 +59,9 @@
 
         <ImageView
             android:id="@+id/widget_btn_refresh"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginStart="4dp"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="6dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_refresh"
             android:contentDescription="Refresh"
@@ -70,9 +70,9 @@
 
         <ImageView
             android:id="@+id/widget_btn_add"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginStart="4dp"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="6dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_add"
             android:contentDescription="Add Task"
@@ -87,12 +87,12 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingBottom="6dp">
+        android:paddingBottom="4dp">
 
         <ImageView
             android:id="@+id/widget_filter_list"
-            android:layout_width="26dp"
-            android:layout_height="26dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_list"
             android:contentDescription="Filter by List"
@@ -101,8 +101,8 @@
 
         <ImageView
             android:id="@+id/widget_filter_tag"
-            android:layout_width="26dp"
-            android:layout_height="26dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:layout_marginStart="6dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_tag"
@@ -112,8 +112,8 @@
 
         <ImageView
             android:id="@+id/widget_filter_space"
-            android:layout_width="26dp"
-            android:layout_height="26dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:layout_marginStart="6dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_space"
@@ -123,8 +123,8 @@
 
         <ImageView
             android:id="@+id/widget_filter_subspace"
-            android:layout_width="26dp"
-            android:layout_height="26dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:layout_marginStart="6dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_subspace"
@@ -134,8 +134,8 @@
 
         <ImageView
             android:id="@+id/widget_filter_account"
-            android:layout_width="26dp"
-            android:layout_height="26dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:layout_marginStart="6dp"
             android:background="@drawable/widget_btn_bg"
             android:src="@drawable/ic_widget_account"
@@ -143,42 +143,65 @@
             android:clickable="true"
             android:padding="5dp" />
 
-        <!-- Active Filter Badge Pill (Visible when a filter is applied) -->
-        <LinearLayout
-            android:id="@+id/widget_active_filter_container"
+        <ImageView
+            android:id="@+id/widget_filter_date"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_calendar"
+            android:contentDescription="Filter by Date Window"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/widget_filter_sort"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_sort"
+            android:contentDescription="Sort by"
+            android:clickable="true"
+            android:padding="5dp" />
+    </LinearLayout>
+
+    <!-- Active Filter Badge Pill (Visible when a filter or sort is applied) -->
+    <LinearLayout
+        android:id="@+id/widget_active_filter_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/widget_filter_pill_bg"
+        android:paddingStart="10dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="6dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/widget_active_filter_text"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@drawable/widget_filter_pill_bg"
-            android:paddingStart="8dp"
-            android:paddingEnd="4dp"
-            android:paddingTop="3dp"
-            android:paddingBottom="3dp"
-            android:visibility="gone">
+            android:text="Space: Work"
+            android:textColor="#38BDF8"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
 
-            <TextView
-                android:id="@+id/widget_active_filter_text"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Space: Work"
-                android:textColor="#38BDF8"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:maxLines="1"
-                android:ellipsize="end" />
-
-            <ImageView
-                android:id="@+id/widget_btn_clear_filter"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:src="@drawable/ic_widget_close"
-                android:contentDescription="Clear Filter"
-                android:clickable="true" />
-        </LinearLayout>
+        <ImageView
+            android:id="@+id/widget_btn_clear_filter"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@drawable/ic_widget_close"
+            android:contentDescription="Clear Filter"
+            android:clickable="true"
+            android:padding="3dp" />
     </LinearLayout>
 
     <!-- Divider -->

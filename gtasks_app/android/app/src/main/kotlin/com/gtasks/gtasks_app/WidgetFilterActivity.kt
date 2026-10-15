@@ -64,6 +64,14 @@ class WidgetFilterActivity : Activity() {
                 tvTitle.text = "Filter by Account"
                 ivIcon.setImageResource(R.drawable.ic_widget_account)
             }
+            "date" -> {
+                tvTitle.text = "Filter by Date Window"
+                ivIcon.setImageResource(R.drawable.ic_widget_calendar)
+            }
+            "sort" -> {
+                tvTitle.text = "Sort Tasks By"
+                ivIcon.setImageResource(R.drawable.ic_widget_sort)
+            }
             else -> {
                 tvTitle.text = "Filter Tasks"
             }
@@ -90,25 +98,42 @@ class WidgetFilterActivity : Activity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // Clear filter
+        // Clear filter / reset sort
         tvAll.setOnClickListener {
             val prefs = getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
             prefs.edit()
                 .remove("filter_type_$appWidgetId")
                 .remove("filter_val_$appWidgetId")
+                .remove("sort_by_$appWidgetId")
                 .apply()
             GTasksWidgetProvider.updateAllWidgets(applicationContext)
             finish()
         }
 
-        // Select specific filter
+        // Select specific filter or sort
         lvOptions.setOnItemClickListener { _, _, position, _ ->
             val selected = filteredOptions[position]
             val prefs = getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-            prefs.edit()
-                .putString("filter_type_$appWidgetId", filterType)
-                .putString("filter_val_$appWidgetId", selected.name)
-                .apply()
+
+            if (filterType == "sort") {
+                val sortKey = when (selected.name) {
+                    "Due Date (Earliest first)" -> "due_asc"
+                    "Due Date (Latest first)" -> "due_desc"
+                    "Modified Date (Recent first)" -> "modified"
+                    "Created Date (Recent first)" -> "created"
+                    "Title (A to Z)" -> "title"
+                    else -> "priority"
+                }
+                prefs.edit()
+                    .putString("sort_by_$appWidgetId", sortKey)
+                    .apply()
+            } else {
+                prefs.edit()
+                    .putString("filter_type_$appWidgetId", filterType)
+                    .putString("filter_val_$appWidgetId", selected.name)
+                    .apply()
+            }
+
             GTasksWidgetProvider.updateAllWidgets(applicationContext)
             finish()
         }
@@ -123,7 +148,6 @@ class WidgetFilterActivity : Activity() {
             if (!dbFile.exists()) return
 
             SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                // Check if tasks table exists
                 val check = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'", null)
                 val exists = check.use { it.moveToFirst() }
                 if (!exists) return
@@ -238,6 +262,36 @@ class WidgetFilterActivity : Activity() {
                         counts.entries.sortedByDescending { it.value }.forEach {
                             allOptions.add(FilterOption(it.key, it.value))
                         }
+                    }
+                    "date" -> {
+                        fun countFor(whereClause: String): Int {
+                            val c = db.rawQuery(
+                                "SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete' AND $whereClause",
+                                null
+                            )
+                            return c.use { if (it.moveToFirst()) it.getInt(0) else 0 }
+                        }
+
+                        allOptions.add(FilterOption("Today", countFor("substr(due, 1, 10) = date('now', 'localtime')")))
+                        allOptions.add(FilterOption("Tomorrow", countFor("substr(due, 1, 10) = date('now', 'localtime', '+1 day')")))
+                        allOptions.add(FilterOption("Overdue", countFor("due IS NOT NULL AND due != '' AND substr(due, 1, 10) < date('now', 'localtime')")))
+                        allOptions.add(FilterOption("Next 7 Days", countFor("due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= date('now', 'localtime') AND substr(due, 1, 10) <= date('now', 'localtime', '+7 days')")))
+                        allOptions.add(FilterOption("Upcoming", countFor("due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= date('now', 'localtime')")))
+                        allOptions.add(FilterOption("No Due Date", countFor("due IS NULL OR due = ''")))
+                    }
+                    "sort" -> {
+                        val totalCursor = db.rawQuery(
+                            "SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete'",
+                            null
+                        )
+                        val total = totalCursor.use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+                        allOptions.add(FilterOption("Priority (Critical to Low)", total))
+                        allOptions.add(FilterOption("Due Date (Earliest first)", total))
+                        allOptions.add(FilterOption("Due Date (Latest first)", total))
+                        allOptions.add(FilterOption("Modified Date (Recent first)", total))
+                        allOptions.add(FilterOption("Created Date (Recent first)", total))
+                        allOptions.add(FilterOption("Title (A to Z)", total))
                     }
                 }
             }

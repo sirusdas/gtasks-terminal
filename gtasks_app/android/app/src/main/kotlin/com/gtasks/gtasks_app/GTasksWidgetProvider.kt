@@ -91,6 +91,16 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                                     args.add("%\"$filterVal\"%")
                                 }
                             }
+                            "date" -> {
+                                when (filterVal?.lowercase()) {
+                                    "today" -> queryBuilder.append(" AND substr(due, 1, 10) = date('now', 'localtime')")
+                                    "tomorrow" -> queryBuilder.append(" AND substr(due, 1, 10) = date('now', 'localtime', '+1 day')")
+                                    "overdue" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) < date('now', 'localtime')")
+                                    "next 7 days" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= date('now', 'localtime') AND substr(due, 1, 10) <= date('now', 'localtime', '+7 days')")
+                                    "upcoming" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= date('now', 'localtime')")
+                                    "no due date" -> queryBuilder.append(" AND (due IS NULL OR due = '')")
+                                }
+                            }
                         }
                     }
 
@@ -180,6 +190,7 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                         prefs.edit()
                             .remove("filter_type_$appWidgetId")
                             .remove("filter_val_$appWidgetId")
+                            .remove("sort_by_$appWidgetId")
                             .apply()
                         updateAllWidgets(context)
                     }
@@ -193,25 +204,43 @@ class GTasksWidgetProvider : AppWidgetProvider() {
     private fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
         val views = RemoteViews(context.packageName, R.layout.gtasks_widget_layout)
 
-        // Read active filter
+        // Read active filter & sort
         val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
         val filterType = prefs.getString("filter_type_$appWidgetId", null)
         val filterVal = prefs.getString("filter_val_$appWidgetId", null)
+        val sortBy = prefs.getString("sort_by_$appWidgetId", "priority")
 
         val count = getFilteredTaskCount(context, filterType, filterVal)
 
-        // Update header & active filter pill
-        if (!filterType.isNullOrBlank() && !filterVal.isNullOrBlank()) {
-            val label = when (filterType) {
-                "space" -> "Space: $filterVal"
-                "subspace" -> filterVal
-                "tag" -> "#$filterVal"
-                "list" -> "List: $filterVal"
-                "account" -> "@$filterVal"
-                else -> filterVal
-            }
+        // Format active filter & sort badge pill
+        val filterLabel = when (filterType) {
+            "space" -> "Space: $filterVal"
+            "subspace" -> filterVal
+            "tag" -> "#$filterVal"
+            "list" -> "List: $filterVal"
+            "account" -> "@$filterVal"
+            "date" -> "📅 $filterVal"
+            else -> null
+        }
+        val sortLabel = when (sortBy) {
+            "due_asc" -> "Due ↑"
+            "due_desc" -> "Due ↓"
+            "modified" -> "Modified"
+            "created" -> "Created"
+            "title" -> "Title A-Z"
+            else -> null
+        }
+
+        val pillText = when {
+            !filterLabel.isNullOrBlank() && !sortLabel.isNullOrBlank() -> "$filterLabel • Sort: $sortLabel"
+            !filterLabel.isNullOrBlank() -> filterLabel
+            !sortLabel.isNullOrBlank() -> "Sort: $sortLabel"
+            else -> null
+        }
+
+        if (pillText != null) {
             views.setViewVisibility(R.id.widget_active_filter_container, View.VISIBLE)
-            views.setTextViewText(R.id.widget_active_filter_text, label)
+            views.setTextViewText(R.id.widget_active_filter_text, pillText)
             views.setTextViewText(R.id.widget_task_count, "$count tasks")
         } else {
             views.setViewVisibility(R.id.widget_active_filter_container, View.GONE)
@@ -325,6 +354,8 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         setupFilterButton(R.id.widget_filter_space, "space", 12)
         setupFilterButton(R.id.widget_filter_subspace, "subspace", 13)
         setupFilterButton(R.id.widget_filter_account, "account", 14)
+        setupFilterButton(R.id.widget_filter_date, "date", 15)
+        setupFilterButton(R.id.widget_filter_sort, "sort", 16)
 
         // Item click template (Broadcasts to provider to handle complete, expand, or open)
         val itemTemplateIntent = Intent(context, GTasksWidgetProvider::class.java).apply {

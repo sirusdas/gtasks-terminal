@@ -60,6 +60,9 @@ class GTasksRemoteViewsFactory(
             val filterVal = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                 prefs.getString("filter_val_$appWidgetId", null)
             } else null
+            val sortBy = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                prefs.getString("sort_by_$appWidgetId", "priority")
+            } else "priority"
 
             SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
                 val checkCursor = db.rawQuery(
@@ -107,12 +110,39 @@ class GTasksRemoteViewsFactory(
                                 args.add("%\"$filterVal\"%")
                             }
                         }
+                        "date" -> {
+                            when (filterVal.lowercase()) {
+                                "today" -> queryBuilder.append(" AND substr(due, 1, 10) = date('now', 'localtime')")
+                                "tomorrow" -> queryBuilder.append(" AND substr(due, 1, 10) = date('now', 'localtime', '+1 day')")
+                                "overdue" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) < date('now', 'localtime')")
+                                "next 7 days" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= date('now', 'localtime') AND substr(due, 1, 10) <= date('now', 'localtime', '+7 days')")
+                                "upcoming" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= date('now', 'localtime')")
+                                "no due date" -> queryBuilder.append(" AND (due IS NULL OR due = '')")
+                            }
+                        }
                     }
                 }
 
-                queryBuilder.append(
-                    """
-                     ORDER BY 
+                val orderByClause = when (sortBy) {
+                    "due_asc" -> """
+                        CASE WHEN due IS NOT NULL AND due != '' THEN 0 ELSE 1 END,
+                        due ASC,
+                        CASE priority 
+                            WHEN 'critical' THEN 1 
+                            WHEN 'high' THEN 2 
+                            WHEN 'medium' THEN 3 
+                            WHEN 'low' THEN 4 
+                            ELSE 5 
+                        END
+                    """.trimIndent()
+                    "due_desc" -> """
+                        CASE WHEN due IS NOT NULL AND due != '' THEN 0 ELSE 1 END,
+                        due DESC
+                    """.trimIndent()
+                    "modified" -> "modified_at DESC"
+                    "created" -> "created_at DESC"
+                    "title" -> "title COLLATE NOCASE ASC"
+                    else -> """
                         CASE priority 
                             WHEN 'critical' THEN 1 
                             WHEN 'high' THEN 2 
@@ -121,10 +151,11 @@ class GTasksRemoteViewsFactory(
                             ELSE 5 
                         END, 
                         CASE WHEN due IS NOT NULL AND due != '' THEN 0 ELSE 1 END,
-                        due ASC 
-                    LIMIT 50
+                        due ASC
                     """.trimIndent()
-                )
+                }
+
+                queryBuilder.append(" ORDER BY $orderByClause LIMIT 50")
 
                 val cursor = db.rawQuery(queryBuilder.toString(), args.toTypedArray())
                 cursor.use {
