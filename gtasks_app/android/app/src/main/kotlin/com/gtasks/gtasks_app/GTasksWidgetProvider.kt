@@ -37,7 +37,6 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                 val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget) ?: intArrayOf()
                 if (appWidgetIds.isNotEmpty()) {
                     appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list_view)
-                    appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_grid_view)
                     for (appWidgetId in appWidgetIds) {
                         val provider = GTasksWidgetProvider()
                         provider.updateAppWidget(context, appWidgetManager, appWidgetId)
@@ -227,7 +226,6 @@ class GTasksWidgetProvider : AppWidgetProvider() {
 
                         val appWidgetManager = AppWidgetManager.getInstance(context) ?: return
                         appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list_view)
-                        appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_grid_view)
                     }
                 }
                 ACTION_TOGGLE_VIEW_MODE -> {
@@ -376,26 +374,16 @@ class GTasksWidgetProvider : AppWidgetProvider() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         )
 
-        // Toggle Empty View vs List View vs Grid View
+        // Toggle Empty View vs List View
         if (count == 0) {
             views.setViewVisibility(R.id.widget_empty_view, View.VISIBLE)
             views.setViewVisibility(R.id.widget_list_view, View.GONE)
-            views.setViewVisibility(R.id.widget_grid_view, View.GONE)
         } else {
             views.setViewVisibility(R.id.widget_empty_view, View.GONE)
-            if (viewMode == "two_column") {
-                views.setViewVisibility(R.id.widget_list_view, View.GONE)
-                views.setViewVisibility(R.id.widget_grid_view, View.VISIBLE)
-                views.setRemoteAdapter(R.id.widget_grid_view, serviceIntent)
-                views.setEmptyView(R.id.widget_grid_view, R.id.widget_empty_view)
-                views.setPendingIntentTemplate(R.id.widget_grid_view, itemTemplatePendingIntent)
-            } else {
-                views.setViewVisibility(R.id.widget_grid_view, View.GONE)
-                views.setViewVisibility(R.id.widget_list_view, View.VISIBLE)
-                views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
-                views.setEmptyView(R.id.widget_list_view, R.id.widget_empty_view)
-                views.setPendingIntentTemplate(R.id.widget_list_view, itemTemplatePendingIntent)
-            }
+            views.setViewVisibility(R.id.widget_list_view, View.VISIBLE)
+            views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
+            views.setEmptyView(R.id.widget_list_view, R.id.widget_empty_view)
+            views.setPendingIntentTemplate(R.id.widget_list_view, itemTemplatePendingIntent)
         }
 
         // Header click -> opens MainActivity

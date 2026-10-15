@@ -251,24 +251,13 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <!-- Task List (for Detailed and Compact modes) -->
+        <!-- Single Rock-Solid Task ListView (Handles Detailed, Compact One-Liner, and 2-Column Rows) -->
         <ListView
             android:id="@+id/widget_list_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:divider="@null"
             android:dividerHeight="3dp" />
-
-        <!-- Task Grid (for 2-Column mode) -->
-        <GridView
-            android:id="@+id/widget_grid_view"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:numColumns="2"
-            android:horizontalSpacing="4dp"
-            android:verticalSpacing="4dp"
-            android:stretchMode="columnWidth"
-            android:visibility="gone" />
 
         <!-- Empty State View -->
         <LinearLayout
