@@ -3085,11 +3085,12 @@ def api_ai_ask():
 
 @api.route('/ai/chat', methods=['POST'])
 def api_ai_chat():
-    """Process a turn in conversational chat via AIClient"""
+    """Process a turn in conversational chat via AIClient with optional view context"""
     try:
         data = request.get_json() or {}
         message = data.get('message') or data.get('query') or ''
         account = data.get('account')
+        context = data.get('context')
         
         if not message:
             return jsonify({'success': False, 'error': 'Message is required'}), 400
@@ -3101,7 +3102,18 @@ def api_ai_chat():
         tm = TaskManager(storage_backend='sqlite', account_name=cli_account)
         ai_client = AIClient(tm, account_name=cli_account)
         
-        reply = ai_client.chat_turn(message)
+        effective_message = message
+        if context and ai_client.has_llm_configured():
+            scope_desc = f"[Scope: {context.get('scopeType', 'VIEW')} | Filters: {context.get('filterDescription', 'None')} | Count: {context.get('taskCount', 0)} tasks]"
+            task_samples = context.get('tasksSample', [])
+            if task_samples:
+                sample_lines = "\n".join([f"- #{t.get('display_id') or t.get('id')}: {t.get('title')} (due: {t.get('due') or 'None'}, priority: {t.get('priority', 'medium')})" for t in task_samples[:10]])
+                context_prefix = f"[View Context: {scope_desc}\nVisible Tasks:\n{sample_lines}]\n\n"
+            else:
+                context_prefix = f"[View Context: {scope_desc}]\n\n"
+            effective_message = f"{context_prefix}{message}"
+            
+        reply = ai_client.chat_turn(effective_message)
         return jsonify({
             'success': True,
             'reply': reply

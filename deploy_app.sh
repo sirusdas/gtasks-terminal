@@ -57,6 +57,10 @@ except Exception:
     pass
 " 2>/dev/null || true)
 
+  if [ -z "${DOWNLOAD_URL}" ]; then
+    DOWNLOAD_URL="https://github.com/sirusdas/gtasks-terminal/releases/download/nightly-build/app-debug.apk"
+  fi
+
   if [ -n "${DOWNLOAD_URL}" ]; then
     echo "[+] Downloading fresh APK from GitHub Actions release..."
     curl -L -o "${FALLBACK_APK}" "${DOWNLOAD_URL}"

@@ -2136,6 +2136,19 @@ export function filterTasks() {
     // Apply filters
     filteredTasks = filterTasksByCriteria(filteredTasks, filters);
     
+    // Expose active view state for AI Assistant & update context
+    window.currentFilteredTasks = filteredTasks;
+    window.currentActiveFilters = filters;
+    if (window.AiChatController && typeof window.AiChatController.onViewContextUpdated === 'function') {
+        window.AiChatController.onViewContextUpdated({
+            tasks: filteredTasks,
+            allTasks: dashboardData.tasks || [],
+            filters: filters,
+            totalCount: totalTasks,
+            filteredCount: filteredTasks.length
+        });
+    }
+    
     // Update task count display
     updateTasksCountDisplay(filteredTasks.length, totalTasks);
     

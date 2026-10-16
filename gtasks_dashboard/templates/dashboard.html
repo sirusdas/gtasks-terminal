@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="{{ base_path }}/static/css/reports.css?v=36">
     <link rel="stylesheet" href="{{ base_path }}/static/css/notifications.css?v=36">
     <link rel="stylesheet" href="{{ base_path }}/static/css/debugger.css?v=36">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/ai-chat.css?v=1">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -37,6 +38,11 @@
             <button class="mobile-action-btn mobile-filter-btn" id="mobile-top-filter-btn" onclick="toggleFilterDrawer()" title="Filter Tasks">
                 <i class="fas fa-filter"></i>
                 <span class="filter-count-badge" id="mobile-filter-badge" style="display: none;">0</span>
+            </button>
+            <!-- Mobile AI Assistant Button -->
+            <button class="mobile-action-btn mobile-ai-btn" id="mobile-header-ai-btn" onclick="window.toggleAiChatDrawer?.()" title="AI Assistant (Ctrl+Space)">
+                <i class="fas fa-sparkles" style="color: #f59e0b;"></i>
+                <span class="filter-count-badge" id="mobile-ai-badge" style="display: none; background: #f59e0b; color: #000;">0</span>
             </button>
             <!-- Mobile Refresh Dropdown -->
             <div class="refresh-dropdown mobile-refresh-dropdown">
@@ -112,6 +118,12 @@
                 <a href="{{ base_path }}/reports" class="nav-item {% if default_view == 'reports' %}active{% endif %}" id="nav-reports" onclick="showSection('reports'); closeSidebarOnMobile(); return false;">
                     <i class="fas fa-chart-pie"></i>
                     <span>Reports & Analytics</span>
+                </a>
+                <!-- AI Assistant Nav Item -->
+                <a href="#" class="nav-item" id="nav-ai-chat" onclick="window.openAiChatDrawer?.(); if(typeof closeSidebarOnMobile === 'function') closeSidebarOnMobile(); return false;">
+                    <i class="fas fa-sparkles" style="color: #f59e0b;"></i>
+                    <span>AI Assistant</span>
+                    <span class="sidebar-badge" id="sidebar-ai-badge" style="display: none; background: #f59e0b; color: #000; border-radius: 10px; padding: 1px 6px; font-size: 10px; font-weight: bold; margin-left: auto;">0</span>
                 </a>
                 <!-- Tasks Nav Item with Nested Lists & Tags -->
                 <div class="sidebar-tasks-group" id="sidebar-tasks-group">
@@ -243,6 +255,12 @@
                                 </div>
                             </div>
                         </div>
+                        <!-- Desktop AI Assistant Button -->
+                        <button class="header-ai-btn" id="header-ai-btn" onclick="window.toggleAiChatDrawer?.()" title="AI Assistant (Ctrl+Space)">
+                            <i class="fas fa-sparkles"></i>
+                            <span>AI Assistant</span>
+                            <span class="header-ai-badge" id="header-ai-badge" style="display: none;">0</span>
+                        </button>
                         <button class="settings-btn" onclick="openSettings()" title="Settings">
                             <i class="fas fa-cog"></i>
                         </button>
@@ -752,6 +770,11 @@
                     <div class="header-actions">
                         <button class="btn btn-primary" onclick="openAddModal()" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background-color: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer;">
                             <i class="fas fa-plus"></i> New Task
+                        </button>
+                        <button class="header-ai-btn" id="tasks-header-ai-btn" onclick="window.toggleAiChatDrawer?.()" title="AI Assistant for this view (Ctrl+Space)">
+                            <i class="fas fa-sparkles"></i>
+                            <span>AI View</span>
+                            <span class="header-ai-badge" id="tasks-ai-badge" style="display: none;">0</span>
                         </button>
                         <div class="refresh-dropdown">
                             <button class="header-refresh-btn" onclick="refreshData()" title="Refresh Tasks">
@@ -1537,5 +1560,6 @@
     <script type="module" src="{{ base_path }}/static/js/reports.js?v=47"></script>
     <script type="module" src="{{ base_path }}/static/js/notifications.js?v=47"></script>
     <script type="module" src="{{ base_path }}/static/js/debugger.js?v=47"></script>
+    <script type="module" src="{{ base_path }}/static/js/ai-chat.js?v=1"></script>
 </body>
 </html>
