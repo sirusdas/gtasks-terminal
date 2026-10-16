@@ -18,6 +18,7 @@ import '../../models/task_view_context.dart';
 import '../../models/task_item.dart';
 import 'reports_screen.dart';
 import 'ai_chat_screen.dart';
+import '../widgets/quick_ai_bottom_sheet.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -244,12 +245,8 @@ class _TasksScreenState extends State<TasksScreen> {
               '${provider.tasks.length}',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
             ),
-            child: IconButton(
-              icon: const Icon(Icons.auto_awesome, color: Colors.amber),
-              tooltip: hasViewFilters
-                  ? 'AI Assistant (Scoped to this view: ${provider.tasks.length} tasks)'
-                  : 'AI Assistant & Chat Bot',
-              onPressed: () {
+            child: GestureDetector(
+              onLongPress: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -259,6 +256,18 @@ class _TasksScreenState extends State<TasksScreen> {
                   ),
                 );
               },
+              child: IconButton(
+                icon: const Icon(Icons.auto_awesome, color: Colors.amber),
+                tooltip: hasViewFilters
+                    ? 'Quick AI (${provider.tasks.length} tasks) • Long-press for full chat'
+                    : 'Quick AI Assistant • Long-press for full chat',
+                onPressed: () {
+                  showQuickAiBottomSheet(
+                    context,
+                    _buildCurrentViewContext(provider),
+                  );
+                },
+              ),
             ),
           ),
           // Filter drawer toggle button with active badge
@@ -705,13 +714,9 @@ class _TasksScreenState extends State<TasksScreen> {
                                         icon: const Icon(Icons.auto_awesome, size: 16, color: Colors.amber),
                                         label: const Text('Ask AI about this view', style: TextStyle(fontSize: 12)),
                                         onPressed: () {
-                                          Navigator.push(
+                                          showQuickAiBottomSheet(
                                             context,
-                                            MaterialPageRoute(
-                                              builder: (_) => AiChatScreen(
-                                                initialContext: _buildCurrentViewContext(provider),
-                                              ),
-                                            ),
+                                            _buildCurrentViewContext(provider),
                                           );
                                         },
                                       ),

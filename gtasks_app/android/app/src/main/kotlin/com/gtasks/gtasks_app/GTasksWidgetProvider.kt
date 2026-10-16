@@ -418,11 +418,9 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.widget_btn_view_mode, toggleViewPendingIntent)
 
-        // AI Assistant Button -> Opens AI Chat Screen directly with widget context
-        val aiIntent = Intent(context, MainActivity::class.java).apply {
-            action = "com.gtasks.gtasks_app.ACTION_OPEN_AI"
-            putExtra("open_ai_chat", true)
-            putExtra("is_from_widget", true)
+        // AI Assistant Button -> Opens Native Translucent Quick AI Dialog immediately over Home Screen
+        val aiIntent = Intent(context, QuickAiActivity::class.java).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             if (!filterType.isNullOrBlank() && !filterVal.isNullOrBlank()) {
                 putExtra("widget_filter_type", filterType)
                 putExtra("widget_filter_val", filterVal)
