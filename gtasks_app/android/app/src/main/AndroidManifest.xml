@@ -79,13 +79,6 @@
             android:theme="@style/Theme.TranslucentDialog"
             android:exported="false"
             android:windowSoftInputMode="stateHidden|adjustResize" />
-
-        <!-- Home Screen Widget Quick AI Floating Dialog -->
-        <activity
-            android:name=".QuickAiActivity"
-            android:theme="@style/Theme.TranslucentDialog"
-            android:exported="false"
-            android:windowSoftInputMode="stateHidden|adjustResize" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
