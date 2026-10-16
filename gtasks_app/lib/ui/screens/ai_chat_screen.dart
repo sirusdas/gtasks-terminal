@@ -5,6 +5,7 @@ import '../../models/task_item.dart';
 import '../../providers/task_provider.dart';
 import '../widgets/task_detail_modal.dart';
 import '../widgets/task_editor_dialog.dart';
+import '../widgets/command_palette_modal.dart';
 
 enum ChatSender { user, assistant }
 
@@ -14,6 +15,7 @@ enum WizardStep {
   addingDue,
   addingPriority,
   addingSpace,
+  confirmingReview,
   updatingSelectTask,
   updatingSelectField,
   updatingFieldValue,
@@ -51,11 +53,11 @@ class AiChatScreen extends StatefulWidget {
 
 class _AiChatScreenState extends State<AiChatScreen> {
   final List<ChatMessage> _messages = [];
-  final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey<_ChatInputBarState> _inputBarKey = GlobalKey<_ChatInputBarState>();
   bool _isProcessing = false;
 
-  // Conversational Wizard State
+  // Conversational Wizard State (Claude CLI Q&A style)
   WizardStep _wizardStep = WizardStep.none;
   String? _draftTitle;
   String? _draftDue;
@@ -64,15 +66,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
   TaskItem? _targetTaskForUpdate;
   String? _targetFieldForUpdate;
 
+  // Selected quick filter combiners for command chaining
+  final Set<String> _chainedFilters = {};
+
   final List<String> _quickActionPills = [
-    '📊 Summary',
-    '⏳ Pending Tasks',
+    '/help',
+    '➕ Add Task',
     '📅 Due Today',
     '⚡ High Priority',
-    '➕ Add Task',
-    '🌌 Spaces',
+    '⏳ Pending',
     '🚨 Overdue',
-    '❓ Help & Menu',
+    '🌌 Spaces',
+    '📊 Summary',
   ];
 
   @override
@@ -82,17 +87,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
       ChatMessage(
         id: 'welcome',
         sender: ChatSender.assistant,
-        text: '👋 Hi! I am your **GTasks AI Assistant**.\n\n'
-            'I can help you add tasks step-by-step, review deadlines, prioritize your work, or organize spaces.\n\n'
-            'Tap any quick action pill below, choose a command, or ask naturally!',
+        text: '👋 Welcome to **GTasks AI Assistant**!\n\n'
+            'I can help you manage tasks conversationally, chain commands, or guide you through a step-by-step Q&A wizard.\n\n'
+            '• Type `/help` or tap **`[/]`** to open the interactive Command Palette.\n'
+            '• Chain commands with `|` or `&&` (e.g. `/today | /high`).\n'
+            '• Tap **➕ Add Task** for Claude CLI-style Q&A with skip options!',
         suggestionChips: [
-          '📊 Summary',
-          '⏳ Pending Tasks',
+          '/help',
+          '➕ Add Task',
           '📅 Due Today',
           '⚡ High Priority',
-          '➕ Add Task',
-          '🌌 Spaces',
-          '❓ Help & Menu',
+          '⏳ Pending Tasks',
+          '📊 Summary',
         ],
       ),
     );
@@ -100,7 +106,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   @override
   void dispose() {
-    _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -110,8 +115,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
         );
       }
     });
@@ -135,11 +140,24 @@ class _AiChatScreenState extends State<AiChatScreen> {
     return t.formattedDueDate == todayStr;
   }
 
+  void _openCommandPalette() {
+    CommandPaletteModal.show(
+      context,
+      onSelectCommand: (cmd, runImmediately) {
+        if (runImmediately) {
+          _handleSubmitted(cmd);
+        } else {
+          _inputBarKey.currentState?.setText(cmd);
+        }
+      },
+    );
+  }
+
   Future<void> _handleSubmitted(String text) async {
     final query = text.trim();
     if (query.isEmpty || _isProcessing) return;
 
-    _inputController.clear();
+    _inputBarKey.currentState?.clear();
     setState(() {
       _messages.add(
         ChatMessage(
@@ -159,43 +177,71 @@ class _AiChatScreenState extends State<AiChatScreen> {
     bool isError = false;
 
     try {
-      // 1. Check for cancel / exit during wizard
       final qLower = query.toLowerCase();
-      if (qLower == 'cancel' || qLower == 'exit' || qLower == 'stop' || qLower == 'reset') {
+
+      // Check for Cancel / Stop
+      if (qLower == 'cancel' || qLower == 'exit' || qLower == 'stop' || qLower == 'reset' || qLower == '❌ cancel' || qLower == '🚫 cancel') {
         _resetWizard();
-        replyText = '🚫 Action canceled. How else can I assist you?';
-        suggestionChips = ['⏳ Pending Tasks', '📅 Due Today', '➕ Add Task', '📊 Summary'];
+        replyText = '🚫 Wizard canceled. What would you like to do next?';
+        suggestionChips = ['/help', '➕ Add Task', '⏳ Pending Tasks', '📅 Due Today', '📊 Summary'];
       }
-      // 2. Active Conversational Wizard takes precedence
+      // Check for /clear or /cls
+      else if (qLower == '/clear' || qLower == '/cls' || qLower == 'clear' || qLower == 'cls') {
+        _resetWizard();
+        _messages.clear();
+        _messages.add(
+          ChatMessage(
+            id: 'cleared',
+            sender: ChatSender.assistant,
+            text: '🧹 Chat cleared! How can I assist you?',
+            suggestionChips: ['/help', '➕ Add Task', '📅 Due Today', '📊 Summary'],
+          ),
+        );
+        return;
+      }
+      // Check for /help
+      else if (qLower == '/help' || qLower == '/h') {
+        _openCommandPalette();
+        replyText = '📖 Opened Command Palette with real-time search. You can also pick actions below:';
+        suggestionChips = ['➕ Add Task', '📅 Due Today', '⚡ High Priority', '⏳ Pending', '📊 Summary'];
+      }
+      // Active Wizard Step
       else if (_wizardStep != WizardStep.none) {
         final stepResult = await _handleWizardStep(query, provider);
         replyText = stepResult.text;
         actionTasks = stepResult.tasks;
         suggestionChips = stepResult.chips;
       }
-      // 3. Easy Picks by number (1 to 12) or quick menus
-      else if (_isQuickPick(query)) {
-        final pickResult = await _handleQuickPick(query, provider);
+      // Command Chaining / Multi-Command Pipeline (| or && or +)
+      else if (_isChainedCommand(query)) {
+        final chainedResult = await _handleChainedCommand(query, provider);
+        replyText = chainedResult.text;
+        actionTasks = chainedResult.tasks;
+        suggestionChips = chainedResult.chips;
+      }
+      // Direct Slash Commands & Easy Picks
+      else if (_isSlashOrQuickCommand(query)) {
+        final pickResult = await _handleSlashOrQuickCommand(query, provider);
         replyText = pickResult.text;
         actionTasks = pickResult.tasks;
         suggestionChips = pickResult.chips;
       }
-      // 4. Try backend server if available
+      // Try backend server if available
       else {
         bool backendHandled = false;
         try {
-          final serverReply = await provider.apiClient.chatAi(query).timeout(const Duration(milliseconds: 3500));
+          final serverReply = await provider.apiClient.chatAi(query).timeout(const Duration(milliseconds: 3000));
           if (serverReply.isNotEmpty) {
             replyText = serverReply;
             backendHandled = true;
             await provider.refreshTasks();
-            suggestionChips = ['⏳ Pending Tasks', '📅 Due Today', '➕ Add Task', '📊 Summary'];
+            suggestionChips = ['📅 Due Today', '⚡ High Priority', '➕ Add Task', '📊 Summary'];
           }
         } catch (_) {
           backendHandled = false;
         }
 
-        // 5. Local intelligent processor fallback
+        // Local fallback NLP
         if (!backendHandled) {
           final localResult = await _processQueryLocally(query, provider);
           replyText = localResult.text;
@@ -206,7 +252,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     } catch (e) {
       isError = true;
       replyText = '⚠️ An issue occurred: $e';
-      suggestionChips = ['❓ Help & Menu', '⏳ Pending Tasks'];
+      suggestionChips = ['/help', '⏳ Pending Tasks'];
     } finally {
       if (mounted) {
         setState(() {
@@ -237,26 +283,89 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _targetFieldForUpdate = null;
   }
 
-  bool _isQuickPick(String query) {
-    final trimmed = query.trim();
-    final numVal = int.tryParse(trimmed);
-    if (numVal != null && numVal >= 1 && numVal <= 12) return true;
-    final lower = trimmed.toLowerCase();
-    return lower == 'help' ||
-        lower == 'menu' ||
-        lower == 'picks' ||
-        lower == 'easy picks' ||
-        lower == 'options' ||
-        lower == '?';
+  bool _isChainedCommand(String query) {
+    return query.contains('|') || query.contains('&&') || (query.contains('+') && !query.contains('➕'));
   }
 
-  Future<_LocalQueryResult> _handleQuickPick(String query, TaskProvider provider) async {
-    final trimmed = query.trim();
-    final numVal = int.tryParse(trimmed);
-    final lower = trimmed.toLowerCase();
+  Future<_LocalQueryResult> _handleChainedCommand(String query, TaskProvider provider) async {
+    // Split on | or && or +
+    final parts = query.split(RegExp(r'\s*(?:\||&&|\+)\s*')).map((s) => s.trim().toLowerCase()).toList();
 
-    // 1: Pending Tasks
-    if (numVal == 1 || lower.contains('pending')) {
+    bool filterDueToday = false;
+    bool filterOverdue = false;
+    bool filterPending = false;
+    bool filterHigh = false;
+    String? spaceFilter;
+
+    for (final p in parts) {
+      final clean = p.replaceAll(RegExp(r'^/'), '');
+      if (clean == 'today' || clean == 'due today' || clean == 't') filterDueToday = true;
+      if (clean == 'overdue' || clean == 'o') filterOverdue = true;
+      if (clean == 'pending' || clean == 'p') filterPending = true;
+      if (clean == 'high' || clean == 'urgent' || clean == 'critical') filterHigh = true;
+      if (clean.startsWith('space:') || clean.startsWith('space ')) {
+        spaceFilter = clean.replaceFirst(RegExp(r'^space:?\s*'), '');
+      }
+    }
+
+    var list = provider.tasks.where((t) => !t.isCompleted).toList();
+
+    if (filterPending) {
+      list = list.where((t) => !t.isCompleted).toList();
+    }
+    if (filterDueToday) {
+      list = list.where(_isTaskDueToday).toList();
+    }
+    if (filterOverdue) {
+      list = list.where(_isTaskOverdue).toList();
+    }
+    if (filterHigh) {
+      list = list.where((t) => t.calculatedPriority == 'high' || t.calculatedPriority == 'critical').toList();
+    }
+    if (spaceFilter != null && spaceFilter.isNotEmpty) {
+      list = list.where((t) => t.spaces.keys.any((s) => s.toLowerCase() == spaceFilter!.toLowerCase())).toList();
+    }
+
+    final chainLabel = parts.join(' ⧉ ');
+    if (list.isEmpty) {
+      return _LocalQueryResult(
+        text: '🔍 **Chained Query:** `$chainLabel`\n\nNo tasks match this combined filter.',
+        chips: ['📅 Due Today', '⏳ Pending Tasks', '➕ Add Task', '📊 Summary'],
+      );
+    }
+
+    return _LocalQueryResult(
+      text: '🔗 **Chained Query Result (${list.length} tasks):** `$chainLabel`',
+      tasks: list,
+      chips: ['📅 Due Today', '⚡ High Priority', '➕ Add Task', '📊 Summary'],
+    );
+  }
+
+  bool _isSlashOrQuickCommand(String query) {
+    final trimmed = query.trim().toLowerCase();
+    if (trimmed.startsWith('/')) return true;
+    final numVal = int.tryParse(trimmed);
+    if (numVal != null && numVal >= 1 && numVal <= 12) return true;
+    return trimmed == 'help' ||
+        trimmed == 'menu' ||
+        trimmed == 'picks' ||
+        trimmed == 'options' ||
+        trimmed == 'today' ||
+        trimmed == 'pending' ||
+        trimmed == 'overdue' ||
+        trimmed == 'summary' ||
+        trimmed == 'spaces' ||
+        trimmed == '?';
+  }
+
+  Future<_LocalQueryResult> _handleSlashOrQuickCommand(String query, TaskProvider provider) async {
+    var cmd = query.trim().toLowerCase();
+    if (cmd.startsWith('/')) cmd = cmd.substring(1).trim();
+
+    final numVal = int.tryParse(cmd);
+
+    // 1 / Pending
+    if (numVal == 1 || cmd == 'pending' || cmd == 'p') {
       final pending = provider.tasks.where((t) => !t.isCompleted).take(10).toList();
       if (pending.isEmpty) {
         return _LocalQueryResult(
@@ -271,8 +380,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
       );
     }
 
-    // 2: Overdue Tasks
-    if (numVal == 2 || lower.contains('overdue')) {
+    // 2 / Overdue
+    if (numVal == 2 || cmd == 'overdue' || cmd == 'o') {
       final overdue = provider.tasks.where(_isTaskOverdue).toList();
       if (overdue.isEmpty) {
         return _LocalQueryResult(
@@ -287,8 +396,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
       );
     }
 
-    // 3: Due Today
-    if (numVal == 3 || lower.contains('due today') || lower == 'today') {
+    // 3 / Due Today
+    if (numVal == 3 || cmd == 'today' || cmd == 'due today' || cmd == 't') {
       final dueToday = provider.tasks.where(_isTaskDueToday).toList();
       if (dueToday.isEmpty) {
         return _LocalQueryResult(
@@ -303,8 +412,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
       );
     }
 
-    // 4: High / Critical Priority
-    if (numVal == 4 || lower.contains('high') || lower.contains('critical') || lower.contains('urgent')) {
+    // 4 / High Priority
+    if (numVal == 4 || cmd == 'high' || cmd == 'urgent' || cmd == 'critical') {
       final highPrio = provider.tasks
           .where((t) => !t.isCompleted && (t.calculatedPriority == 'high' || t.calculatedPriority == 'critical'))
           .toList();
@@ -321,80 +430,98 @@ class _AiChatScreenState extends State<AiChatScreen> {
       );
     }
 
-    // 5: Add Task (Launch Wizard)
-    if (numVal == 5 || lower.contains('add task') || lower == 'add') {
+    // 5 / Add Task (Interactive Claude CLI-Style Wizard)
+    if (numVal == 5 || cmd.startsWith('add') || cmd.startsWith('new') || cmd == 'a') {
+      final arg = cmd.replaceFirst(RegExp(r'^(?:add|new|a)\s*'), '').trim();
+      if (arg.isNotEmpty) {
+        _draftTitle = arg;
+        _wizardStep = WizardStep.addingDue;
+        return _LocalQueryResult(
+          text: '📝 **Task Title:** "$_draftTitle"\n\n'
+              '📅 **Step 2 of 4: When is this due?**\n'
+              'Select an option or tap Skip:',
+          chips: ['📅 Today', '🌅 Tomorrow', '🗓 End of Week', '⏩ Next Week', '⏭️ Skip Due Date', '❌ Cancel'],
+        );
+      }
       _wizardStep = WizardStep.addingTitle;
       return _LocalQueryResult(
-        text: '📝 **New Task Wizard**\n\nWhat would you like the task title to be?',
-        chips: ['📝 Open Full Form', '🚫 Cancel'],
+        text: '📝 **Interactive Task Wizard: Step 1 of 4**\n\n'
+            'What would you like the task title to be?',
+        chips: ['📝 Open Full Form', '❌ Cancel'],
       );
     }
 
-    // 6: Update Task
-    if (numVal == 6 || lower.contains('update') || lower.contains('edit')) {
+    // 6 / Update
+    if (numVal == 6 || cmd.startsWith('update') || cmd.startsWith('edit')) {
       final pending = provider.tasks.where((t) => !t.isCompleted).take(6).toList();
       if (pending.isEmpty) {
-        return _LocalQueryResult(
-          text: 'No pending tasks available to update.',
-          chips: ['➕ Add Task', '📊 Summary'],
-        );
+        return _LocalQueryResult(text: 'No pending tasks to update.', chips: ['➕ Add Task']);
       }
       _wizardStep = WizardStep.updatingSelectTask;
       return _LocalQueryResult(
-        text: '✏️ **Which task would you like to update?**\n'
-            'Type the task title, number, or tap an option below:',
+        text: '✏️ **Which task would you like to update?**\nTap an option or enter title/number:',
         tasks: pending,
-        chips: [...pending.map((t) => 'Edit "${t.title}"'), '🚫 Cancel'],
+        chips: [...pending.map((t) => 'Edit "${t.title}"'), '❌ Cancel'],
       );
     }
 
-    // 7: Mark Done
-    if (numVal == 7 || lower.contains('mark done') || lower.contains('complete')) {
-      final pending = provider.tasks.where((t) => !t.isCompleted).take(8).toList();
-      if (pending.isEmpty) {
-        return _LocalQueryResult(
-          text: '🎉 All tasks are already completed!',
-          chips: ['➕ Add Task', '📊 Summary'],
-        );
+    // 7 / Mark Done
+    if (numVal == 7 || cmd.startsWith('done') || cmd.startsWith('complete')) {
+      final target = cmd.replaceFirst(RegExp(r'^(?:done|complete)\s*'), '').trim();
+      if (target.isNotEmpty) {
+        final task = _findTask(target, provider);
+        if (task != null) {
+          await provider.completeTask(task.id);
+          return _LocalQueryResult(
+            text: '✅ Marked **${task.title}** as completed!',
+            tasks: [task],
+            chips: ['⏳ Pending Tasks', '📅 Due Today', '📊 Summary'],
+          );
+        }
       }
+      final pending = provider.tasks.where((t) => !t.isCompleted).take(8).toList();
       _wizardStep = WizardStep.completingSelectTask;
       return _LocalQueryResult(
-        text: '✅ **Which task would you like to mark as completed?**\n'
-            'Tap the checkbox directly on any card below or type its title:',
+        text: '✅ **Which task would you like to complete?**\nTap the checkbox on any card or type title:',
         tasks: pending,
-        chips: ['🚫 Cancel'],
+        chips: ['❌ Cancel'],
       );
     }
 
-    // 8: Delete Task
-    if (numVal == 8 || lower.contains('delete') || lower.contains('remove')) {
-      final pending = provider.tasks.where((t) => !t.isCompleted).take(8).toList();
-      if (pending.isEmpty) {
-        return _LocalQueryResult(
-          text: 'No pending tasks to delete.',
-          chips: ['➕ Add Task', '📊 Summary'],
-        );
+    // 8 / Delete
+    if (numVal == 8 || cmd.startsWith('delete') || cmd.startsWith('rm')) {
+      final target = cmd.replaceFirst(RegExp(r'^(?:delete|rm)\s*'), '').trim();
+      if (target.isNotEmpty) {
+        final task = _findTask(target, provider);
+        if (task != null) {
+          await provider.deleteTask(task.id);
+          return _LocalQueryResult(
+            text: '🗑️ Deleted task **${task.title}**.',
+            chips: ['⏳ Pending Tasks', '➕ Add Task', '📊 Summary'],
+          );
+        }
       }
+      final pending = provider.tasks.where((t) => !t.isCompleted).take(8).toList();
       _wizardStep = WizardStep.deletingSelectTask;
       return _LocalQueryResult(
-        text: '🗑️ **Which task would you like to delete?**\n'
-            'Tap the delete icon on any card below or type its title:',
+        text: '🗑️ **Which task would you like to delete?**\nTap delete on any card or type title:',
         tasks: pending,
-        chips: ['🚫 Cancel'],
+        chips: ['❌ Cancel'],
       );
     }
 
-    // 9: Search Tasks
-    if (numVal == 9 || lower == 'search') {
+    // 9 / Search
+    if (numVal == 9 || cmd.startsWith('search') || cmd.startsWith('s ')) {
+      final term = cmd.replaceFirst(RegExp(r'^(?:search|s)\s*'), '').trim();
+      if (term.isNotEmpty) {
+        return _searchTasksLocally(term, provider);
+      }
       _wizardStep = WizardStep.searchingKeyword;
-      return _LocalQueryResult(
-        text: '🔍 **What keyword or tag would you like to search for?**',
-        chips: ['🚫 Cancel'],
-      );
+      return _LocalQueryResult(text: '🔍 What keyword or tag would you like to search for?', chips: ['❌ Cancel']);
     }
 
-    // 10: Spaces
-    if (numVal == 10 || lower.contains('space')) {
+    // 10 / Spaces
+    if (numVal == 10 || cmd == 'spaces' || cmd == 'sp') {
       final spacesMap = provider.spacesWithCounts;
       if (spacesMap.isEmpty) {
         return _LocalQueryResult(
@@ -412,44 +539,29 @@ class _AiChatScreenState extends State<AiChatScreen> {
       );
     }
 
-    // 11: Summary
-    if (numVal == 11 || lower.contains('summary') || lower.contains('stats')) {
+    // 11 / Summary
+    if (numVal == 11 || cmd == 'summary' || cmd == 'stats') {
       return _buildSummaryResult(provider);
     }
 
-    // 12 or Help / Menu:
-    return _buildHelpMenu();
-  }
+    // Open Full Form
+    if (cmd == 'open' || cmd == 'form') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const TaskEditorDialog(isFullScreen: true)),
+          );
+        }
+      });
+      return _LocalQueryResult(text: '📝 Opening Full Task Editor form...');
+    }
 
-  _LocalQueryResult _buildHelpMenu() {
+    // Default: Help menu
+    _openCommandPalette();
     return _LocalQueryResult(
-      text: '🤖 **GTasks AI Interactive Menu & Easy Picks**\n\n'
-          'Enter a number `1` - `12` or tap any option below:\n\n'
-          '1️⃣ **Pending Tasks** - View active to-dos\n'
-          '2️⃣ **Overdue Tasks** - Deadlines requiring attention\n'
-          '3️⃣ **Due Today** - Tasks scheduled for today\n'
-          '4️⃣ **High Priority** - Urgent & critical tasks\n'
-          '5️⃣ **Add Task** - Guided step-by-step wizard\n'
-          '6️⃣ **Update Task** - Modify title, date, priority, or space\n'
-          '7️⃣ **Mark Done** - Complete tasks interactively\n'
-          '8️⃣ **Delete Task** - Safely remove tasks\n'
-          '9️⃣ **Search** - Find by title, tag, or notes\n'
-          '🔟 **Spaces** - Browse spaces & subspaces\n'
-          '1️⃣1️⃣ **Summary** - Productivity statistics\n'
-          '1️⃣2️⃣ **AI Tips** - Natural language query examples',
-      chips: [
-        '1. ⏳ Pending',
-        '2. 🚨 Overdue',
-        '3. 📅 Due Today',
-        '4. ⚡ High Priority',
-        '5. ➕ Add Task',
-        '6. ✏️ Update Task',
-        '7. ✅ Mark Done',
-        '8. 🗑️ Delete Task',
-        '9. 🔍 Search',
-        '10. 🌌 Spaces',
-        '11. 📊 Summary',
-      ],
+      text: '🤖 **GTasks Command Palette opened.** Choose a command or tap an option below:',
+      chips: ['/today', '/pending', '/high', '/overdue', '/add', '/summary'],
     );
   }
 
@@ -480,7 +592,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final qTrim = query.trim();
     final qLower = qTrim.toLowerCase();
 
-    // Check if user tapped Open Full Form
+    // Check Open Full Form
     if (qLower.contains('full form') || qLower.contains('open form')) {
       _resetWizard();
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -491,10 +603,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           );
         }
       });
-      return _LocalQueryResult(
-        text: '📝 Opening the Full Task Editor for you...',
-        chips: ['⏳ Pending Tasks', '📊 Summary'],
-      );
+      return _LocalQueryResult(text: '📝 Opening Full Task Editor for you...');
     }
 
     switch (_wizardStep) {
@@ -502,15 +611,16 @@ class _AiChatScreenState extends State<AiChatScreen> {
         _draftTitle = qTrim;
         _wizardStep = WizardStep.addingDue;
         return _LocalQueryResult(
-          text: 'Got it: **"$_draftTitle"**.\n\n📅 **When is this task due?**\n'
-              'Tap an option below or type a date (e.g. tomorrow, Friday, 2026-10-25):',
+          text: '📝 **Task Title:** "$_draftTitle"\n\n'
+              '📅 **Step 2 of 4: When is this due?**\n'
+              'Select a preset or tap Skip to set no due date:',
           chips: [
             '📅 Today',
             '🌅 Tomorrow',
             '🗓 End of Week',
             '⏩ Next Week',
-            '🚫 No Due Date',
-            '🚫 Cancel',
+            '⏭️ Skip Due Date',
+            '❌ Cancel',
           ],
         );
 
@@ -525,10 +635,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
           _draftDue = DateFormat('yyyy-MM-dd').format(now.add(Duration(days: daysUntilSunday <= 0 ? 7 : daysUntilSunday)));
         } else if (qLower.contains('next week')) {
           _draftDue = DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 7)));
-        } else if (qLower.contains('no due date') || qLower.contains('skip') || qLower.contains('none')) {
+        } else if (qLower.contains('skip') || qLower.contains('none') || qLower.contains('no due')) {
           _draftDue = null;
         } else {
-          // Attempt custom date parse or keep string
           try {
             final parsed = DateTime.parse(qTrim);
             _draftDue = DateFormat('yyyy-MM-dd').format(parsed);
@@ -539,8 +648,16 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
         _wizardStep = WizardStep.addingPriority;
         return _LocalQueryResult(
-          text: '⚡ **What priority level should we set?**',
-          chips: ['🟢 Low', '🔵 Normal', '🟠 High', '🔴 Critical', '🚫 Cancel'],
+          text: '⚡ **Step 3 of 4: What priority level?**\n'
+              'Select priority or tap Skip for Normal:',
+          chips: [
+            '🔴 Critical',
+            '🟠 High',
+            '🔵 Normal',
+            '🟢 Low',
+            '⏭️ Skip (Normal)',
+            '❌ Cancel',
+          ],
         );
 
       case WizardStep.addingPriority:
@@ -557,12 +674,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
         _wizardStep = WizardStep.addingSpace;
         final spaces = provider.spacesWithCounts.keys.take(4).toList();
         return _LocalQueryResult(
-          text: '🌌 **Assign to a Space?** (Optional)\n'
-              'Tap a space below, type a space name (e.g. `work:frontend`), or tap Skip:',
+          text: '🌌 **Step 4 of 4: Assign to Space?** (Optional)\n'
+              'Tap an existing space or tap Skip:',
           chips: [
             ...spaces.map((s) => 'Space: $s'),
-            '🚫 Skip Space',
-            '🚫 Cancel',
+            '⏭️ Skip Space',
+            '❌ Cancel',
           ],
         );
 
@@ -577,41 +694,78 @@ class _AiChatScreenState extends State<AiChatScreen> {
           }
         }
 
-        // Finalize task creation!
-        final title = _draftTitle ?? 'New Task';
-        final success = await provider.addTask(
-          title: title,
-          due: _draftDue,
-          priority: _draftPriority ?? 'normal',
-          spaces: _draftSpaces,
+        _wizardStep = WizardStep.confirmingReview;
+        return _LocalQueryResult(
+          text: '📋 **Review & Confirm Task**\n\n'
+              '• **Title:** ${_draftTitle ?? "New Task"}\n'
+              '• **Due Date:** ${_draftDue ?? "No due date"}\n'
+              '• **Priority:** ${(_draftPriority ?? "normal").toUpperCase()}\n'
+              '• **Space:** ${_draftSpaces != null ? _draftSpaces!.keys.join(", ") : "None"}\n\n'
+              'Tap **Confirm** to create or tap an option to edit:',
+          chips: [
+            '✅ Confirm & Create',
+            '✏️ Change Title',
+            '📅 Change Date',
+            '⚡ Change Priority',
+            '❌ Cancel',
+          ],
         );
 
-        _resetWizard();
-
-        if (success) {
-          final added = provider.tasks.isNotEmpty ? provider.tasks.first : null;
-          return _LocalQueryResult(
-            text: '✨ **Task created successfully!**\n\n'
-                '• **Title:** $title\n'
-                '• **Due:** ${_draftDue ?? "No due date"}\n'
-                '• **Priority:** ${(_draftPriority ?? "normal").toUpperCase()}\n'
-                '• **Space:** ${_draftSpaces != null ? _draftSpaces!.keys.join(", ") : "None"}',
-            tasks: added != null ? [added] : null,
-            chips: ['➕ Add Another Task', '⏳ Pending Tasks', '📅 Due Today', '📊 Summary'],
+      case WizardStep.confirmingReview:
+        if (qLower.contains('confirm') || qLower.contains('create') || qLower.contains('yes') || qLower.contains('ok')) {
+          final title = _draftTitle ?? 'New Task';
+          final success = await provider.addTask(
+            title: title,
+            due: _draftDue,
+            priority: _draftPriority ?? 'normal',
+            spaces: _draftSpaces,
           );
-        } else {
+          _resetWizard();
+
+          if (success) {
+            final added = provider.tasks.isNotEmpty ? provider.tasks.first : null;
+            return _LocalQueryResult(
+              text: '✨ **Task created successfully!**\n\n'
+                  '• **Title:** $title\n'
+                  '• **Due:** ${_draftDue ?? "No due date"}\n'
+                  '• **Priority:** ${(_draftPriority ?? "normal").toUpperCase()}\n'
+                  '• **Space:** ${_draftSpaces != null ? _draftSpaces!.keys.join(", ") : "None"}',
+              tasks: added != null ? [added] : null,
+              chips: ['➕ Add Another Task', '⏳ Pending Tasks', '📅 Due Today', '📊 Summary'],
+            );
+          } else {
+            return _LocalQueryResult(
+              text: '⚠️ Failed to create task.',
+              chips: ['➕ Try Again', '📊 Summary'],
+            );
+          }
+        } else if (qLower.contains('title')) {
+          _wizardStep = WizardStep.addingTitle;
+          return _LocalQueryResult(text: 'Enter the new title for this task:', chips: ['❌ Cancel']);
+        } else if (qLower.contains('date')) {
+          _wizardStep = WizardStep.addingDue;
           return _LocalQueryResult(
-            text: '⚠️ Failed to create task. Please check storage connection.',
-            chips: ['➕ Try Again', '📊 Summary'],
+            text: 'When is this due?',
+            chips: ['📅 Today', '🌅 Tomorrow', '🗓 End of Week', '⏭️ Skip Due Date', '❌ Cancel'],
+          );
+        } else if (qLower.contains('priority')) {
+          _wizardStep = WizardStep.addingPriority;
+          return _LocalQueryResult(
+            text: 'Select priority level:',
+            chips: ['🔴 Critical', '🟠 High', '🔵 Normal', '🟢 Low', '❌ Cancel'],
           );
         }
+        return _LocalQueryResult(
+          text: 'Tap Confirm to save or choose what to adjust:',
+          chips: ['✅ Confirm & Create', '✏️ Change Title', '📅 Change Date', '⚡ Change Priority', '❌ Cancel'],
+        );
 
       case WizardStep.updatingSelectTask:
         final task = _findTask(qTrim.replaceAll(RegExp(r'^edit\s*"?|"?$', caseSensitive: false), ''), provider);
         if (task == null) {
           return _LocalQueryResult(
-            text: '❓ Could not find task matching "$qTrim". Please type the exact name or number:',
-            chips: ['🚫 Cancel'],
+            text: '❓ Could not find task matching "$qTrim". Please type exact title or number:',
+            chips: ['❌ Cancel'],
           );
         }
         _targetTaskForUpdate = task;
@@ -625,7 +779,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             '⚡ Change Priority',
             '🌌 Change Space',
             '✅ Mark Completed',
-            '🚫 Cancel',
+            '❌ Cancel',
           ],
         );
 
@@ -633,33 +787,33 @@ class _AiChatScreenState extends State<AiChatScreen> {
         final target = _targetTaskForUpdate;
         if (target == null) {
           _resetWizard();
-          return _LocalQueryResult(text: 'Update session expired. Please start again.', chips: ['✏️ Update Task']);
+          return _LocalQueryResult(text: 'Update session expired.', chips: ['✏️ Update Task']);
         }
 
         if (qLower.contains('title')) {
           _targetFieldForUpdate = 'title';
           _wizardStep = WizardStep.updatingFieldValue;
-          return _LocalQueryResult(text: 'Enter the new title for **${target.title}**:', chips: ['🚫 Cancel']);
+          return _LocalQueryResult(text: 'Enter the new title for **${target.title}**:', chips: ['❌ Cancel']);
         } else if (qLower.contains('due') || qLower.contains('date')) {
           _targetFieldForUpdate = 'due';
           _wizardStep = WizardStep.updatingFieldValue;
           return _LocalQueryResult(
             text: 'Enter new due date (or tap preset):',
-            chips: ['📅 Today', '🌅 Tomorrow', '🗓 Next Week', '🚫 No Due Date', '🚫 Cancel'],
+            chips: ['📅 Today', '🌅 Tomorrow', '🗓 Next Week', '⏭️ Clear Date', '❌ Cancel'],
           );
         } else if (qLower.contains('priority')) {
           _targetFieldForUpdate = 'priority';
           _wizardStep = WizardStep.updatingFieldValue;
           return _LocalQueryResult(
             text: 'Select new priority:',
-            chips: ['🟢 Low', '🔵 Normal', '🟠 High', '🔴 Critical', '🚫 Cancel'],
+            chips: ['🔴 Critical', '🟠 High', '🔵 Normal', '🟢 Low', '❌ Cancel'],
           );
         } else if (qLower.contains('space')) {
           _targetFieldForUpdate = 'space';
           _wizardStep = WizardStep.updatingFieldValue;
           return _LocalQueryResult(
             text: 'Enter space name or tap an existing space:',
-            chips: [...provider.spacesWithCounts.keys.take(4).map((s) => 'Space: $s'), '🚫 Clear Space', '🚫 Cancel'],
+            chips: [...provider.spacesWithCounts.keys.take(4).map((s) => 'Space: $s'), '🚫 Clear Space', '❌ Cancel'],
           );
         } else if (qLower.contains('complete') || qLower.contains('mark done')) {
           await provider.completeTask(target.id);
@@ -670,8 +824,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
           );
         }
         return _LocalQueryResult(
-          text: 'Please select what to update:',
-          chips: ['✏️ Change Title', '📅 Change Due Date', '⚡ Change Priority', '🌌 Change Space', '🚫 Cancel'],
+          text: 'Please choose what to update:',
+          chips: ['✏️ Change Title', '📅 Change Due Date', '⚡ Change Priority', '🌌 Change Space', '❌ Cancel'],
         );
 
       case WizardStep.updatingFieldValue:
@@ -679,7 +833,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         final field = _targetFieldForUpdate;
         if (target == null || field == null) {
           _resetWizard();
-          return _LocalQueryResult(text: 'Update session expired. Please start again.', chips: ['✏️ Update Task']);
+          return _LocalQueryResult(text: 'Update session expired.', chips: ['✏️ Update Task']);
         }
 
         bool success = false;
@@ -693,7 +847,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             newDue = DateFormat('yyyy-MM-dd').format(DateTime.now().add(const Duration(days: 1)));
           } else if (qLower.contains('next week')) {
             newDue = DateFormat('yyyy-MM-dd').format(DateTime.now().add(const Duration(days: 7)));
-          } else if (qLower.contains('no due date') || qLower.contains('clear')) {
+          } else if (qLower.contains('clear') || qLower.contains('none') || qLower.contains('skip')) {
             newDue = '';
           } else {
             newDue = qTrim;
@@ -773,83 +927,37 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final q = query.trim();
     final qLower = q.toLowerCase();
 
-    // A. Summary / Stats / Overview
+    // Summary / Stats / Overview
     if (qLower.contains('summary') || qLower.contains('stats') || qLower.contains('how many task') || qLower.contains('overview')) {
       return _buildSummaryResult(provider);
     }
 
-    // B. Due Today
-    if (qLower.contains('due today') || qLower == 'today' || qLower.contains('what is due today')) {
-      return _handleQuickPick('3', provider);
+    // Due Today
+    if (qLower.contains('due today') || qLower == 'today') {
+      return _handleSlashOrQuickCommand('/today', provider);
     }
 
-    // C. Overdue Tasks
+    // Overdue
     if (qLower.contains('overdue') || qLower.contains('past due')) {
-      return _handleQuickPick('2', provider);
+      return _handleSlashOrQuickCommand('/overdue', provider);
     }
 
-    // D. High Priority
+    // High Priority
     if (qLower.contains('high priority') || qLower.contains('urgent') || qLower.contains('critical')) {
-      return _handleQuickPick('4', provider);
+      return _handleSlashOrQuickCommand('/high', provider);
     }
 
-    // E. Mark Done / Complete
-    if (qLower.startsWith('done ') || qLower.startsWith('complete ') || qLower.startsWith('finish ') || qLower.startsWith('mark done ')) {
-      final target = q.replaceFirst(RegExp(r'^(?:complete|done|finish|mark done)\s+', caseSensitive: false), '').trim();
-      final task = _findTask(target, provider);
-      if (task != null) {
-        final success = await provider.completeTask(task.id);
-        if (success) {
-          return _LocalQueryResult(
-            text: '✅ Marked **${task.title}** as completed!',
-            tasks: [task],
-            chips: ['⏳ Pending Tasks', '📅 Due Today', '📊 Summary'],
-          );
-        } else {
-          return _LocalQueryResult(text: '⚠️ Could not mark "${task.title}" as completed.');
-        }
-      } else {
-        return _LocalQueryResult(text: '❓ Could not find task matching "$target".');
-      }
-    }
-
-    // F. Delete Task
-    if (qLower.startsWith('delete ') || qLower.startsWith('remove ') || qLower.startsWith('trash ')) {
-      final target = q.replaceFirst(RegExp(r'^(?:delete|remove|trash)\s+', caseSensitive: false), '').trim();
-      final task = _findTask(target, provider);
-      if (task != null) {
-        final success = await provider.deleteTask(task.id);
-        if (success) {
-          return _LocalQueryResult(
-            text: '🗑️ Deleted task **${task.title}**.',
-            chips: ['⏳ Pending Tasks', '➕ Add Task', '📊 Summary'],
-          );
-        } else {
-          return _LocalQueryResult(text: '⚠️ Could not delete "${task.title}".');
-        }
-      } else {
-        return _LocalQueryResult(text: '❓ Could not find task matching "$target".');
-      }
-    }
-
-    // G. Spaces
-    if (qLower == 'spaces' || qLower.contains('show spaces') || qLower.contains('list spaces')) {
-      return _handleQuickPick('10', provider);
-    }
-
-    // H. Add / Create Task
-    if (qLower.startsWith('add ') || qLower.startsWith('create ') || qLower.startsWith('new task ') || qLower == 'add task' || qLower == 'add') {
+    // One-shot Add Task with inline tags/spaces
+    if (qLower.startsWith('add ') || qLower.startsWith('create ') || qLower.startsWith('new task ')) {
       var raw = q.replaceFirst(RegExp(r'^(?:add|create|new task)\s*', caseSensitive: false), '').trim();
       if (raw.isEmpty || raw.toLowerCase() == 'task') {
-        // Start interactive guided wizard!
         _wizardStep = WizardStep.addingTitle;
         return _LocalQueryResult(
-          text: '📝 **New Task Wizard**\n\nWhat would you like the task title to be?',
-          chips: ['📝 Open Full Form', '🚫 Cancel'],
+          text: '📝 **Interactive Task Wizard: Step 1 of 4**\n\nWhat would you like the task title to be?',
+          chips: ['📝 Open Full Form', '❌ Cancel'],
         );
       }
 
-      // One-shot natural language parsing
       String? due;
       String priority = 'normal';
       Map<String, List<String>> spaces = {};
@@ -914,38 +1022,32 @@ class _AiChatScreenState extends State<AiChatScreen> {
       }
     }
 
-    // I. Search / Find Tasks
+    // Search
     if (qLower.startsWith('search ') || qLower.startsWith('find ')) {
       final term = q.replaceFirst(RegExp(r'^(?:search|find)\s+', caseSensitive: false), '').trim();
       return _searchTasksLocally(term, provider);
     }
 
-    // J. Pending Tasks List
+    // Pending Tasks
     if (qLower.contains('pending') || qLower == 'list' || qLower.contains('show tasks') || qLower.contains('my tasks')) {
-      return _handleQuickPick('1', provider);
+      return _handleSlashOrQuickCommand('/pending', provider);
     }
 
-    // K. Help / Greeting
-    if (qLower == 'help' || qLower == 'hi' || qLower == 'hello' || qLower == '?' || qLower == 'menu') {
-      return _buildHelpMenu();
-    }
-
-    // Default fallback
+    // Default Fallback
     return _LocalQueryResult(
       text: 'I understood: "$q".\n\n'
-          'Try typing numbers `1` - `12` or commands like:\n'
-          '• `Add <task title> tomorrow with high priority`\n'
-          '• `Due today`\n'
-          '• `Pending tasks`\n'
-          '• `Complete <task name>`\n'
-          '• `Summary`',
+          'Try slash commands or chained queries:\n'
+          '• `/help` - Open Command Palette with search\n'
+          '• `/today | /high` - Tasks due today AND high priority\n'
+          '• `/add` - Interactive Claude CLI-style Q&A\n'
+          '• `/summary` - Overall productivity stats',
       chips: [
-        '1. ⏳ Pending',
-        '3. 📅 Due Today',
-        '4. ⚡ High Priority',
-        '5. ➕ Add Task',
-        '11. 📊 Summary',
-        '❓ Help & Menu',
+        '/help',
+        '/today | /high',
+        '➕ Add Task',
+        '📅 Due Today',
+        '⏳ Pending Tasks',
+        '📊 Summary',
       ],
     );
   }
@@ -976,17 +1078,17 @@ class _AiChatScreenState extends State<AiChatScreen> {
     if (target.isEmpty) return null;
     final lower = target.toLowerCase().trim();
 
-    // 1. Exact title match
+    // Exact title match
     for (final t in provider.tasks) {
       if (t.title.toLowerCase() == lower) return t;
     }
 
-    // 2. Substring title match
+    // Substring title match
     for (final t in provider.tasks) {
       if (t.title.toLowerCase().contains(lower)) return t;
     }
 
-    // 3. Number match (1-based index)
+    // Number match
     final idx = int.tryParse(lower);
     if (idx != null && idx > 0 && idx <= provider.tasks.length) {
       return provider.tasks[idx - 1];
@@ -1000,6 +1102,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Row(
           children: [
@@ -1017,7 +1120,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
               children: [
                 const Text('AI Assistant', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 Text(
-                  _wizardStep != WizardStep.none ? 'Guided Step Active' : 'Natural Language & Smart Picks',
+                  _wizardStep != WizardStep.none ? 'Claude Q&A Active' : 'Slash Commands & Smart Chains',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: _wizardStep != WizardStep.none ? Colors.amber : Colors.grey,
                     fontSize: 11,
@@ -1030,34 +1133,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.help_outline),
-            tooltip: 'Interactive Menu',
-            onPressed: () => _handleSubmitted('help'),
+            icon: const Icon(Icons.terminal),
+            tooltip: 'Command Palette (/help)',
+            onPressed: _openCommandPalette,
           ),
           IconButton(
             icon: const Icon(Icons.delete_sweep_outlined),
-            tooltip: 'Clear Chat',
-            onPressed: () {
-              _resetWizard();
-              setState(() {
-                _messages.clear();
-                _messages.add(
-                  ChatMessage(
-                    id: 'cleared',
-                    sender: ChatSender.assistant,
-                    text: '🧹 Chat cleared. How can I assist you today?',
-                    suggestionChips: [
-                      '📊 Summary',
-                      '⏳ Pending Tasks',
-                      '📅 Due Today',
-                      '⚡ High Priority',
-                      '➕ Add Task',
-                      '❓ Help & Menu',
-                    ],
-                  ),
-                );
-              });
-            },
+            tooltip: 'Clear Chat (/clear)',
+            onPressed: () => _handleSubmitted('/clear'),
           ),
         ],
       ),
@@ -1065,8 +1148,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
         children: [
           // Top Quick Action Pills
           Container(
-            height: 48,
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            height: 46,
+            padding: const EdgeInsets.symmetric(vertical: 5),
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
               border: Border(
@@ -1094,21 +1177,30 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   backgroundColor: theme.colorScheme.surface,
                   side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  onPressed: () => _handleSubmitted(prompt.replaceAll(RegExp(r'^[^\w]+'), '').trim()),
+                  onPressed: () {
+                    if (prompt == '/help') {
+                      _openCommandPalette();
+                    } else {
+                      _handleSubmitted(prompt.replaceAll(RegExp(r'^[^\w/]+'), '').trim());
+                    }
+                  },
                 );
               },
             ),
           ),
 
-          // Chat Messages List
+          // Messages List with RepaintBoundary for smooth 120Hz scrolling
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
+              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final message = _messages[index];
-                return _buildMessageBubble(context, message);
+                return RepaintBoundary(
+                  child: _buildMessageBubble(context, message),
+                );
               },
             ),
           ),
@@ -1116,7 +1208,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           // Processing Indicator
           if (_isProcessing)
             Padding(
-              padding: const EdgeInsets.only(left: 20, bottom: 8),
+              padding: const EdgeInsets.only(left: 20, bottom: 6),
               child: Row(
                 children: [
                   const SizedBox(
@@ -1126,7 +1218,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Thinking & organizing...',
+                    'Thinking & chaining...',
                     style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic, color: Colors.grey),
                   ),
                 ],
@@ -1144,7 +1236,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Interactive Wizard active: answer prompt or tap chips',
+                      'Claude Q&A Wizard active: choose option or tap Skip',
                       style: TextStyle(fontSize: 11, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
                     ),
                   ),
@@ -1157,48 +1249,78 @@ class _AiChatScreenState extends State<AiChatScreen> {
               ),
             ),
 
-          // Input Bar
-          Container(
-            padding: EdgeInsets.fromLTRB(12, 8, 12, MediaQuery.of(context).padding.bottom + 8),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  offset: const Offset(0, -2),
-                  blurRadius: 6,
-                ),
-              ],
-            ),
-            child: Row(
+          // Quick Filter Combiner / Command Chainer Bar
+          _buildQuickChainerBar(theme),
+
+          // Decoupled, High-Performance Chat Input Bar
+          _ChatInputBar(
+            key: _inputBarKey,
+            wizardStep: _wizardStep,
+            onSubmitted: _handleSubmitted,
+            onOpenPalette: _openCommandPalette,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickChainerBar(ThemeData theme) {
+    final chainOptions = ['today', 'high', 'pending', 'overdue'];
+
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+        border: Border(top: BorderSide(color: theme.dividerColor.withValues(alpha: 0.15))),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.link, size: 14, color: theme.colorScheme.primary),
+          const SizedBox(width: 6),
+          Text('Chain:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: ListView(
+              scrollDirection: Axis.horizontal,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _inputController,
-                    minLines: 1,
-                    maxLines: 4,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: _handleSubmitted,
-                    decoration: InputDecoration(
-                      hintText: _wizardStep != WizardStep.none
-                          ? "Type answer or tap choice..."
-                          : "Ask anything (e.g. 'Add tax return Friday', '1-12')...",
-                      hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
-                      filled: true,
-                      fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
+                ...chainOptions.map((opt) {
+                  final isSelected = _chainedFilters.contains(opt);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: FilterChip(
+                      label: Text(opt == 'high' ? '⚡ high' : (opt == 'today' ? '📅 today' : opt), style: const TextStyle(fontSize: 10)),
+                      selected: isSelected,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      showCheckmark: false,
+                      onSelected: (val) {
+                        setState(() {
+                          if (val) {
+                            _chainedFilters.add(opt);
+                          } else {
+                            _chainedFilters.remove(opt);
+                          }
+                        });
+                      },
                     ),
+                  );
+                }),
+                if (_chainedFilters.length >= 2) ...[
+                  const SizedBox(width: 4),
+                  ActionChip(
+                    avatar: const Icon(Icons.play_arrow, size: 12, color: Colors.white),
+                    label: Text('Run: ${_chainedFilters.join(" | ")}', style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                    backgroundColor: Colors.deepPurple,
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    onPressed: () {
+                      final combined = _chainedFilters.map((s) => '/$s').join(' | ');
+                      _chainedFilters.clear();
+                      _handleSubmitted(combined);
+                    },
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  icon: const Icon(Icons.send_rounded, size: 18),
-                  onPressed: () => _handleSubmitted(_inputController.text),
-                ),
+                ],
               ],
             ),
           ),
@@ -1255,33 +1377,49 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   ),
                 ),
 
-                // Interactive Task Cards attached to message (NO task IDs displayed)
+                // Interactive Task Cards (Zero Task IDs displayed)
                 if (message.taskItems != null && message.taskItems!.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   ...message.taskItems!.map((task) => _buildChatTaskCard(context, task)),
                 ],
 
-                // Action / Suggestion Chips attached to message
+                // Action / Suggestion Chips
                 if (!isUser && message.suggestionChips != null && message.suggestionChips!.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
                     children: message.suggestionChips!.map((chipText) {
+                      final isSkip = chipText.toLowerCase().contains('skip');
+                      final isCancel = chipText.toLowerCase().contains('cancel');
                       return ActionChip(
                         label: Text(
                           chipText,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: theme.colorScheme.primary,
+                            fontWeight: isSkip || isCancel ? FontWeight.w600 : FontWeight.w500,
+                            color: isCancel
+                                ? Colors.redAccent
+                                : (isSkip ? Colors.amber.shade800 : theme.colorScheme.primary),
                           ),
                         ),
-                        backgroundColor: theme.colorScheme.surface,
-                        side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+                        backgroundColor: isCancel
+                            ? Colors.red.withValues(alpha: 0.08)
+                            : (isSkip ? Colors.amber.withValues(alpha: 0.08) : theme.colorScheme.surface),
+                        side: BorderSide(
+                          color: isCancel
+                              ? Colors.red.withValues(alpha: 0.3)
+                              : (isSkip ? Colors.amber.withValues(alpha: 0.3) : theme.colorScheme.primary.withValues(alpha: 0.3)),
+                        ),
                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                         visualDensity: VisualDensity.compact,
-                        onPressed: () => _handleSubmitted(chipText),
+                        onPressed: () {
+                          if (chipText == '/help') {
+                            _openCommandPalette();
+                          } else {
+                            _handleSubmitted(chipText);
+                          }
+                        },
                       );
                     }).toList(),
                   ),
@@ -1345,7 +1483,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             runSpacing: 4,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              // Due Date Chip (No Task ID!)
+              // Due Date Chip (Zero Task IDs)
               if (task.formattedDueDate != null)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -1463,6 +1601,126 @@ class _AiChatScreenState extends State<AiChatScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+// Decoupled, high-performance Input Bar with dedicated [/] Palette trigger
+class _ChatInputBar extends StatefulWidget {
+  final WizardStep wizardStep;
+  final Function(String) onSubmitted;
+  final VoidCallback onOpenPalette;
+
+  const _ChatInputBar({
+    super.key,
+    required this.wizardStep,
+    required this.onSubmitted,
+    required this.onOpenPalette,
+  });
+
+  @override
+  State<_ChatInputBar> createState() => _ChatInputBarState();
+}
+
+class _ChatInputBarState extends State<_ChatInputBar> {
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+
+  void clear() {
+    _controller.clear();
+  }
+
+  void setText(String text) {
+    _controller.text = text;
+    _controller.selection = TextSelection.fromPosition(TextPosition(offset: text.length));
+    _focusNode.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SafeArea(
+      top: false,
+      bottom: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              offset: const Offset(0, -2),
+              blurRadius: 6,
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Dedicated Quick Slash Command Palette Trigger Button
+            IconButton(
+              icon: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '/',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.amber,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+              tooltip: 'Command Palette (/help)',
+              onPressed: widget.onOpenPalette,
+            ),
+            const SizedBox(width: 4),
+
+            // Input Field
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                minLines: 1,
+                maxLines: 4,
+                textInputAction: TextInputAction.send,
+                onSubmitted: widget.onSubmitted,
+                decoration: InputDecoration(
+                  hintText: widget.wizardStep != WizardStep.none
+                      ? "Answer or tap Skip / Choice..."
+                      : "Type message, /command, or chain (|)...",
+                  hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
+                  filled: true,
+                  fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+
+            // Send Button
+            IconButton.filled(
+              icon: const Icon(Icons.send_rounded, size: 18),
+              onPressed: () => widget.onSubmitted(_controller.text),
+            ),
+          ],
+        ),
       ),
     );
   }
