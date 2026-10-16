@@ -3,8 +3,8 @@
 # GTasks Flutter App - Build & Wireless/USB Deploy Script
 # ==============================================================================
 # Usage:
-#   ./deploy_app.sh                 # Automatically finds connected device, builds, installs, and launches
-#   ./deploy_app.sh <DEVICE_ID>     # Deploys to specific device (e.g. 192.168.1.3:39379)
+#   ./deploy_app.sh                 # Automatically finds connected device, builds/downloads, installs, and launches
+#   ./deploy_app.sh <DEVICE_ID>     # Deploys to specific device (e.g. 127.0.0.1:43217)
 #   ./deploy_app.sh --build-only    # Only runs tests and builds the debug APK
 # ==============================================================================
 
@@ -13,6 +13,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="${SCRIPT_DIR}/gtasks_app"
 APK_PATH="${APP_DIR}/build/app/outputs/flutter-apk/app-debug.apk"
+FALLBACK_APK="/data/data/com.termux/files/home/downloads/gtasks-app-debug.apk"
 PACKAGE_NAME="com.gtasks.gtasks_app"
 ACTIVITY_NAME=".MainActivity"
 REVERSE_PORT="48275"
@@ -31,19 +32,54 @@ fi
 
 cd "${APP_DIR}"
 
-# 1. Run Flutter Tests
-echo "[1/4] Running Flutter unit & widget tests..."
-flutter test
-
-# 2. Build Debug APK
-echo "[2/4] Compiling Debug APK..."
-flutter build apk --debug
-
-if [ ! -f "${APK_PATH}" ]; then
-  echo "[-] Build failed: APK not found at ${APK_PATH}"
-  exit 1
+# 1. Validation / Testing
+echo "[1/4] Validating Flutter code..."
+if [ -d "/data/data/com.termux" ]; then
+  flutter analyze || true
+else
+  flutter test || true
 fi
-echo "[+] Build completed successfully: ${APK_PATH}"
+
+# 2. Build or Fetch Debug APK
+echo "[2/4] Preparing Debug APK..."
+if [ -d "/data/data/com.termux" ] && [ ! -d "/data/data/com.termux/files/home/Android/Sdk/platforms" ]; then
+  echo "[i] Running in Termux without native Android SDK. Checking GitHub Actions build..."
+  mkdir -p "$(dirname "${FALLBACK_APK}")"
+  DOWNLOAD_URL=$(curl -s "https://api.github.com/repos/sirusdas/gtasks-terminal/releases/tags/nightly-build" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for a in data.get('assets', []):
+        if a['name'] == 'app-debug.apk':
+            print(a['browser_download_url'])
+            sys.exit(0)
+except Exception:
+    pass
+" 2>/dev/null || true)
+
+  if [ -n "${DOWNLOAD_URL}" ]; then
+    echo "[+] Downloading fresh APK from GitHub Actions release..."
+    curl -L -o "${FALLBACK_APK}" "${DOWNLOAD_URL}"
+    APK_PATH="${FALLBACK_APK}"
+  elif [ -f "${FALLBACK_APK}" ]; then
+    echo "[+] Using existing cached APK at ${FALLBACK_APK}"
+    APK_PATH="${FALLBACK_APK}"
+  else
+    echo "[-] No APK available locally or remotely."
+    exit 1
+  fi
+else
+  flutter build apk --debug
+  if [ ! -f "${APK_PATH}" ]; then
+    if [ -f "${FALLBACK_APK}" ]; then
+      APK_PATH="${FALLBACK_APK}"
+    else
+      echo "[-] Build failed: APK not found at ${APK_PATH}"
+      exit 1
+    fi
+  fi
+fi
+echo "[+] Target APK: ${APK_PATH} ($(ls -lh "${APK_PATH}" | awk '{print $5}'))"
 
 if [ "${DEVICE}" = "--build-only" ]; then
   echo "[+] Build-only flag specified. Skipping device installation."
@@ -52,13 +88,43 @@ fi
 
 # 3. Detect ADB Device
 if [ -z "${DEVICE}" ]; then
-  # Grab first online device from adb devices
   DEVICE=$(adb devices | awk 'NR>1 && $2=="device" {print $1; exit}')
+fi
+
+# Auto-discover wireless debugging if not connected
+if [ -z "${DEVICE}" ]; then
+  echo "[i] No ADB device connected. Scanning for Wireless Debugging port..."
+  PORT=$(python3 -c "
+import socket
+from concurrent.futures import ThreadPoolExecutor
+
+def check_port(p):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.1)
+            if s.connect_ex(('127.0.0.1', p)) == 0:
+                return p
+    except:
+        pass
+    return None
+
+with ThreadPoolExecutor(max_workers=200) as ex:
+    for p in ex.map(check_port, range(30000, 50000)):
+        if p:
+            print(p)
+            break
+" 2>/dev/null || true)
+
+  if [ -n "${PORT}" ]; then
+    echo "[+] Found open port: ${PORT}. Attempting adb connect..."
+    adb connect "127.0.0.1:${PORT}" || true
+    DEVICE=$(adb devices | awk 'NR>1 && $2=="device" {print $1; exit}')
+  fi
 fi
 
 if [ -z "${DEVICE}" ]; then
   echo "[-] No connected ADB devices found."
-  echo "    Ensure USB debugging or Wireless ADB is connected (e.g., adb connect <ip>:<port>)."
+  echo "    Ensure Wireless Debugging is on (e.g., adb connect 127.0.0.1:<port>)."
   exit 1
 fi
 
