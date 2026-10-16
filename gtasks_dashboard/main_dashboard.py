@@ -619,6 +619,18 @@ def api_filter_tasks_root():
     from routes.api import api_filter_tasks
     return api_filter_tasks()
 
+@app.route('/api/ai/ask', methods=['POST'])
+def api_ai_ask_root():
+    """Execute a single-shot natural language query via AIClient (local development)"""
+    from routes.api import api_ai_ask
+    return api_ai_ask()
+
+@app.route('/api/ai/chat', methods=['POST'])
+def api_ai_chat_root():
+    """Process a turn in conversational chat via AIClient (local development)"""
+    from routes.api import api_ai_chat
+    return api_ai_chat()
+
 @app.route('/api/updates/last')
 def api_last_update_root():
     """Get last update timestamp (local development)"""

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/settings_provider.dart';
 import 'settings_modal.dart';
+import '../screens/ai_chat_screen.dart';
 
 class TasksSidebarDrawer extends StatefulWidget {
   const TasksSidebarDrawer({super.key});
@@ -181,6 +182,28 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                       provider.setSelectedTags({});
                       provider.clearSpaceFilter();
                       Navigator.pop(context);
+                    },
+                  ),
+
+                  ListTile(
+                    dense: true,
+                    leading: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(Icons.auto_awesome, color: Colors.amber, size: 18),
+                    ),
+                    title: const Text('AI Assistant', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Chat & Smart Actions', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    trailing: const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AiChatScreen()),
+                      );
                     },
                   ),
 

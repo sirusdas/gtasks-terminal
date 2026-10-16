@@ -130,6 +130,85 @@ class _TaskDetailModalState extends State<TaskDetailModal> with SingleTickerProv
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              // Metadata overview (Clean & Simplified, No Task ID)
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: task.isCompleted
+                                          ? Colors.green.withValues(alpha: 0.15)
+                                          : Colors.amber.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          task.isCompleted ? Icons.check_circle : Icons.hourglass_top,
+                                          size: 13,
+                                          color: task.isCompleted ? Colors.green : Colors.amber.shade800,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          task.isCompleted ? 'Completed' : 'Pending',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: task.isCompleted ? Colors.green : Colors.amber.shade800,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (task.formattedDueDate != null)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.calendar_today, size: 12, color: Colors.blueAccent),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            task.formattedDueDate!,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.blueAccent,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  if (task.calculatedPriority != 'normal')
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: task.calculatedPriority == 'critical'
+                                            ? Colors.red.withValues(alpha: 0.15)
+                                            : Colors.orange.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        task.calculatedPriority.toUpperCase(),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: task.calculatedPriority == 'critical' ? Colors.red : Colors.orange.shade800,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+
                               if (cleanNotes.isNotEmpty)
                                 SelectableText(
                                   cleanNotes,
@@ -231,6 +310,38 @@ class _TaskDetailModalState extends State<TaskDetailModal> with SingleTickerProv
                         ),
                       ),
                     ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Dialog Footer Actions
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  TextButton.icon(
+                    icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                    label: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      widget.onDelete();
+                    },
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.edit, size: 16),
+                    label: const Text('Edit Task'),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      widget.onEdit();
+                    },
                   ),
                 ],
               ),

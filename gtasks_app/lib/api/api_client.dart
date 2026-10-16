@@ -311,4 +311,38 @@ class ApiClient {
     }
     throw Exception('Failed to generate report: HTTP ${response.statusCode}');
   }
+
+  Future<String> askAi(String query, {String? account}) async {
+    final uri = Uri.parse('$baseUrl/api/ai/ask');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'query': query,
+        'account': account,
+      }),
+    );
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data['reply'] ?? data['result'] ?? '';
+    }
+    throw Exception('AI request failed: HTTP ${response.statusCode}');
+  }
+
+  Future<String> chatAi(String message, {String? account}) async {
+    final uri = Uri.parse('$baseUrl/api/ai/chat');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'message': message,
+        'account': account,
+      }),
+    );
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data['reply'] ?? '';
+    }
+    throw Exception('AI chat request failed: HTTP ${response.statusCode}');
+  }
 }

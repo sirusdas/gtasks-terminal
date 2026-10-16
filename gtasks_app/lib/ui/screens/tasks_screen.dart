@@ -15,6 +15,7 @@ import '../widgets/sync_progress_dialog.dart';
 import '../../services/widget_service.dart';
 import '../../providers/settings_provider.dart';
 import 'reports_screen.dart';
+import 'ai_chat_screen.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -158,6 +159,16 @@ class _TasksScreenState extends State<TasksScreen> {
       appBar: AppBar(
         title: const Text('GTasks', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_awesome, color: Colors.amber),
+            tooltip: 'AI Assistant & Chat Bot',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AiChatScreen()),
+              );
+            },
+          ),
           // Filter drawer toggle button with active badge
           Badge(
             isLabelVisible: provider.activeFilterCount > 0,

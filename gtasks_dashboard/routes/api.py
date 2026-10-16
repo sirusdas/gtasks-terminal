@@ -3055,6 +3055,61 @@ def api_remote_load_tasks():
         }), 500
 
 
+@api.route('/ai/ask', methods=['POST'])
+def api_ai_ask():
+    """Execute a single-shot natural language query via AIClient"""
+    try:
+        data = request.get_json() or {}
+        query = data.get('query') or data.get('message') or ''
+        account = data.get('account')
+        
+        if not query:
+            return jsonify({'success': False, 'error': 'Query is required'}), 400
+            
+        cli_account = _resolve_cli_account(account)
+        from gtasks_cli.core.task_manager import TaskManager
+        from gtasks_cli.ai.client import AIClient
+        
+        tm = TaskManager(storage_backend='sqlite', account_name=cli_account)
+        ai_client = AIClient(tm, account_name=cli_account)
+        
+        reply = ai_client.ask(query)
+        return jsonify({
+            'success': True,
+            'reply': reply,
+            'result': reply
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/ai/chat', methods=['POST'])
+def api_ai_chat():
+    """Process a turn in conversational chat via AIClient"""
+    try:
+        data = request.get_json() or {}
+        message = data.get('message') or data.get('query') or ''
+        account = data.get('account')
+        
+        if not message:
+            return jsonify({'success': False, 'error': 'Message is required'}), 400
+            
+        cli_account = _resolve_cli_account(account)
+        from gtasks_cli.core.task_manager import TaskManager
+        from gtasks_cli.ai.client import AIClient
+        
+        tm = TaskManager(storage_backend='sqlite', account_name=cli_account)
+        ai_client = AIClient(tm, account_name=cli_account)
+        
+        reply = ai_client.chat_turn(message)
+        return jsonify({
+            'success': True,
+            'reply': reply
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @api.route('/openapi.json', methods=['GET'])
 def get_openapi_spec():
     """Serve the OpenAPI 3.0 specification JSON"""
