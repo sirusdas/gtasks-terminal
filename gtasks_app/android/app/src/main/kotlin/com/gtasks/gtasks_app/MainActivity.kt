@@ -10,6 +10,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         const val CHANNEL = "com.gtasks.gtasks_app/widget"
         const val ACTION_NEW_TASK = "com.gtasks.gtasks_app.ACTION_NEW_TASK"
+        const val ACTION_OPEN_AI = "com.gtasks.gtasks_app.ACTION_OPEN_AI"
     }
 
     private var pendingAction: String? = null
@@ -31,6 +32,16 @@ class MainActivity : FlutterActivity() {
         if (intent.action == ACTION_NEW_TASK || intent.getBooleanExtra("open_task_editor", false)) {
             pendingAction = "open_task_editor"
             methodChannel?.invokeMethod("onActionReceived", "open_task_editor")
+        } else if (intent.action == ACTION_OPEN_AI || intent.getBooleanExtra("open_ai_chat", false)) {
+            val filterType = intent.getStringExtra("widget_filter_type")
+            val filterVal = intent.getStringExtra("widget_filter_val")
+            val action = if (!filterType.isNullOrBlank() && !filterVal.isNullOrBlank()) {
+                "open_ai_chat:$filterType:$filterVal"
+            } else {
+                "open_ai_chat"
+            }
+            pendingAction = action
+            methodChannel?.invokeMethod("onActionReceived", action)
         }
     }
 

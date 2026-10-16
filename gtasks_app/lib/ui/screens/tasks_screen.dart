@@ -15,6 +15,7 @@ import '../widgets/sync_progress_dialog.dart';
 import '../../services/widget_service.dart';
 import '../../providers/settings_provider.dart';
 import '../../models/task_view_context.dart';
+import '../../models/task_item.dart';
 import 'reports_screen.dart';
 import 'ai_chat_screen.dart';
 
@@ -34,9 +35,7 @@ class _TasksScreenState extends State<TasksScreen> {
     super.initState();
     WidgetService.init();
     WidgetService.setActionListener((action) {
-      if (action == 'open_task_editor' && mounted) {
-        _showAddTaskSheet(context, isFromWidget: true);
-      }
+      if (mounted) _handleWidgetAction(action);
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -47,10 +46,69 @@ class _TasksScreenState extends State<TasksScreen> {
 
       // Check if launched from widget with initial action
       final initialAction = await WidgetService.getInitialAction();
-      if (initialAction == 'open_task_editor' && mounted) {
-        _showAddTaskSheet(context, isFromWidget: true);
+      if (initialAction != null && mounted) {
+        _handleWidgetAction(initialAction);
       }
     });
+  }
+
+  void _handleWidgetAction(String action) {
+    if (!mounted) return;
+    if (action == 'open_task_editor') {
+      _showAddTaskSheet(context, isFromWidget: true);
+    } else if (action.startsWith('open_ai_chat')) {
+      final provider = context.read<TaskProvider>();
+      TaskViewContext viewCtx;
+      if (action.contains(':')) {
+        final parts = action.split(':');
+        final filterType = parts.length > 1 ? parts[1] : '';
+        final filterVal = parts.length > 2 ? parts[2] : '';
+
+        List<TaskItem> filteredList = provider.tasks;
+        String? selectedSpace;
+        String? selectedSubspace;
+        Set<String> selectedLists = {};
+        Set<String> selectedTags = {};
+
+        if (filterType == 'space') {
+          selectedSpace = filterVal;
+          filteredList = provider.allTasksUnfiltered.where((t) => t.spaces.containsKey(filterVal)).toList();
+        } else if (filterType == 'subspace') {
+          final subParts = filterVal.split(' › ');
+          selectedSpace = subParts[0];
+          selectedSubspace = subParts.length > 1 ? subParts[1] : null;
+          filteredList = provider.allTasksUnfiltered.where((t) =>
+              t.spaces.containsKey(selectedSpace) &&
+              (selectedSubspace == null || (t.spaces[selectedSpace]?.contains(selectedSubspace) ?? false))
+          ).toList();
+        } else if (filterType == 'list') {
+          selectedLists = {filterVal};
+          filteredList = provider.allTasksUnfiltered.where((t) => t.listTitle == filterVal).toList();
+        } else if (filterType == 'tag') {
+          selectedTags = {filterVal};
+          filteredList = provider.allTasksUnfiltered.where((t) => t.allTags.contains(filterVal)).toList();
+        }
+
+        viewCtx = TaskViewContext(
+          visibleTasks: List.unmodifiable(filteredList),
+          totalTasksCount: provider.allTasksUnfiltered.length,
+          selectedSpace: selectedSpace,
+          selectedSubspace: selectedSubspace,
+          selectedLists: selectedLists,
+          selectedTags: selectedTags,
+          statusFilter: provider.statusFilter,
+        );
+      } else {
+        viewCtx = _buildCurrentViewContext(provider);
+      }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AiChatScreen(initialContext: viewCtx),
+        ),
+      );
+    }
   }
 
   void _checkAccountStatusAtStartup(TaskProvider provider) {

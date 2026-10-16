@@ -80,6 +80,17 @@
             android:padding="6dp" />
 
         <ImageView
+            android:id="@+id/widget_btn_ai"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_ai"
+            android:contentDescription="AI Assistant"
+            android:clickable="true"
+            android:padding="6dp" />
+
+        <ImageView
             android:id="@+id/widget_btn_add"
             android:layout_width="34dp"
             android:layout_height="34dp"

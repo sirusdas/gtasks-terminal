@@ -418,6 +418,25 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.widget_btn_view_mode, toggleViewPendingIntent)
 
+        // AI Assistant Button -> Opens AI Chat Screen directly with widget context
+        val aiIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.gtasks.gtasks_app.ACTION_OPEN_AI"
+            putExtra("open_ai_chat", true)
+            putExtra("is_from_widget", true)
+            if (!filterType.isNullOrBlank() && !filterVal.isNullOrBlank()) {
+                putExtra("widget_filter_type", filterType)
+                putExtra("widget_filter_val", filterVal)
+            }
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val aiPendingIntent = PendingIntent.getActivity(
+            context,
+            appWidgetId * 100 + 7,
+            aiIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_btn_ai, aiPendingIntent)
+
         // Add Task Button -> Opens Full Screen In-App Task Editor with all features
         val addTaskIntent = Intent(context, MainActivity::class.java).apply {
             action = "com.gtasks.gtasks_app.ACTION_NEW_TASK"
