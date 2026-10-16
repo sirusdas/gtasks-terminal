@@ -14,6 +14,7 @@ import '../widgets/task_editor_dialog.dart';
 import '../widgets/sync_progress_dialog.dart';
 import '../../services/widget_service.dart';
 import '../../providers/settings_provider.dart';
+import '../../models/task_view_context.dart';
 import 'reports_screen.dart';
 import 'ai_chat_screen.dart';
 
@@ -149,25 +150,58 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
+  TaskViewContext _buildCurrentViewContext(TaskProvider provider) {
+    return TaskViewContext(
+      visibleTasks: List.unmodifiable(provider.tasks),
+      totalTasksCount: provider.allTasksUnfiltered.length,
+      searchQuery: provider.searchQuery.isNotEmpty ? provider.searchQuery : null,
+      selectedSpace: provider.selectedSpace,
+      selectedSubspace: provider.selectedSubspace,
+      selectedPriority: provider.selectedPriority,
+      selectedLists: Set.unmodifiable(provider.selectedLists),
+      selectedTags: Set.unmodifiable(provider.selectedTags),
+      statusFilter: provider.statusFilter,
+      dateRange: provider.dateRange,
+      dateField: provider.dateField,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TaskProvider>();
     final theme = Theme.of(context);
+    final hasViewFilters = provider.hasActiveFilters || provider.searchQuery.isNotEmpty;
 
     return Scaffold(
       drawer: const TasksSidebarDrawer(),
       appBar: AppBar(
         title: const Text('GTasks', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.auto_awesome, color: Colors.amber),
-            tooltip: 'AI Assistant & Chat Bot',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AiChatScreen()),
-              );
-            },
+          // AI Assistant & Chat Bot button with view-context badge
+          Badge(
+            isLabelVisible: hasViewFilters,
+            backgroundColor: Colors.amber,
+            textColor: Colors.black,
+            label: Text(
+              '${provider.tasks.length}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.auto_awesome, color: Colors.amber),
+              tooltip: hasViewFilters
+                  ? 'AI Assistant (Scoped to this view: ${provider.tasks.length} tasks)'
+                  : 'AI Assistant & Chat Bot',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AiChatScreen(
+                      initialContext: _buildCurrentViewContext(provider),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
           // Filter drawer toggle button with active badge
           Badge(
@@ -607,6 +641,23 @@ class _TasksScreenState extends State<TasksScreen> {
                                     Text('No tasks match your criteria', style: theme.textTheme.titleMedium),
                                     const SizedBox(height: 4),
                                     Text('Tap + New Task to create one', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
+                                    if (hasViewFilters) ...[
+                                      const SizedBox(height: 12),
+                                      OutlinedButton.icon(
+                                        icon: const Icon(Icons.auto_awesome, size: 16, color: Colors.amber),
+                                        label: const Text('Ask AI about this view', style: TextStyle(fontSize: 12)),
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => AiChatScreen(
+                                                initialContext: _buildCurrentViewContext(provider),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
                                   ],
                                 ],
                               ),
