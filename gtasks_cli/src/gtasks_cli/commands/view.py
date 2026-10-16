@@ -51,7 +51,7 @@ def view(ctx, task_id):
     }.get(priority_value, '🔹')
     
     # Display task details
-    click.echo(f"📝 Task Details (ID: {task.id})")
+    click.echo("📝 Task Details")
     click.echo(f"  Title: {task.title}")
     click.echo(f"  Status: {status_icon} {status_value}")
     click.echo(f"  Priority: {priority_icon} {priority_value}")

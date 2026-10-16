@@ -10,11 +10,20 @@ from gtasks_cli.models.task import TaskStatus
 def handle_done_command(task_state, task_manager, command_parts, use_google_tasks=False):
     """Handle the done command in interactive mode"""
     if len(command_parts) < 2:
-        click.echo("Usage: done <task_number>")
-        return
-    
-    try:
-        task_num = int(command_parts[1])
+        num_input = click.prompt("  Which task number(s) to mark as completed? (e.g. 1, 2 or c to cancel)", default="c", show_default=False).strip()
+        if not num_input or num_input.lower() in ['c', 'cancel', 'q', 'exit']:
+            return
+        parts_to_process = [p.strip() for p in num_input.replace(',', ' ').split() if p.strip()]
+    else:
+        parts_to_process = [p.strip() for p in " ".join(command_parts[1:]).replace(',', ' ').split() if p.strip()]
+
+    for part in parts_to_process:
+        try:
+            task_num = int(part)
+        except ValueError:
+            click.echo(f"Invalid task number '{part}'. Please enter a valid integer.")
+            continue
+
         task = task_state.get_task_by_number(task_num)
         if task:
             # Capture original status and completed_at

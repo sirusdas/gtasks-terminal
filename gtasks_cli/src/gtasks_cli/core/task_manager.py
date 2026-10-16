@@ -149,6 +149,35 @@ class TaskManager:
                 self.storage.save_list_mapping(list_mapping)
             
             return task
+
+    def add_task(self, task: Task) -> Optional[Task]:
+        """Add an instantiated Task object directly to storage."""
+        if self.use_google_tasks:
+            due_str = task.due.isoformat() if task.due else None
+            return self.create_task(
+                title=task.title,
+                description=task.description,
+                due=due_str,
+                priority=task.priority,
+                project=task.project,
+                tags=task.tags,
+                notes=task.notes,
+                recurrence_rule=task.recurrence_rule,
+                tasklist_id=task.tasklist_id,
+                tasklist_name=task.list_title,
+                estimated_duration=task.estimated_duration
+            )
+        else:
+            if not getattr(task, 'id', None):
+                import uuid
+                task.id = str(uuid.uuid4())
+            if isinstance(self.storage, SQLiteStorage):
+                self.storage.save_tasks([task.model_dump()])
+            else:
+                task_dicts = self.storage.load_tasks()
+                task_dicts.append(task.model_dump())
+                self.storage.save_tasks(task_dicts)
+            return task
     
     def list_tasks(self, list_filter: Optional[str] = None, 
                   status: Optional[TaskStatus] = None,

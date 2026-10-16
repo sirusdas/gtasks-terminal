@@ -15,32 +15,21 @@ console = Console()
 
 def display_tasks_grouped_by_list(tasks, start_number=1):
     """Display tasks grouped by their list names"""
-    # Debug: Show total tasks received
-    console.print(f"[dim]DEBUG: Received {len(tasks)} total tasks to display[/dim]")
-    
     # Group tasks by list title
     tasks_by_list = defaultdict(list)
     for task in tasks:
         list_title = getattr(task, 'list_title', 'Unknown List')
         tasks_by_list[list_title].append(task)
     
-    # Debug: Show how many lists we're displaying
-    console.print(f"[dim]DEBUG: Found {len(tasks_by_list)} lists to display tasks for[/dim]")
-    
     # Display tasks grouped by list
     task_index = start_number
     all_tasks = []
     
     for list_title, list_tasks in tasks_by_list.items():
-        # Debug: Show number of tasks in this list
-        console.print(f"[dim]DEBUG: Processing list '{list_title}' with {len(list_tasks)} tasks[/dim]")
-        
         # Display list name with color in a panel
         console.print(Panel(f"[bold blue]List Name: \"{list_title}\"[/bold blue]", expand=False))
         
         for i, task in enumerate(list_tasks, task_index):
-            # Debug: Show raw task data
-            console.print(f"[dim]DEBUG: Displaying task {i}: {task.id} - {task.title}[/dim]")
             
             # For enum values, we need to check if they are already strings or enum instances
             status_value = task.status if isinstance(task.status, str) else task.status.value
@@ -143,7 +132,7 @@ def display_tasks_grouped_by_list(tasks, start_number=1):
                         description_info = formatted_lines
 
             # Display task with number
-            task_line = f"  {i:2d}. [bright_black]{task.id[:8]}[/bright_black]: [{status_color}]{status_icon}[/{status_color}] [{priority_color}]{priority_icon}[/{priority_color}] {task.title}{due_info}{project_info}{tags_info}{spaces_info}{recurring_info}{dates_info}"
+            task_line = f"  {i:2d}. [{status_color}]{status_icon}[/{status_color}] [{priority_color}]{priority_icon}[/{priority_color}] {task.title}{due_info}{project_info}{tags_info}{spaces_info}{recurring_info}{dates_info}"
             console.print(task_line)
             
             # Display description/notes separately to avoid markup interpretation issues

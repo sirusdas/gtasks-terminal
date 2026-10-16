@@ -456,6 +456,34 @@ def interactive(ctx, command):
                 
             cmd = command_parts[0].lower()
             
+            # Map Easy Picks numbers to interactive commands
+            easy_pick_map = {
+                '1': 'list',
+                '2': 'add',
+                '3': 'view',
+                '4': 'done',
+                '5': 'update',
+                '6': 'delete',
+                '7': 'tags',
+                '8': 'spaces',
+                '9': 'search',
+                '10': 'update-status',
+                '11': 'chat',
+                '12': 'help',
+            }
+            if cmd in easy_pick_map:
+                mapped = easy_pick_map[cmd]
+                if len(command_parts) == 1:
+                    cmd = mapped
+                    command_parts = [mapped]
+                else:
+                    cmd = mapped
+                    command_parts = [mapped] + command_parts[1:]
+            elif cmd.isdigit() and int(cmd) > 12:
+                # Direct number greater than picks: view that task number
+                command_parts = ['view', cmd]
+                cmd = 'view'
+            
             if cmd in ['quit', 'exit']:
                 click.echo("Exiting interactive mode.")
                 break
@@ -696,8 +724,10 @@ def interactive(ctx, command):
                     task_state.push_command(command_input)
             elif cmd == 'view':
                 if len(command_parts) < 2:
-                    click.echo("Usage: view <number>[,<number>,...] or view all")
-                    continue
+                    view_input = click.prompt("  Which task number(s) to view? (or 'all', Enter/c to cancel)", default="", show_default=False).strip()
+                    if not view_input or view_input.lower() in ['c', 'cancel', 'q', 'exit']:
+                        continue
+                    command_parts = ['view', view_input]
 
                 # Handle "view all" command
                 if command_parts[1].lower() == 'all':
@@ -785,8 +815,10 @@ def interactive(ctx, command):
                     click.echo("Nothing to undo.")
             elif cmd == 'search':
                 if len(command_parts) < 2:
-                    click.echo("Usage: search <query>")
-                    continue
+                    search_query = click.prompt("  Enter search query (terms or term1|term2, Enter/c to cancel)", default="", show_default=False).strip()
+                    if not search_query or search_query.lower() in ['c', 'cancel', 'q', 'exit']:
+                        continue
+                    command_parts = ['search', search_query]
                     
                 query = " ".join(command_parts[1:])
                 # Get all tasks first and apply advanced search filter locally
@@ -807,6 +839,22 @@ def interactive(ctx, command):
                 handle_tag_filtering_interactive_mode(task_manager, use_google_tasks)
                 # After tag filtering mode, we need to refresh the task display
                 _display_tasks_grouped_by_list(task_state.tasks)
+            elif cmd in ['chat', 'ai']:
+                from gtasks_cli.ai.client import AIClient
+                ai_client = AIClient(task_manager, account_name=getattr(task_manager, 'account_name', None))
+                if len(command_parts) > 1:
+                    query = " ".join(command_parts[1:])
+                    console.print("[bold cyan]🤖 AI Assistant:[/bold cyan]")
+                    reply = ai_client.ask(query)
+                    from rich.markdown import Markdown
+                    console.print(Markdown(reply))
+                else:
+                    ai_client.chat_loop()
+                
+                # Refresh task list after exiting chat
+                tasks = task_manager.list_tasks()
+                _display_tasks_grouped_by_list(tasks)
+                task_state.set_tasks(tasks)
             elif cmd == 'help':
                 if len(command_parts) > 1:
                     subcommand = command_parts[1]
@@ -893,6 +941,15 @@ def interactive(ctx, command):
                     elif subcommand == 'update-spaces':
                         from gtasks_cli.commands.interactive_help import show_update_spaces_help
                         show_update_spaces_help()
+                    elif subcommand in ['chat', 'ai']:
+                        console.print(Panel("[bold blue]AI Chat Bot Help[/bold blue]", expand=False))
+                        console.print("[bold]Description:[/bold]")
+                        console.print("Start an interactive chat session with the AI assistant, or ask a quick question.\n")
+                        console.print("[bold]Usage:[/bold]")
+                        console.print("  chat                       # Start interactive conversation")
+                        console.print("  chat <your natural query>  # Ask a one-off query\n")
+                    elif subcommand in ['--all', 'all']:
+                        show_general_help(show_full=True)
                     elif subcommand in ['quit', 'exit']:
                         show_quit_help()
                     else:

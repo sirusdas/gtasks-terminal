@@ -13,15 +13,17 @@ logger = setup_logger(__name__)
 def handle_delete_command(task_state, task_manager, command_parts, use_google_tasks=False):
     """Handle the delete command in interactive mode"""
     if len(command_parts) < 2:
-        click.echo("Usage: delete <task_number>")
-        return
+        task_num_input = click.prompt("  Which task number to delete? (Enter/c to cancel)", default="c", show_default=False).strip()
+        if not task_num_input or task_num_input.lower() in ['c', 'cancel', 'q', 'exit']:
+            return
+        command_parts = ['delete', task_num_input]
     
     try:
         task_num = int(command_parts[1])
         task = task_state.get_task_by_number(task_num)
         if task:
             # Confirm deletion
-            confirm = click.confirm(f"Are you sure you want to delete task '{task.title}'?")
+            confirm = click.confirm(f"  Are you sure you want to delete task '{task.title}'?", default=False)
             if confirm:
                 # Capture original status for undo
                 original_status = task.status

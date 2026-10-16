@@ -17,8 +17,10 @@ logger = setup_logger(__name__)
 def handle_update_command(task_state, task_manager, command_parts, use_google_tasks=False):
     """Handle the update command in interactive mode"""
     if len(command_parts) < 2:
-        click.echo("Usage: update <task_number> [--editor|-e]")
-        return
+        task_num_input = click.prompt("  Which task number to update? (Enter/c to cancel)", default="c", show_default=False).strip()
+        if not task_num_input or task_num_input.lower() in ['c', 'cancel', 'q', 'exit']:
+            return
+        command_parts = ['update', task_num_input]
     
     try:
         task_num = int(command_parts[1])
@@ -92,6 +94,8 @@ def handle_update_command(task_state, task_manager, command_parts, use_google_ta
                 else:
                     click.echo("Task update cancelled or failed.")
             else:
+                from rich.console import Console
+                from gtasks_cli.models.task import Priority
                 from gtasks_cli.utils.space_extractor import (
                     split_notes_and_metadata,
                     combine_notes_and_metadata,
@@ -99,34 +103,101 @@ def handle_update_command(task_state, task_manager, command_parts, use_google_ta
                     format_spaces_for_input,
                 )
 
+                console = Console()
                 raw_notes = task.description or task.notes or ""
                 clean_notes, current_tags, current_spaces = split_notes_and_metadata(raw_notes)
                 if not current_spaces and getattr(task, 'spaces', None):
                     current_spaces = task.spaces
+                if not current_tags and getattr(task, 'tags', None):
+                    current_tags = task.tags
 
-                # Collect updated details
-                title = click.prompt("Task title", default=task.title)
-                clean_desc = click.prompt("Task description", default=clean_notes)
-                default_spaces_str = format_spaces_for_input(current_spaces)
-                spaces_input = click.prompt("Spaces (e.g. work:frontend, personal)", default=default_spaces_str)
+                console.print(f"\n[bold cyan]✏️  Update Task: {task.title}[/bold cyan]")
+                console.print("  [1] Title")
+                console.print("  [2] Description / Notes")
+                console.print("  [3] Due Date")
+                console.print("  [4] Priority")
+                console.print("  [5] Spaces")
+                console.print("  [6] Tags")
+                console.print("  [7] All fields (Guided)")
+                console.print("  [c] Cancel")
+                
+                choice = click.prompt("  Select field to update", default="7", show_default=False).strip().lower()
+                if choice in ['c', 'cancel', 'q', 'exit']:
+                    return
 
-                new_spaces = parse_spaces_input(spaces_input)
-                combined_desc = combine_notes_and_metadata(clean_desc, tags=current_tags, spaces=new_spaces)
+                new_title = task.title
+                new_desc = clean_notes
+                new_spaces = current_spaces
+                new_tags = current_tags
+                new_due = task.due
+                new_priority = task.priority
+
+                if choice in ['1', '7']:
+                    new_title = click.prompt("  📝 Task title", default=task.title)
+
+                if choice in ['2', '7']:
+                    new_desc = click.prompt("  📄 Task description/notes", default=clean_notes)
+
+                if choice in ['3', '7']:
+                    from datetime import datetime, timedelta
+                    from dateutil import parser as date_parser
+                    console.print("  📅 Due date: [1] Today  [2] Tomorrow  [3] In 3 days  [4] Next week  [5] Clear  [Enter] Keep")
+                    due_choice = click.prompt("     Select (1-5) or type date", default="", show_default=False).strip()
+                    if due_choice == "1":
+                        new_due = datetime.now()
+                    elif due_choice == "2":
+                        new_due = datetime.now() + timedelta(days=1)
+                    elif due_choice == "3":
+                        new_due = datetime.now() + timedelta(days=3)
+                    elif due_choice == "4":
+                        new_due = datetime.now() + timedelta(days=7)
+                    elif due_choice == "5":
+                        new_due = None
+                    elif due_choice:
+                        try:
+                            new_due = date_parser.parse(due_choice)
+                        except Exception:
+                            console.print("     [yellow]Could not parse date, keeping current.[/yellow]")
+
+                if choice in ['4', '7']:
+                    console.print("  ⚡ Priority: [1] Low  [2] Medium  [3] High  [4] Critical")
+                    prio_choice = click.prompt("     Select (1-4)", default="", show_default=False).strip()
+                    prio_map = {"1": Priority.LOW, "2": Priority.MEDIUM, "3": Priority.HIGH, "4": Priority.CRITICAL}
+                    if prio_choice in prio_map:
+                        new_priority = prio_map[prio_choice]
+
+                if choice in ['5', '7']:
+                    default_spaces_str = format_spaces_for_input(current_spaces)
+                    spaces_input = click.prompt("  🌌 Spaces (e.g. work:frontend, personal)", default=default_spaces_str)
+                    new_spaces = parse_spaces_input(spaces_input)
+
+                if choice in ['6', '7']:
+                    default_tags_str = ", ".join(current_tags) if current_tags else ""
+                    tags_input = click.prompt("  🏷️  Tags (e.g. urgent, backend)", default=default_tags_str)
+                    new_tags = [t.strip().lstrip('#') for t in tags_input.split(',') if t.strip()]
+
+                combined_desc = combine_notes_and_metadata(new_desc or "", tags=new_tags or None, spaces=new_spaces or None)
 
                 # Capture original state
                 original_title = task.title
                 original_description = task.description
                 original_notes = task.notes
                 original_spaces = getattr(task, 'spaces', {})
+                original_tags = getattr(task, 'tags', [])
+                original_due = task.due
+                original_priority = task.priority
 
                 # Update the task
-                update_success = task_manager.update_task(
-                    task.id,
-                    title=title,
-                    description=combined_desc,
-                    notes=combined_desc,
-                    spaces=new_spaces,
-                )
+                update_kwargs = {
+                    'title': new_title,
+                    'description': combined_desc,
+                    'notes': combined_desc,
+                    'spaces': new_spaces,
+                    'tags': new_tags,
+                    'due': new_due,
+                    'priority': new_priority,
+                }
+                update_success = task_manager.update_task(task.id, **update_kwargs)
                 if update_success:
                     click.echo(f"Task '{title}' updated successfully.")
                     

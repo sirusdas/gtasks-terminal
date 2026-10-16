@@ -34,6 +34,24 @@ def ask(ctx, query):
     click.echo(result)
 
 @ai.command()
+@click.pass_context
+def chat(ctx):
+    """Start an interactive chat conversation with the AI Assistant."""
+    use_google_tasks = ctx.obj.get('use_google_tasks', False) if ctx.obj else False
+    storage_backend = ctx.obj.get('storage_backend', 'sqlite') if ctx.obj else 'sqlite'
+    account_name = ctx.obj.get('account_name') if ctx.obj else None
+    
+    task_manager = TaskManager(
+        use_google_tasks=use_google_tasks,
+        storage_backend=storage_backend,
+        account_name=account_name
+    )
+    
+    from gtasks_cli.ai.client import AIClient
+    client = AIClient(task_manager, account_name)
+    client.chat_loop()
+
+@ai.command()
 @click.option('--key', help='Config key (e.g., api_key, model, provider)')
 @click.option('--value', help='Config value')
 @click.pass_context

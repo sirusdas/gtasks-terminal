@@ -22,7 +22,7 @@ from gtasks_cli.commands.generate_report import generate_report
 from gtasks_cli.commands.notify import notify
 from gtasks_cli.commands.config import config
 from gtasks_cli.commands.debug import debug
-from gtasks_cli.commands.ai import ai
+from gtasks_cli.commands.ai import ai, chat
 from gtasks_cli.commands.mcp import mcp
 from gtasks_cli.commands.tasklist import tasklist
 from gtasks_cli.commands.remote import remote_commands
@@ -97,8 +97,8 @@ cli.add_command(account)
 cli.add_command(generate_report)
 cli.add_command(notify)
 cli.add_command(config)
-cli.add_command(debug)
-# cli.add_command(ai)
+cli.add_command(ai)
+cli.add_command(chat)
 cli.add_command(mcp)
 cli.add_command(tasklist)
 cli.add_command(remote_commands)
