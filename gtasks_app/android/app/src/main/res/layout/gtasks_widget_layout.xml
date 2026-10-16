@@ -102,6 +102,72 @@
             android:padding="6dp" />
     </LinearLayout>
 
+    <!-- Interactive Tab Navigation Strip (Next / Prev tabs with independent filters) -->
+    <LinearLayout
+        android:id="@+id/widget_tab_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="2dp"
+        android:paddingBottom="6dp">
+
+        <ImageView
+            android:id="@+id/widget_btn_tab_prev"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_chevron_left"
+            android:contentDescription="Previous Tab"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <LinearLayout
+            android:id="@+id/widget_btn_tab_center"
+            android:layout_width="0dp"
+            android:layout_height="28dp"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/widget_filter_pill_bg"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:clickable="true">
+
+            <TextView
+                android:id="@+id/widget_tab_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="✦ All Tasks"
+                android:textColor="#38BDF8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/widget_tab_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="(1/4)"
+                android:textColor="#94A3B8"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/widget_btn_tab_next"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_chevron_right"
+            android:contentDescription="Next Tab"
+            android:clickable="true"
+            android:padding="5dp" />
+    </LinearLayout>
+
     <!-- Filter Icons Strip -->
     <LinearLayout
         android:id="@+id/widget_filter_bar"

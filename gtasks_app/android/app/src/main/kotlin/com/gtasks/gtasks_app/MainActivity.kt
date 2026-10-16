@@ -11,6 +11,8 @@ class MainActivity : FlutterActivity() {
         const val CHANNEL = "com.gtasks.gtasks_app/widget"
         const val ACTION_NEW_TASK = "com.gtasks.gtasks_app.ACTION_NEW_TASK"
         const val ACTION_OPEN_AI = "com.gtasks.gtasks_app.ACTION_OPEN_AI"
+        const val ACTION_OPEN_TASK_PREVIEW = "com.gtasks.gtasks_app.ACTION_OPEN_TASK_PREVIEW"
+        const val ACTION_OPEN_TAB = "com.gtasks.gtasks_app.ACTION_OPEN_TAB"
     }
 
     private var pendingAction: String? = null
@@ -40,6 +42,18 @@ class MainActivity : FlutterActivity() {
             } else {
                 "open_ai_chat"
             }
+            pendingAction = action
+            methodChannel?.invokeMethod("onActionReceived", action)
+        } else if (intent.action == ACTION_OPEN_TASK_PREVIEW || intent.hasExtra("open_task_id")) {
+            val taskId = intent.getStringExtra("open_task_id") ?: ""
+            val action = "open_task_preview:$taskId"
+            pendingAction = action
+            methodChannel?.invokeMethod("onActionReceived", action)
+        } else if (intent.action == ACTION_OPEN_TAB || intent.hasExtra("open_tab_id")) {
+            val tabId = intent.getStringExtra("open_tab_id") ?: ""
+            val filterType = intent.getStringExtra("tab_filter_type") ?: ""
+            val filterVal = intent.getStringExtra("tab_filter_val") ?: ""
+            val action = "open_tab:$tabId:$filterType:$filterVal"
             pendingAction = action
             methodChannel?.invokeMethod("onActionReceived", action)
         }

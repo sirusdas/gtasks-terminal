@@ -29,6 +29,65 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         const val ACTION_TOGGLE_EXPAND = "com.gtasks.gtasks_app.ACTION_TOGGLE_EXPAND"
         const val ACTION_CLEAR_FILTER = "com.gtasks.gtasks_app.ACTION_CLEAR_FILTER"
         const val ACTION_TOGGLE_VIEW_MODE = "com.gtasks.gtasks_app.ACTION_TOGGLE_VIEW_MODE"
+        const val ACTION_OPEN_TASK_PREVIEW = "com.gtasks.gtasks_app.ACTION_OPEN_TASK_PREVIEW"
+        const val ACTION_PREV_TAB = "com.gtasks.gtasks_app.ACTION_PREV_TAB"
+        const val ACTION_NEXT_TAB = "com.gtasks.gtasks_app.ACTION_NEXT_TAB"
+        const val ACTION_OPEN_TAB = "com.gtasks.gtasks_app.ACTION_OPEN_TAB"
+
+        data class WidgetTab(
+            val id: String,
+            val title: String,
+            val filterType: String?,
+            val filterVal: String?
+        )
+
+        fun getAvailableTabs(context: Context): List<WidgetTab> {
+            val tabs = mutableListOf<WidgetTab>()
+            tabs.add(WidgetTab("all", "✦ All Tasks", null, null))
+            tabs.add(WidgetTab("today", "⏰ Today & Due", "date", "today"))
+            tabs.add(WidgetTab("priority", "🔥 High Priority", "priority", "high"))
+
+            try {
+                val dbFile = context.getDatabasePath("gtasks_local.db")
+                if (dbFile.exists()) {
+                    SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                        val checkCursor = db.rawQuery(
+                            "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'",
+                            null
+                        )
+                        if (checkCursor.use { it.moveToFirst() }) {
+                            val cursor = db.rawQuery(
+                                "SELECT spaces FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete' AND spaces IS NOT NULL AND spaces != '' AND spaces != '{}'",
+                                null
+                            )
+                            val discoveredSpaces = sortedSetOf<String>()
+                            cursor.use {
+                                while (it.moveToNext()) {
+                                    val spacesJson = it.getString(0) ?: continue
+                                    try {
+                                        val json = JSONObject(spacesJson)
+                                        val keys = json.keys()
+                                        while (keys.hasNext()) {
+                                            val spaceName = keys.next().trim()
+                                            if (spaceName.isNotEmpty()) {
+                                                discoveredSpaces.add(spaceName)
+                                            }
+                                        }
+                                    } catch (_: Exception) {}
+                                }
+                            }
+                            for (space in discoveredSpaces) {
+                                tabs.add(WidgetTab("space:$space", "🚀 $space", "space", space))
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error discovering spaces for tabs", e)
+            }
+
+            return tabs
+        }
 
         fun updateAllWidgets(context: Context) {
             try {
@@ -100,9 +159,17 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                                     args.add("%\"$filterVal\"%")
                                 }
                             }
+                            "priority" -> {
+                                if (filterVal.lowercase() == "high") {
+                                    queryBuilder.append(" AND priority IN ('critical', 'high')")
+                                } else {
+                                    queryBuilder.append(" AND priority = ?")
+                                    args.add(filterVal)
+                                }
+                            }
                             "date" -> {
                                 when (filterVal.lowercase()) {
-                                    "today" -> queryBuilder.append(" AND substr(due, 1, 10) = date('now', 'localtime')")
+                                    "today" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) <= date('now', 'localtime')")
                                     "tomorrow" -> queryBuilder.append(" AND substr(due, 1, 10) = date('now', 'localtime', '+1 day')")
                                     "overdue" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) < date('now', 'localtime')")
                                     "next 7 days" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= date('now', 'localtime') AND substr(due, 1, 10) <= date('now', 'localtime', '+7 days')")
@@ -250,11 +317,67 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                         updateAllWidgets(context)
                     }
                 }
+                ACTION_PREV_TAB -> {
+                    val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+                    if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                        val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                        val tabs = getAvailableTabs(context)
+                        val currentIndex = prefs.getInt("tab_index_$appWidgetId", 0)
+                        val newIndex = (currentIndex - 1 + tabs.size) % tabs.size
+                        val tab = tabs[newIndex]
+                        val editor = prefs.edit().putInt("tab_index_$appWidgetId", newIndex)
+                        if (tab.filterType != null) {
+                            editor.putString("filter_type_$appWidgetId", tab.filterType)
+                            editor.putString("filter_val_$appWidgetId", tab.filterVal)
+                        } else {
+                            editor.remove("filter_type_$appWidgetId")
+                            editor.remove("filter_val_$appWidgetId")
+                        }
+                        editor.apply()
+
+                        Toast.makeText(context, "${tab.title} (${newIndex + 1}/${tabs.size})", Toast.LENGTH_SHORT).show()
+                        updateAllWidgets(context)
+                    }
+                }
+                ACTION_NEXT_TAB -> {
+                    val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+                    if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                        val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                        val tabs = getAvailableTabs(context)
+                        val currentIndex = prefs.getInt("tab_index_$appWidgetId", 0)
+                        val newIndex = (currentIndex + 1) % tabs.size
+                        val tab = tabs[newIndex]
+                        val editor = prefs.edit().putInt("tab_index_$appWidgetId", newIndex)
+                        if (tab.filterType != null) {
+                            editor.putString("filter_type_$appWidgetId", tab.filterType)
+                            editor.putString("filter_val_$appWidgetId", tab.filterVal)
+                        } else {
+                            editor.remove("filter_type_$appWidgetId")
+                            editor.remove("filter_val_$appWidgetId")
+                        }
+                        editor.apply()
+
+                        Toast.makeText(context, "${tab.title} (${newIndex + 1}/${tabs.size})", Toast.LENGTH_SHORT).show()
+                        updateAllWidgets(context)
+                    }
+                }
+                ACTION_OPEN_TASK_PREVIEW -> {
+                    val taskId = intent.getStringExtra("task_id")
+                    if (!taskId.isNullOrEmpty()) {
+                        val openTaskIntent = Intent(context, MainActivity::class.java).apply {
+                            action = ACTION_OPEN_TASK_PREVIEW
+                            putExtra("open_task_id", taskId)
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        }
+                        context.startActivity(openTaskIntent)
+                    }
+                }
                 ACTION_CLEAR_FILTER -> {
                     val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                     if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                         val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
                         prefs.edit()
+                            .remove("tab_index_$appWidgetId")
                             .remove("filter_type_$appWidgetId")
                             .remove("filter_val_$appWidgetId")
                             .remove("sort_by_$appWidgetId")
@@ -294,6 +417,65 @@ class GTasksWidgetProvider : AppWidgetProvider() {
             else -> R.drawable.ic_widget_view_detailed
         }
         views.setImageViewResource(R.id.widget_btn_view_mode, viewIconRes)
+
+        // ----------------------------------------------------
+        // Tab Navigation Strip (Next & Prev buttons & active tab pill)
+        // ----------------------------------------------------
+        val tabs = getAvailableTabs(context)
+        val tabIndexKey = "tab_index_$appWidgetId"
+        var tabIndex = prefs.getInt(tabIndexKey, 0)
+        if (tabIndex < 0 || tabIndex >= tabs.size) {
+            tabIndex = 0
+            prefs.edit().putInt(tabIndexKey, 0).apply()
+        }
+        val currentTab = tabs[tabIndex]
+
+        views.setTextViewText(R.id.widget_tab_title, currentTab.title)
+        views.setTextViewText(R.id.widget_tab_badge, "($count) • ${tabIndex + 1}/${tabs.size}")
+
+        // Prev Tab Button ◀
+        val prevTabIntent = Intent(context, GTasksWidgetProvider::class.java).apply {
+            action = ACTION_PREV_TAB
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        }
+        val prevTabPendingIntent = PendingIntent.getBroadcast(
+            context,
+            appWidgetId * 100 + 41,
+            prevTabIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_btn_tab_prev, prevTabPendingIntent)
+
+        // Next Tab Button ▶
+        val nextTabIntent = Intent(context, GTasksWidgetProvider::class.java).apply {
+            action = ACTION_NEXT_TAB
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        }
+        val nextTabPendingIntent = PendingIntent.getBroadcast(
+            context,
+            appWidgetId * 100 + 42,
+            nextTabIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_btn_tab_next, nextTabPendingIntent)
+
+        // Center Tab Pill -> Opens In-App scoped to this Tab
+        val openTabIntent = Intent(context, MainActivity::class.java).apply {
+            action = ACTION_OPEN_TAB
+            putExtra("open_tab_id", currentTab.id)
+            if (!currentTab.filterType.isNullOrBlank() && !currentTab.filterVal.isNullOrBlank()) {
+                putExtra("tab_filter_type", currentTab.filterType)
+                putExtra("tab_filter_val", currentTab.filterVal)
+            }
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val openTabPendingIntent = PendingIntent.getActivity(
+            context,
+            appWidgetId * 100 + 43,
+            openTabIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_btn_tab_center, openTabPendingIntent)
 
         // Format active filter, exclusions & sort badge pill
         val filterLabel = when (filterType) {

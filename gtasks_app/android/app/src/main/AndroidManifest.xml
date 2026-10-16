@@ -29,6 +29,9 @@
             </intent-filter>
             <intent-filter>
                 <action android:name="com.gtasks.gtasks_app.ACTION_NEW_TASK" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_OPEN_AI" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_OPEN_TASK_PREVIEW" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_OPEN_TAB" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <intent-filter>
@@ -54,6 +57,11 @@
                 <action android:name="com.gtasks.gtasks_app.ACTION_COMPLETE_TASK" />
                 <action android:name="com.gtasks.gtasks_app.ACTION_TOGGLE_EXPAND" />
                 <action android:name="com.gtasks.gtasks_app.ACTION_CLEAR_FILTER" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_TOGGLE_VIEW_MODE" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_OPEN_TASK_PREVIEW" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_PREV_TAB" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_NEXT_TAB" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_OPEN_TAB" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

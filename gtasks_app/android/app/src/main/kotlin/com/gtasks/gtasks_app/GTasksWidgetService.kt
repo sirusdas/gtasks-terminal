@@ -119,9 +119,17 @@ class GTasksRemoteViewsFactory(
                                 args.add("%\"$filterVal\"%")
                             }
                         }
+                        "priority" -> {
+                            if (filterVal.lowercase() == "high") {
+                                queryBuilder.append(" AND priority IN ('critical', 'high')")
+                            } else {
+                                queryBuilder.append(" AND priority = ?")
+                                args.add(filterVal)
+                            }
+                        }
                         "date" -> {
                             when (filterVal.lowercase()) {
-                                "today" -> queryBuilder.append(" AND substr(due, 1, 10) = date('now', 'localtime')")
+                                "today" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) <= date('now', 'localtime')")
                                 "tomorrow" -> queryBuilder.append(" AND substr(due, 1, 10) = date('now', 'localtime', '+1 day')")
                                 "overdue" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) < date('now', 'localtime')")
                                 "next 7 days" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= date('now', 'localtime') AND substr(due, 1, 10) <= date('now', 'localtime', '+7 days')")
@@ -264,7 +272,7 @@ class GTasksRemoteViewsFactory(
                     putExtra("task_id", itemLeft.id)
                 }
                 val clickLeftIntent = Intent().apply {
-                    action = GTasksWidgetProvider.ACTION_TOGGLE_EXPAND
+                    action = GTasksWidgetProvider.ACTION_OPEN_TASK_PREVIEW
                     putExtra("task_id", itemLeft.id)
                 }
 
@@ -368,7 +376,7 @@ class GTasksRemoteViewsFactory(
                         putExtra("task_id", itemRight.id)
                     }
                     val clickRightIntent = Intent().apply {
-                        action = GTasksWidgetProvider.ACTION_TOGGLE_EXPAND
+                        action = GTasksWidgetProvider.ACTION_OPEN_TASK_PREVIEW
                         putExtra("task_id", itemRight.id)
                     }
                     views.setOnClickFillInIntent(R.id.widget_item_check_right, completeRightIntent)
@@ -394,9 +402,9 @@ class GTasksRemoteViewsFactory(
                 putExtra("task_id", item.id)
             }
 
-            // Fill-in Intent for expanding/collapsing or opening task
+            // Fill-in Intent for opening task preview dialog
             val toggleExpandFillInIntent = Intent().apply {
-                action = GTasksWidgetProvider.ACTION_TOGGLE_EXPAND
+                action = GTasksWidgetProvider.ACTION_OPEN_TASK_PREVIEW
                 putExtra("task_id", item.id)
             }
 

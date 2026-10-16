@@ -332,7 +332,11 @@ class TaskProvider with ChangeNotifier {
         }
       }
       if (_selectedPriority != null) {
-        if (task.calculatedPriority.toLowerCase() != _selectedPriority!.toLowerCase()) {
+        final prio = _selectedPriority!.toLowerCase();
+        final taskPrio = task.calculatedPriority.toLowerCase();
+        if (prio == 'high_or_critical' || prio == 'high') {
+          if (taskPrio != 'high' && taskPrio != 'critical') return false;
+        } else if (taskPrio != prio) {
           return false;
         }
       }
@@ -866,6 +870,13 @@ class TaskProvider with ChangeNotifier {
       _selectedSpace = space;
       _selectedSubspace = subspace;
     }
+    _recomputeFilteredTasks();
+    notifyListeners();
+  }
+
+  void setSpaceFilter(String? space, {String? subspace}) {
+    _selectedSpace = space;
+    _selectedSubspace = subspace;
     _recomputeFilteredTasks();
     notifyListeners();
   }

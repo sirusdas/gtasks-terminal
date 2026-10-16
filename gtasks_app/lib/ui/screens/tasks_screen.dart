@@ -18,6 +18,27 @@ import '../../models/task_view_context.dart';
 import '../../models/task_item.dart';
 import 'reports_screen.dart';
 import 'ai_chat_screen.dart';
+import '../widgets/task_detail_modal.dart';
+
+class AppTab {
+  final String id;
+  final String title;
+  final IconData icon;
+  final Color? accentColor;
+  final String? space;
+  final String? filterType;
+  final String? filterVal;
+
+  const AppTab({
+    required this.id,
+    required this.title,
+    required this.icon,
+    this.accentColor,
+    this.space,
+    this.filterType,
+    this.filterVal,
+  });
+}
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -28,7 +49,10 @@ class TasksScreen extends StatefulWidget {
 
 class _TasksScreenState extends State<TasksScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _tabScrollController = ScrollController();
   Timer? _searchDebounce;
+  String _activeTabId = 'all';
+  String? _pendingPreviewTaskId;
 
   @override
   void initState() {
@@ -49,6 +73,11 @@ class _TasksScreenState extends State<TasksScreen> {
       await provider.loadInitialData();
       if (!mounted) return;
       _checkAccountStatusAtStartup(provider);
+      if (_pendingPreviewTaskId != null) {
+        final pendingId = _pendingPreviewTaskId!;
+        _pendingPreviewTaskId = null;
+        _openTaskPreviewById(pendingId);
+      }
     });
   }
 
@@ -109,7 +138,167 @@ class _TasksScreenState extends State<TasksScreen> {
           fullscreenDialog: true,
         ),
       );
+    } else if (action.startsWith('open_task_preview:')) {
+      final taskId = action.substring('open_task_preview:'.length);
+      _openTaskPreviewById(taskId);
+    } else if (action.startsWith('open_tab:')) {
+      final parts = action.split(':');
+      final tabId = parts.length > 1 ? parts[1] : '';
+      final filterType = parts.length > 2 ? parts[2] : '';
+      final filterVal = parts.length > 3 ? parts[3] : '';
+      _openTabByAction(tabId, filterType, filterVal);
     }
+  }
+
+  void _openTaskPreviewById(String taskId) {
+    if (taskId.isEmpty) return;
+    final provider = context.read<TaskProvider>();
+    if (provider.isLoading && provider.allTasksUnfiltered.isEmpty) {
+      _pendingPreviewTaskId = taskId;
+      return;
+    }
+    TaskItem? targetTask;
+    try {
+      targetTask = provider.allTasksUnfiltered.firstWhere((t) => t.id == taskId);
+    } catch (_) {
+      try {
+        targetTask = provider.tasks.firstWhere((t) => t.id == taskId);
+      } catch (_) {
+        targetTask = null;
+      }
+    }
+    if (targetTask != null && mounted) {
+      showDialog(
+        context: context,
+        builder: (_) => TaskDetailModal(
+          task: targetTask!,
+          onEdit: () => _showEditTaskSheet(context, targetTask!),
+          onDelete: () => provider.deleteTask(targetTask!.id),
+        ),
+      );
+    }
+  }
+
+  void _openTabByAction(String tabId, String filterType, String filterVal) {
+    final provider = context.read<TaskProvider>();
+    final allTabs = _buildAvailableTabs(provider);
+    final match = allTabs.firstWhere(
+      (t) => t.id == tabId || (filterType.isNotEmpty && t.filterType == filterType && t.filterVal == filterVal),
+      orElse: () => allTabs.first,
+    );
+    _selectTab(match, allTabs);
+  }
+
+  List<AppTab> _buildAvailableTabs(TaskProvider provider) {
+    final tabs = <AppTab>[
+      const AppTab(
+        id: 'all',
+        title: 'All Tasks',
+        icon: Icons.all_inbox_rounded,
+        accentColor: Colors.blueAccent,
+      ),
+      const AppTab(
+        id: 'today',
+        title: 'Today & Due',
+        icon: Icons.today_rounded,
+        accentColor: Colors.amber,
+        filterType: 'date',
+        filterVal: 'today',
+      ),
+      const AppTab(
+        id: 'priority',
+        title: 'High Priority',
+        icon: Icons.local_fire_department_rounded,
+        accentColor: Colors.deepOrangeAccent,
+        filterType: 'priority',
+        filterVal: 'high',
+      ),
+    ];
+
+    for (final spaceName in provider.spacesWithCounts.keys) {
+      tabs.add(AppTab(
+        id: 'space:$spaceName',
+        title: spaceName,
+        icon: Icons.rocket_launch_rounded,
+        accentColor: Colors.purpleAccent,
+        space: spaceName,
+        filterType: 'space',
+        filterVal: spaceName,
+      ));
+    }
+
+    return tabs;
+  }
+
+  int _getTabCount(AppTab tab, TaskProvider provider) {
+    if (tab.id == 'all') {
+      return provider.allTasksUnfiltered.where((t) => !t.isCompleted).length;
+    } else if (tab.id == 'today') {
+      final now = DateTime.now();
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      return provider.allTasksUnfiltered.where((t) {
+        if (t.isCompleted || t.due == null || t.due!.isEmpty) return false;
+        final duePart = t.due!.length >= 10 ? t.due!.substring(0, 10) : t.due!;
+        return duePart.compareTo(todayStr) <= 0;
+      }).length;
+    } else if (tab.id == 'priority') {
+      return provider.allTasksUnfiltered.where((t) {
+        if (t.isCompleted) return false;
+        final p = t.calculatedPriority.toLowerCase();
+        return p == 'critical' || p == 'high';
+      }).length;
+    } else if (tab.space != null) {
+      return provider.spacesWithCounts[tab.space!] ?? 0;
+    }
+    return 0;
+  }
+
+  void _selectTab(AppTab tab, List<AppTab> allTabs) {
+    setState(() {
+      _activeTabId = tab.id;
+    });
+
+    final provider = context.read<TaskProvider>();
+    if (tab.id == 'all') {
+      provider.clearSpaceFilter();
+      provider.setPriorityFilter(null);
+      provider.setDateFilter(provider.dateField, null);
+    } else if (tab.id == 'today') {
+      provider.clearSpaceFilter();
+      provider.setPriorityFilter(null);
+      final now = DateTime.now();
+      final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      provider.setDateFilter('due', DateTimeRange(
+        start: DateTime(2000, 1, 1),
+        end: endOfToday,
+      ));
+    } else if (tab.id == 'priority') {
+      provider.clearSpaceFilter();
+      provider.setDateFilter(provider.dateField, null);
+      provider.setPriorityFilter('high');
+    } else if (tab.space != null) {
+      provider.setDateFilter(provider.dateField, null);
+      provider.setPriorityFilter(null);
+      provider.setSpaceFilter(tab.space!);
+    }
+
+    final tabIndex = allTabs.indexWhere((t) => t.id == tab.id);
+    if (tabIndex != -1 && _tabScrollController.hasClients) {
+      final targetOffset = (tabIndex * 110.0).clamp(0.0, _tabScrollController.position.maxScrollExtent);
+      _tabScrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  void _stepTab(int delta, List<AppTab> allTabs) {
+    if (allTabs.isEmpty) return;
+    final currentIndex = allTabs.indexWhere((t) => t.id == _activeTabId);
+    final validIndex = currentIndex == -1 ? 0 : currentIndex;
+    final nextIndex = (validIndex + delta + allTabs.length) % allTabs.length;
+    _selectTab(allTabs[nextIndex], allTabs);
   }
 
   void _checkAccountStatusAtStartup(TaskProvider provider) {
@@ -181,6 +370,7 @@ class _TasksScreenState extends State<TasksScreen> {
     WidgetService.setActionListener(null);
     _searchDebounce?.cancel();
     _searchController.dispose();
+    _tabScrollController.dispose();
     super.dispose();
   }
 
@@ -230,6 +420,24 @@ class _TasksScreenState extends State<TasksScreen> {
     final provider = context.watch<TaskProvider>();
     final theme = Theme.of(context);
     final hasViewFilters = provider.hasActiveFilters || provider.searchQuery.isNotEmpty;
+
+    // Automatically synchronize active tab state with provider active filters
+    if (provider.selectedSpace != null) {
+      final spaceTabId = 'space:${provider.selectedSpace}';
+      if (_activeTabId != spaceTabId) {
+        _activeTabId = spaceTabId;
+      }
+    } else if (provider.selectedPriority != null && (provider.selectedPriority == 'high' || provider.selectedPriority == 'critical')) {
+      if (_activeTabId != 'priority') {
+        _activeTabId = 'priority';
+      }
+    } else if (provider.dateRange != null && provider.dateField == 'due') {
+      if (_activeTabId != 'today') {
+        _activeTabId = 'today';
+      }
+    } else if (!provider.hasActiveFilters && _activeTabId != 'all') {
+      _activeTabId = 'all';
+    }
 
     return Scaffold(
       drawer: const TasksSidebarDrawer(),
@@ -528,6 +736,7 @@ class _TasksScreenState extends State<TasksScreen> {
       ),
       body: Column(
         children: [
+          _buildTabBar(context, provider, theme),
           // Active Filters Strip (Lists / Tags / Priority / Recurring / Hidden Lists & Tags / Date Range)
           if (provider.hasActiveFilters)
             Container(
@@ -836,6 +1045,130 @@ class _TasksScreenState extends State<TasksScreen> {
         icon: const Icon(Icons.add),
         label: const Text('New Task'),
         onPressed: () => _showAddTaskSheet(context),
+      ),
+    );
+  }
+
+  Widget _buildTabBar(BuildContext context, TaskProvider provider, ThemeData theme) {
+    final tabs = _buildAvailableTabs(provider);
+    if (tabs.isEmpty) return const SizedBox.shrink();
+
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1B2232) : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+            width: 1,
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      child: Row(
+        children: [
+          // Previous Tab Button ◀
+          IconButton(
+            icon: const Icon(Icons.chevron_left_rounded, size: 22),
+            tooltip: 'Previous Tab',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            onPressed: () => _stepTab(-1, tabs),
+          ),
+
+          // Scrollable Tabs
+          Expanded(
+            child: SingleChildScrollView(
+              controller: _tabScrollController,
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: tabs.map((tab) {
+                  final isSelected = _activeTabId == tab.id;
+                  final count = _getTabCount(tab, provider);
+                  final accent = tab.accentColor ?? theme.colorScheme.primary;
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () => _selectTab(tab, tabs),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOutCubic,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? accent.withValues(alpha: isDark ? 0.22 : 0.15)
+                                : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03)),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected ? accent : theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                              width: isSelected ? 1.5 : 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                tab.icon,
+                                size: 14,
+                                color: isSelected ? accent : (isDark ? Colors.white70 : Colors.black54),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                tab.title,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  color: isSelected
+                                      ? (isDark ? Colors.white : accent)
+                                      : (isDark ? Colors.white70 : Colors.black87),
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? accent.withValues(alpha: 0.25)
+                                      : (isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.08)),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '$count',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected ? accent : (isDark ? Colors.white60 : Colors.black54),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+
+          // Next Tab Button ▶
+          IconButton(
+            icon: const Icon(Icons.chevron_right_rounded, size: 22),
+            tooltip: 'Next Tab',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            onPressed: () => _stepTab(1, tabs),
+          ),
+        ],
       ),
     );
   }
