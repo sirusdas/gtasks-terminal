@@ -207,7 +207,7 @@ class TaskProvider with ChangeNotifier {
   static const String _keyBrowserTabs = 'gtasks_browser_tabs_v2';
   static const String _keyActiveTabIndex = 'gtasks_browser_active_tab_index_v2';
 
-  List<TaskTab> _tabs = [];
+  List<TaskTab> _tabs = _generateDefaultTabs();
   int _activeTabIndex = 0;
   bool _isApplyingTab = false;
 
@@ -241,7 +241,7 @@ class TaskProvider with ChangeNotifier {
     }
   }
 
-  List<TaskTab> _generateDefaultTabs() {
+  static List<TaskTab> _generateDefaultTabs() {
     return [
       TaskTab(
         id: 'tab_all_tasks',
@@ -310,7 +310,7 @@ class TaskProvider with ChangeNotifier {
     _sortAscending = tab.sortAscending;
     _isApplyingTab = false;
 
-    _recomputeFilteredTasks();
+    _recomputeAllCaches();
     if (shouldNotify) {
       notifyListeners();
     }
@@ -348,14 +348,15 @@ class TaskProvider with ChangeNotifier {
     if (index < 0 || index >= _tabs.length || index == _activeTabIndex) return;
     _activeTabIndex = index;
     final tab = _tabs[index];
+    _applyTabFilters(tab);
+    _saveTabs();
+
     final targetAccount = (tab.effectiveAccounts.length == 1 && !tab.effectiveAccounts.contains('all'))
         ? tab.effectiveAccounts.first
         : 'all';
-    if (targetAccount != _selectedAccount) {
-      await setAccount(targetAccount);
+    if (!_isStandalone && targetAccount != 'all') {
+      apiClient.switchAccount(targetAccount).catchError((_) {});
     }
-    _applyTabFilters(tab);
-    _saveTabs();
   }
 
   void switchToTabById(String tabId) {
@@ -424,8 +425,8 @@ class TaskProvider with ChangeNotifier {
     );
     if (_activeTabIndex == index) {
       final targetAccount = isAll ? 'all' : account;
-      if (targetAccount != _selectedAccount) {
-        await setAccount(targetAccount);
+      if (!_isStandalone && targetAccount != 'all' && targetAccount != null) {
+        apiClient.switchAccount(targetAccount).catchError((_) {});
       }
       _applyTabFilters(_tabs[index]);
     }
@@ -782,34 +783,22 @@ class TaskProvider with ChangeNotifier {
       final validAccountIds = _accounts.map((a) => a.id).toSet();
 
       if (_isStandalone) {
-        if (_selectedAccount != 'all' && validAccountIds.contains(_selectedAccount)) {
-          final localTasks = await localDb.getAllTasks(account: _selectedAccount);
-          _tasks = localTasks;
-        } else {
-          // 'all' configured accounts only
-          List<TaskItem> allTasks = [];
-          for (final acc in _accounts) {
-            final accTasks = await localDb.getAllTasks(account: acc.id);
-            allTasks.addAll(accTasks);
-          }
-          _tasks = allTasks;
+        List<TaskItem> allTasks = [];
+        for (final acc in _accounts) {
+          final accTasks = await localDb.getAllTasks(account: acc.id);
+          allTasks.addAll(accTasks);
         }
+        _tasks = allTasks;
         _errorMessage = null;
       } else {
-        if (_selectedAccount != 'all' && validAccountIds.contains(_selectedAccount)) {
-          final taskList = await apiClient.fetchTasks(account: _selectedAccount);
-          _tasks = taskList;
-        } else {
-          // 'all' configured accounts only
-          List<TaskItem> allTasks = [];
-          for (final acc in _accounts) {
-            try {
-              final accTasks = await apiClient.fetchTasks(account: acc.id);
-              allTasks.addAll(accTasks);
-            } catch (_) {}
-          }
-          _tasks = allTasks;
+        List<TaskItem> allTasks = [];
+        for (final acc in _accounts) {
+          try {
+            final accTasks = await apiClient.fetchTasks(account: acc.id);
+            allTasks.addAll(accTasks);
+          } catch (_) {}
         }
+        _tasks = allTasks;
         _errorMessage = null;
       }
     } catch (e) {
@@ -994,12 +983,18 @@ class TaskProvider with ChangeNotifier {
 
   Future<void> setAccount(String accountId) async {
     _selectedAccount = accountId;
+    if (accountId == 'all') {
+      _selectedAccounts.clear();
+    } else {
+      _selectedAccounts = {accountId};
+    }
     if (!_isStandalone && accountId != 'all') {
       try {
         await apiClient.switchAccount(accountId);
       } catch (_) {}
     }
-    await refreshTasks();
+    _recomputeAllCaches();
+    notifyListeners();
   }
 
   void setStatusFilter(String status) {
