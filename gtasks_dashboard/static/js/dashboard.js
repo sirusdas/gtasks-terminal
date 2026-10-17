@@ -1331,24 +1331,47 @@ export function createBrowserTabPreset(preset, accountId = null) {
         viewMode: currentTaskViewMode || 'compact'
     };
 
-    if (preset === 'account' && accountId) {
-        if (accountId === 'all') {
+    let targetAccount = accountId;
+    if (!targetAccount) {
+        const activeTab = getActiveBrowserTab();
+        if (activeTab?.filters?.accounts && Array.isArray(activeTab.filters.accounts) && activeTab.filters.accounts.length > 0) {
+            targetAccount = activeTab.filters.accounts;
+        } else if (activeTab?.filters?.account && activeTab.filters.account !== 'all') {
+            targetAccount = activeTab.filters.account;
+        }
+    }
+
+    let accLabel = '';
+    if (Array.isArray(targetAccount) && targetAccount.length > 0) {
+        tabData.filters.accounts = targetAccount;
+        tabData.filters.account = targetAccount.length === 1 ? targetAccount[0] : '';
+        accLabel = targetAccount.map(id => {
+            const accObj = (dashboardData.accounts || []).find(a => a.id === id);
+            return accObj ? accObj.name : id;
+        }).join(', ');
+    } else if (typeof targetAccount === 'string' && targetAccount && targetAccount !== 'all') {
+        tabData.filters.account = targetAccount;
+        tabData.filters.accounts = [targetAccount];
+        const accObj = (dashboardData.accounts || []).find(a => a.id === targetAccount);
+        accLabel = accObj ? accObj.name : targetAccount;
+    }
+
+    if (preset === 'account') {
+        if (!accLabel) {
             tabData.title = 'All Accounts';
             tabData.icon = 'fas fa-users';
             tabData.filters.account = '';
+            tabData.filters.accounts = [];
         } else {
-            const accObj = (dashboardData.accounts || []).find(a => a.id === accountId);
-            tabData.title = accObj ? accObj.name : accountId;
+            tabData.title = accLabel;
             tabData.icon = 'fas fa-user-circle';
-            tabData.filters.account = accountId;
         }
     } else if (preset === 'all') {
-        tabData.title = 'All Tasks';
+        tabData.title = accLabel ? `${accLabel} - All Tasks` : 'All Tasks';
         tabData.icon = 'fas fa-inbox';
         tabData.filters.status = ['pending', 'completed'];
-        tabData.filters.account = '';
     } else if (preset === 'today') {
-        tabData.title = 'Due Today';
+        tabData.title = accLabel ? `${accLabel} - Due Today` : 'Due Today';
         tabData.icon = 'fas fa-calendar-day';
         const todayStr = new Date().toISOString().slice(0, 10);
         tabData.filters.dateField = 'due';
@@ -1357,18 +1380,18 @@ export function createBrowserTabPreset(preset, accountId = null) {
         tabData.filters.sortField = 'due';
         tabData.filters.sortOrder = 'asc';
     } else if (preset === 'high_priority') {
-        tabData.title = 'High Priority';
+        tabData.title = accLabel ? `${accLabel} - High Priority` : 'High Priority';
         tabData.icon = 'fas fa-fire';
         tabData.filters.priority = 'high';
         tabData.filters.sortField = 'priority';
         tabData.filters.sortOrder = 'desc';
     } else if (preset === 'work') {
-        tabData.title = 'Work Space';
+        tabData.title = accLabel ? `${accLabel} - Work Space` : 'Work Space';
         tabData.icon = 'fas fa-briefcase';
         tabData.filters.spaces = ['Work'];
         tabData.filters.space = 'Work';
     } else if (preset === 'completed') {
-        tabData.title = 'Completed';
+        tabData.title = accLabel ? `${accLabel} - Completed` : 'Completed';
         tabData.icon = 'fas fa-check-circle';
         tabData.filters.status = ['completed'];
     }

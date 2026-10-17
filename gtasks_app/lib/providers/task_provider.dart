@@ -21,6 +21,7 @@ class TaskProvider with ChangeNotifier {
   List<TaskItem> _tasks = [];
   List<GTasksAccount> _accounts = [];
   String _selectedAccount = 'all';
+  Set<String> _selectedAccounts = {};
   String _statusFilter = 'pending'; // 'pending', 'completed', 'all'
   String _searchQuery = '';
   Set<String> _selectedLists = {};
@@ -180,6 +181,7 @@ class TaskProvider with ChangeNotifier {
   List<TaskItem> get allTasksUnfiltered => _tasks;
   List<GTasksAccount> get accounts => _accounts;
   String get selectedAccount => _selectedAccount;
+  Set<String> get selectedAccounts => _selectedAccounts;
   String get statusFilter => _statusFilter;
   String get searchQuery => _searchQuery;
   Set<String> get selectedLists => _selectedLists;
@@ -286,7 +288,12 @@ class TaskProvider with ChangeNotifier {
 
   void _applyTabFilters(TaskTab tab, {bool shouldNotify = true}) {
     _isApplyingTab = true;
-    _selectedAccount = tab.selectedAccount ?? 'all';
+    _selectedAccounts = Set.from(tab.effectiveAccounts);
+    if (_selectedAccounts.length == 1 && !_selectedAccounts.contains('all')) {
+      _selectedAccount = _selectedAccounts.first;
+    } else {
+      _selectedAccount = 'all';
+    }
     _statusFilter = tab.statusFilter;
     _selectedSpace = tab.selectedSpace;
     _selectedSubspace = tab.selectedSubspace;
@@ -314,6 +321,7 @@ class TaskProvider with ChangeNotifier {
     final current = _tabs[_activeTabIndex];
     _tabs[_activeTabIndex] = current.copyWith(
       selectedAccount: _selectedAccount,
+      selectedAccounts: _selectedAccounts,
       statusFilter: _statusFilter,
       selectedSpace: _selectedSpace,
       clearSpace: _selectedSpace == null,
@@ -340,7 +348,9 @@ class TaskProvider with ChangeNotifier {
     if (index < 0 || index >= _tabs.length || index == _activeTabIndex) return;
     _activeTabIndex = index;
     final tab = _tabs[index];
-    final targetAccount = tab.selectedAccount ?? 'all';
+    final targetAccount = (tab.effectiveAccounts.length == 1 && !tab.effectiveAccounts.contains('all'))
+        ? tab.effectiveAccounts.first
+        : 'all';
     if (targetAccount != _selectedAccount) {
       await setAccount(targetAccount);
     }
@@ -358,6 +368,7 @@ class TaskProvider with ChangeNotifier {
   void addNewTab({
     String? title,
     String? account,
+    Set<String>? accounts,
     int? iconCodePoint,
     String? space,
     String? subspace,
@@ -369,12 +380,25 @@ class TaskProvider with ChangeNotifier {
     String? statusFilter,
   }) {
     final newId = 'tab_${DateTime.now().millisecondsSinceEpoch}';
-    final tabTitle = title ?? (account != null ? account : (space != null ? space : (priority != null ? '$priority Priority' : 'New Tab ${_tabs.length + 1}')));
-    final effectiveAccount = account ?? _selectedAccount;
+    final tabAccounts = accounts ?? (account != null ? (account == 'all' ? <String>{} : {account}) : _selectedAccounts);
+    String defaultTitle;
+    if (title != null && title.isNotEmpty) {
+      defaultTitle = title;
+    } else if (tabAccounts.length == 1) {
+      final accName = _accounts.firstWhere((a) => a.id == tabAccounts.first, orElse: () => GTasksAccount(id: tabAccounts.first, name: tabAccounts.first)).name;
+      defaultTitle = space != null ? '$accName - $space' : (priority != null ? '$accName - $priority' : accName);
+    } else if (tabAccounts.length > 1) {
+      final accNames = tabAccounts.map((id) => _accounts.firstWhere((a) => a.id == id, orElse: () => GTasksAccount(id: id, name: id)).name).join(', ');
+      defaultTitle = space != null ? '$accNames - $space' : (priority != null ? '$accNames - $priority' : '$accNames Tasks');
+    } else {
+      defaultTitle = space ?? (priority != null ? '$priority Priority' : 'New Tab ${_tabs.length + 1}');
+    }
+
     final newTab = TaskTab(
       id: newId,
-      title: tabTitle,
-      selectedAccount: effectiveAccount == 'all' ? null : effectiveAccount,
+      title: defaultTitle,
+      selectedAccount: tabAccounts.length == 1 ? tabAccounts.first : null,
+      selectedAccounts: tabAccounts,
       iconCodePoint: iconCodePoint,
       selectedSpace: space,
       selectedSubspace: subspace,
@@ -403,6 +427,22 @@ class TaskProvider with ChangeNotifier {
       if (targetAccount != _selectedAccount) {
         await setAccount(targetAccount);
       }
+      _applyTabFilters(_tabs[index]);
+    }
+    _saveTabs();
+    notifyListeners();
+  }
+
+  Future<void> updateTabAccounts(int index, Set<String> accounts) async {
+    if (index < 0 || index >= _tabs.length) return;
+    final isAll = accounts.isEmpty || accounts.contains('all');
+    final singleAcc = (!isAll && accounts.length == 1) ? accounts.first : null;
+    _tabs[index] = _tabs[index].copyWith(
+      selectedAccount: singleAcc,
+      selectedAccounts: isAll ? {} : accounts,
+      clearAccount: isAll,
+    );
+    if (_activeTabIndex == index) {
       _applyTabFilters(_tabs[index]);
     }
     _saveTabs();
@@ -503,7 +543,11 @@ class TaskProvider with ChangeNotifier {
     final Map<String, Map<String, int>> subspaceMap = {};
 
     for (final task in _tasks) {
-      if (_selectedAccount != 'all' && task.account != _selectedAccount) continue;
+      if (_selectedAccounts.isNotEmpty && !_selectedAccounts.contains('all')) {
+        if (!_selectedAccounts.contains(task.account)) continue;
+      } else if (_selectedAccount != 'all' && task.account != _selectedAccount) {
+        continue;
+      }
       if (task.isCompleted) continue; // Only count pending tasks
       pendingCount++;
 
@@ -552,7 +596,9 @@ class TaskProvider with ChangeNotifier {
       if (!validAccountIds.contains(task.account)) {
         return false;
       }
-      if (_selectedAccount != 'all' && task.account != _selectedAccount) {
+      if (_selectedAccounts.isNotEmpty && !_selectedAccounts.contains('all')) {
+        if (!_selectedAccounts.contains(task.account)) return false;
+      } else if (_selectedAccount != 'all' && task.account != _selectedAccount) {
         return false;
       }
       if (_statusFilter == 'pending' && task.isCompleted) {
@@ -1205,7 +1251,10 @@ class TaskProvider with ChangeNotifier {
       return true;
     }
 
-    final acc = targetTask?.account ?? (_selectedAccount == 'all' ? 'default' : _selectedAccount);
+    final defaultAcc = (_selectedAccounts.isNotEmpty && !_selectedAccounts.contains('all'))
+        ? _selectedAccounts.first
+        : (_accounts.isNotEmpty ? _accounts.first.id : 'default');
+    final acc = targetTask?.account ?? (_selectedAccount == 'all' ? defaultAcc : _selectedAccount);
     final success = await apiClient.completeTask(taskId, account: acc);
     if (success) {
       NotificationService().cancelReminder(taskId.hashCode);
@@ -1226,7 +1275,9 @@ class TaskProvider with ChangeNotifier {
     final effectiveAccount = account ??
         ((_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
             ? _selectedAccount
-            : (_accounts.isNotEmpty ? _accounts.first.id : 'default'));
+            : (_selectedAccounts.isNotEmpty && !_selectedAccounts.contains('all')
+                ? _selectedAccounts.first
+                : (_accounts.isNotEmpty ? _accounts.first.id : 'default')));
     final effectiveList = (listTitle != null && listTitle.isNotEmpty) ? listTitle : 'My Tasks';
 
     if (_isStandalone) {
@@ -1285,10 +1336,19 @@ class TaskProvider with ChangeNotifier {
     List<String>? tags,
     Map<String, List<String>>? spaces,
   }) async {
-    final effectiveAccount = account ??
-        ((_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
+    TaskItem? existingTask;
+    try {
+      existingTask = _tasks.firstWhere((t) => t.id == taskId);
+    } catch (_) {}
+
+    final defaultAcc = (existingTask?.account.isNotEmpty == true && existingTask!.account != 'default')
+        ? existingTask.account
+        : ((_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
             ? _selectedAccount
-            : (_accounts.isNotEmpty ? _accounts.first.id : 'default'));
+            : (_selectedAccounts.isNotEmpty && !_selectedAccounts.contains('all')
+                ? _selectedAccounts.first
+                : (_accounts.isNotEmpty ? _accounts.first.id : 'default')));
+    final effectiveAccount = account ?? defaultAcc;
 
     if (_isStandalone) {
       final existing = await localDb.getTaskById(taskId);
@@ -1336,7 +1396,14 @@ class TaskProvider with ChangeNotifier {
   }
 
   Future<bool> deleteTask(String taskId, {String? account}) async {
-    final effectiveAccount = account ?? (_selectedAccount == 'all' ? 'default' : _selectedAccount);
+    TaskItem? targetTask;
+    try {
+      targetTask = _tasks.firstWhere((t) => t.id == taskId);
+    } catch (_) {}
+    final defaultAcc = (_selectedAccounts.isNotEmpty && !_selectedAccounts.contains('all'))
+        ? _selectedAccounts.first
+        : (_accounts.isNotEmpty ? _accounts.first.id : 'default');
+    final effectiveAccount = account ?? targetTask?.account ?? (_selectedAccount == 'all' ? defaultAcc : _selectedAccount);
     NotificationService().cancelReminder(taskId.hashCode);
     if (_isStandalone) {
       final existing = await localDb.getTaskById(taskId);
@@ -1372,7 +1439,7 @@ class TaskProvider with ChangeNotifier {
           continue;
         }
 
-        final rawNotes = task.description ?? '';
+        final rawNotes = task.description;
         final parsed = NotesParser.splitNotesAndMetadata(rawNotes);
         final hasTag = parsed.tags.any((t) => t.toLowerCase() == targetTag) ||
             task.tags.any((t) => t.toLowerCase() == targetTag);
@@ -1432,7 +1499,7 @@ class TaskProvider with ChangeNotifier {
           continue;
         }
 
-        final rawNotes = task.description ?? '';
+        final rawNotes = task.description;
         final parsed = NotesParser.splitNotesAndMetadata(rawNotes);
         final matchedKey = parsed.spaces.keys.firstWhere(
           (k) => k.toLowerCase() == targetSpace,
@@ -1496,7 +1563,7 @@ class TaskProvider with ChangeNotifier {
           continue;
         }
 
-        final rawNotes = task.description ?? '';
+        final rawNotes = task.description;
         final parsed = NotesParser.splitNotesAndMetadata(rawNotes);
         final matchedKey = parsed.spaces.keys.firstWhere(
           (k) => k.toLowerCase() == targetSpace,

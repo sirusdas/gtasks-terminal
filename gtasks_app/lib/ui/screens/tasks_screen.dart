@@ -19,7 +19,6 @@ import '../../models/task_item.dart';
 import 'reports_screen.dart';
 import 'ai_chat_screen.dart';
 import '../widgets/task_detail_modal.dart';
-import '../../models/task_tab.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -187,162 +186,276 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   void _showNewTabDialog(BuildContext context, TaskProvider provider) {
+    Set<String> chosenAccounts = Set.from(
+      provider.selectedAccounts.isNotEmpty
+          ? provider.selectedAccounts
+          : (provider.selectedAccount != 'all' ? {provider.selectedAccount} : <String>{}),
+    );
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         final theme = Theme.of(ctx);
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.outlineVariant,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final isAllSelected = chosenAccounts.isEmpty || chosenAccounts.contains('all');
+
+            String getAccountScopeLabel() {
+              if (isAllSelected) return 'All Accounts';
+              final names = chosenAccounts.map((id) {
+                final match = provider.accounts.where((a) => a.id == id);
+                return match.isNotEmpty ? match.first.name : id;
+              }).toList();
+              return names.join(', ');
+            }
+
+            String formatTitleWithAccounts(String baseTitle) {
+              if (isAllSelected) return baseTitle;
+              final scope = getAccountScopeLabel();
+              return '$scope - $baseTitle';
+            }
+
+            return Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: SafeArea(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.85,
                   ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Icon(Icons.tab, color: Colors.blueAccent),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Open New Tab',
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                ListTile(
-                  leading: const Icon(Icons.all_inbox_rounded, color: Colors.blueAccent),
-                  title: const Text('All Tasks (Blank View)'),
-                  subtitle: const Text('Clean tab with all pending tasks'),
-                  dense: true,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    provider.addNewTab(title: 'All Tasks', iconCodePoint: Icons.all_inbox_rounded.codePoint);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.copy_rounded, color: Colors.teal),
-                  title: const Text('Duplicate Current Tab'),
-                  subtitle: const Text('Copy current filters to a new tab'),
-                  dense: true,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    provider.duplicateTab(provider.activeTabIndex);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.today_rounded, color: Colors.amber),
-                  title: const Text('Today & Due'),
-                  subtitle: const Text('Tasks due today or overdue'),
-                  dense: true,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    final now = DateTime.now();
-                    provider.addNewTab(
-                      title: 'Today & Due',
-                      iconCodePoint: Icons.today_rounded.codePoint,
-                      dateField: 'due',
-                      dateRange: DateTimeRange(
-                        start: DateTime(2000, 1, 1),
-                        end: DateTime(now.year, now.month, now.day, 23, 59, 59),
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.local_fire_department_rounded, color: Colors.deepOrangeAccent),
-                  title: const Text('High Priority'),
-                  subtitle: const Text('Critical and high priority tasks'),
-                  dense: true,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    provider.addNewTab(
-                      title: 'High Priority',
-                      iconCodePoint: Icons.local_fire_department_rounded.codePoint,
-                      priority: 'high',
-                    );
-                  },
-                ),
-                if (provider.spacesWithCounts.isNotEmpty) ...[
-                  const Divider(height: 24),
-                  Text('Spaces', style: theme.textTheme.labelMedium?.copyWith(color: theme.hintColor)),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: provider.spacesWithCounts.keys.map((space) {
-                      return ActionChip(
-                        avatar: const Icon(Icons.rocket_launch_rounded, size: 14, color: Colors.purpleAccent),
-                        label: Text(space),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          provider.addNewTab(
-                            title: space,
-                            space: space,
-                            iconCodePoint: Icons.rocket_launch_rounded.codePoint,
-                          );
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ],
-                if (provider.accounts.isNotEmpty) ...[
-                  const Divider(height: 24),
-                  Text('Accounts', style: theme.textTheme.labelMedium?.copyWith(color: theme.hintColor)),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      ActionChip(
-                        avatar: const Icon(Icons.people_alt_rounded, size: 14, color: Colors.blueAccent),
-                        label: const Text('All Accounts'),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          provider.addNewTab(
-                            title: 'All Accounts',
-                            account: 'all',
-                            iconCodePoint: Icons.people_alt_rounded.codePoint,
-                          );
-                        },
-                      ),
-                      ...provider.accounts.map((acc) {
-                        return ActionChip(
-                          avatar: const Icon(Icons.account_circle_rounded, size: 14, color: Colors.teal),
-                          label: Text(acc.name),
-                          onPressed: () {
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.outlineVariant,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            const Icon(Icons.tab, color: Colors.blueAccent),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Open New Tab',
+                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Multi-Account Selector Header
+                        if (provider.accounts.isNotEmpty) ...[
+                          Row(
+                            children: [
+                              Icon(Icons.people_alt_rounded, size: 16, color: theme.colorScheme.primary),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Select Accounts (Multi-select)',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                isAllSelected ? 'All Accounts' : '${chosenAccounts.length} selected',
+                                style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              FilterChip(
+                                avatar: Icon(
+                                  Icons.all_inclusive_rounded,
+                                  size: 16,
+                                  color: isAllSelected ? theme.colorScheme.onPrimary : Colors.blueAccent,
+                                ),
+                                label: const Text('All Accounts'),
+                                selected: isAllSelected,
+                                selectedColor: theme.colorScheme.primary,
+                                checkmarkColor: theme.colorScheme.onPrimary,
+                                labelStyle: TextStyle(
+                                  color: isAllSelected ? theme.colorScheme.onPrimary : null,
+                                  fontWeight: isAllSelected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                                onSelected: (_) {
+                                  setModalState(() {
+                                    chosenAccounts.clear();
+                                  });
+                                },
+                              ),
+                              ...provider.accounts.map((acc) {
+                                final isSelected = !isAllSelected && chosenAccounts.contains(acc.id);
+                                return FilterChip(
+                                  avatar: Icon(
+                                    Icons.account_circle_rounded,
+                                    size: 16,
+                                    color: isSelected ? theme.colorScheme.onPrimary : Colors.teal,
+                                  ),
+                                  label: Text(acc.name),
+                                  selected: isSelected,
+                                  selectedColor: Colors.teal,
+                                  checkmarkColor: Colors.white,
+                                  labelStyle: TextStyle(
+                                    color: isSelected ? Colors.white : null,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                  onSelected: (selected) {
+                                    setModalState(() {
+                                      if (selected) {
+                                        chosenAccounts.remove('all');
+                                        chosenAccounts.add(acc.id);
+                                      } else {
+                                        chosenAccounts.remove(acc.id);
+                                      }
+                                    });
+                                  },
+                                );
+                              }),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Active Scope: ${getAccountScopeLabel()}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          const Divider(height: 20),
+                        ],
+
+                        // Presets
+                        Text(
+                          'Views & Presets',
+                          style: theme.textTheme.labelMedium?.copyWith(color: theme.hintColor),
+                        ),
+                        const SizedBox(height: 4),
+
+                        if (!isAllSelected && chosenAccounts.isNotEmpty)
+                          ListTile(
+                            leading: const Icon(Icons.folder_shared_rounded, color: Colors.teal),
+                            title: Text('Open Tab for ${getAccountScopeLabel()}'),
+                            subtitle: Text('Tab filtered exclusively to ${getAccountScopeLabel()}'),
+                            dense: true,
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              provider.addNewTab(
+                                title: getAccountScopeLabel(),
+                                accounts: chosenAccounts,
+                                iconCodePoint: Icons.account_circle_rounded.codePoint,
+                              );
+                            },
+                          ),
+
+                        ListTile(
+                          leading: const Icon(Icons.all_inbox_rounded, color: Colors.blueAccent),
+                          title: Text(formatTitleWithAccounts('All Tasks')),
+                          subtitle: Text('Clean tab with all pending tasks for ${getAccountScopeLabel()}'),
+                          dense: true,
+                          onTap: () {
                             Navigator.pop(ctx);
                             provider.addNewTab(
-                              title: acc.name,
-                              account: acc.id,
-                              iconCodePoint: Icons.account_circle_rounded.codePoint,
+                              title: formatTitleWithAccounts('All Tasks'),
+                              accounts: isAllSelected ? null : chosenAccounts,
+                              iconCodePoint: Icons.all_inbox_rounded.codePoint,
                             );
                           },
-                        );
-                      }),
-                    ],
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.copy_rounded, color: Colors.teal),
+                          title: const Text('Duplicate Current Tab'),
+                          subtitle: const Text('Copy current filters to a new tab'),
+                          dense: true,
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            provider.duplicateTab(provider.activeTabIndex);
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.today_rounded, color: Colors.amber),
+                          title: Text(formatTitleWithAccounts('Today & Due')),
+                          subtitle: Text('Tasks due today or overdue for ${getAccountScopeLabel()}'),
+                          dense: true,
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            final now = DateTime.now();
+                            provider.addNewTab(
+                              title: formatTitleWithAccounts('Today & Due'),
+                              accounts: isAllSelected ? null : chosenAccounts,
+                              iconCodePoint: Icons.today_rounded.codePoint,
+                              dateField: 'due',
+                              dateRange: DateTimeRange(
+                                start: DateTime(2000, 1, 1),
+                                end: DateTime(now.year, now.month, now.day, 23, 59, 59),
+                              ),
+                            );
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.local_fire_department_rounded, color: Colors.deepOrangeAccent),
+                          title: Text(formatTitleWithAccounts('High Priority')),
+                          subtitle: Text('Critical and high priority tasks for ${getAccountScopeLabel()}'),
+                          dense: true,
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            provider.addNewTab(
+                              title: formatTitleWithAccounts('High Priority'),
+                              accounts: isAllSelected ? null : chosenAccounts,
+                              iconCodePoint: Icons.local_fire_department_rounded.codePoint,
+                              priority: 'high',
+                            );
+                          },
+                        ),
+                        if (provider.spacesWithCounts.isNotEmpty) ...[
+                          const Divider(height: 24),
+                          Text('Spaces for ${getAccountScopeLabel()}', style: theme.textTheme.labelMedium?.copyWith(color: theme.hintColor)),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: provider.spacesWithCounts.keys.map((space) {
+                              return ActionChip(
+                                avatar: const Icon(Icons.rocket_launch_rounded, size: 14, color: Colors.purpleAccent),
+                                label: Text(space),
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  provider.addNewTab(
+                                    title: formatTitleWithAccounts(space),
+                                    accounts: isAllSelected ? null : chosenAccounts,
+                                    space: space,
+                                    iconCodePoint: Icons.rocket_launch_rounded.codePoint,
+                                  );
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                      ],
+                    ),
                   ),
-                ],
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -423,12 +536,13 @@ class _TasksScreenState extends State<TasksScreen> {
                 ),
                 ListTile(
                   leading: const Icon(Icons.switch_account_rounded, color: Colors.blueAccent),
-                  title: const Text('Filter by Account'),
-                  subtitle: Text(tab.selectedAccount == null || tab.selectedAccount == 'all'
+                  title: const Text('Filter by Account(s)'),
+                  subtitle: Text(tab.effectiveAccounts.isEmpty || tab.effectiveAccounts.contains('all')
                       ? 'All Accounts'
-                      : (provider.accounts.any((a) => a.id == tab.selectedAccount)
-                          ? provider.accounts.firstWhere((a) => a.id == tab.selectedAccount).name
-                          : tab.selectedAccount!)),
+                      : tab.effectiveAccounts.map((id) {
+                          final match = provider.accounts.where((a) => a.id == id);
+                          return match.isNotEmpty ? match.first.name : id;
+                        }).join(', ')),
                   onTap: () {
                     Navigator.pop(ctx);
                     _showChangeAccountDialog(context, provider, tabIndex);
@@ -454,46 +568,100 @@ class _TasksScreenState extends State<TasksScreen> {
   void _showChangeAccountDialog(BuildContext context, TaskProvider provider, int tabIndex) {
     if (tabIndex < 0 || tabIndex >= provider.tabs.length) return;
     final tab = provider.tabs[tabIndex];
+    Set<String> chosenAccounts = Set.from(tab.effectiveAccounts);
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text('Select Account for Tab', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final isAllSelected = chosenAccounts.isEmpty || chosenAccounts.contains('all');
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Filter Tab by Account(s)',
+                      style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Select one or multiple accounts for this tab',
+                      style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).hintColor),
+                    ),
+                    const SizedBox(height: 12),
+                    ListTile(
+                      leading: const Icon(Icons.people_alt_rounded, color: Colors.blueAccent),
+                      title: const Text('All Accounts'),
+                      trailing: isAllSelected
+                          ? const Icon(Icons.check_circle_rounded, color: Colors.blueAccent)
+                          : null,
+                      onTap: () {
+                        setModalState(() {
+                          chosenAccounts.clear();
+                        });
+                      },
+                    ),
+                    ...provider.accounts.map((acc) {
+                      final isSelected = !isAllSelected && chosenAccounts.contains(acc.id);
+                      return ListTile(
+                        leading: const Icon(Icons.account_circle_rounded, color: Colors.teal),
+                        title: Text(acc.name),
+                        subtitle: Text(acc.email ?? acc.id),
+                        trailing: Checkbox(
+                          value: isSelected,
+                          onChanged: (val) {
+                            setModalState(() {
+                              if (val == true) {
+                                chosenAccounts.remove('all');
+                                chosenAccounts.add(acc.id);
+                              } else {
+                                chosenAccounts.remove(acc.id);
+                              }
+                            });
+                          },
+                        ),
+                        onTap: () {
+                          setModalState(() {
+                            if (!isSelected) {
+                              chosenAccounts.remove('all');
+                              chosenAccounts.add(acc.id);
+                            } else {
+                              chosenAccounts.remove(acc.id);
+                            }
+                          });
+                        },
+                      );
+                    }),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            provider.updateTabAccounts(tabIndex, chosenAccounts);
+                          },
+                          child: const Text('Apply'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
-              ListTile(
-                leading: const Icon(Icons.people_alt_rounded, color: Colors.blueAccent),
-                title: const Text('All Accounts'),
-                trailing: (tab.selectedAccount == null || tab.selectedAccount == 'all')
-                    ? const Icon(Icons.check_circle_rounded, color: Colors.blueAccent)
-                    : null,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  provider.updateTabAccount(tabIndex, 'all');
-                },
-              ),
-              ...provider.accounts.map((acc) {
-                final isSelected = tab.selectedAccount == acc.id;
-                return ListTile(
-                  leading: const Icon(Icons.account_circle_rounded, color: Colors.teal),
-                  title: Text(acc.name),
-                  subtitle: Text(acc.email ?? acc.id),
-                  trailing: isSelected ? const Icon(Icons.check_circle_rounded, color: Colors.teal) : null,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    provider.updateTabAccount(tabIndex, acc.id);
-                  },
-                );
-              }),
-              const SizedBox(height: 12),
-            ],
-          ),
+            );
+          },
         );
       },
     );

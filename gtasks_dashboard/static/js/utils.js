@@ -622,7 +622,13 @@ export function filterTasksByCriteria(tasks, filters) {
     }
 
     // Apply account filter (supports per-tab multi-account isolation)
-    if (filters.account && filters.account !== 'all' && filters.account !== '') {
+    if (filters.accounts && Array.isArray(filters.accounts) && filters.accounts.length > 0 && !filters.accounts.includes('all')) {
+        const accsLower = filters.accounts.map(a => String(a).toLowerCase());
+        filteredTasks = filteredTasks.filter(task => {
+            if (!task.account) return false;
+            return accsLower.includes(String(task.account).toLowerCase());
+        });
+    } else if (filters.account && filters.account !== 'all' && filters.account !== '') {
         const filterAccLower = String(filters.account).toLowerCase();
         filteredTasks = filteredTasks.filter(task => {
             if (!task.account) return false;

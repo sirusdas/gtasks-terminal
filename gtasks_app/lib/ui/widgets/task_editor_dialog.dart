@@ -126,7 +126,9 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     super.didChangeDependencies();
     if (_selectedAccount == null) {
       final provider = context.read<TaskProvider>();
-      if (provider.selectedAccount != 'all' && provider.selectedAccount.isNotEmpty) {
+      if (provider.selectedAccounts.isNotEmpty && !provider.selectedAccounts.contains('all')) {
+        _selectedAccount = provider.selectedAccounts.first;
+      } else if (provider.selectedAccount != 'all' && provider.selectedAccount.isNotEmpty) {
         _selectedAccount = provider.selectedAccount;
       } else if (provider.accounts.isNotEmpty) {
         _selectedAccount = provider.accounts.first.id;

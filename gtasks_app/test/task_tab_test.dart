@@ -141,5 +141,73 @@ void main() {
       );
       expect(backendTab.computeTaskCount(tasks), 1); // Only Task 2
     });
+
+    test('TaskTab multi-account effectiveAccounts and computeTaskCount work accurately', () {
+      final multiAccountTasks = [
+        TaskItem(
+          id: 't1',
+          title: 'Work Task 1',
+          description: '',
+          account: 'work_acc',
+          status: 'pending',
+        ),
+        TaskItem(
+          id: 't2',
+          title: 'Work Task 2',
+          description: '',
+          account: 'work_acc',
+          status: 'pending',
+        ),
+        TaskItem(
+          id: 't3',
+          title: 'Personal Task',
+          description: '',
+          account: 'personal_acc',
+          status: 'pending',
+        ),
+        TaskItem(
+          id: 't4',
+          title: 'Side Project Task',
+          description: '',
+          account: 'side_acc',
+          status: 'pending',
+        ),
+      ];
+
+      // Multi-account tab (work + side_acc)
+      final multiTab = TaskTab(
+        id: 'multi_tab',
+        title: 'Work & Side Project',
+        selectedAccounts: {'work_acc', 'side_acc'},
+        statusFilter: 'pending',
+      );
+      expect(multiTab.effectiveAccounts, {'work_acc', 'side_acc'});
+      expect(multiTab.computeTaskCount(multiAccountTasks), 3); // t1, t2, t4
+
+      // Single account tab
+      final singleTab = TaskTab(
+        id: 'single_tab',
+        title: 'Personal Only',
+        selectedAccount: 'personal_acc',
+        statusFilter: 'pending',
+      );
+      expect(singleTab.effectiveAccounts, {'personal_acc'});
+      expect(singleTab.computeTaskCount(multiAccountTasks), 1); // t3
+
+      // All accounts tab
+      final allTab = TaskTab(
+        id: 'all_tab',
+        title: 'All Accounts',
+        statusFilter: 'pending',
+      );
+      expect(allTab.effectiveAccounts, isEmpty);
+      expect(allTab.computeTaskCount(multiAccountTasks), 4); // all
+
+      // Serialization round-trip with selectedAccounts
+      final serialized = multiTab.toJson();
+      final restored = TaskTab.fromJson(serialized);
+      expect(restored.selectedAccounts, {'work_acc', 'side_acc'});
+      expect(restored.effectiveAccounts, {'work_acc', 'side_acc'});
+    });
   });
 }

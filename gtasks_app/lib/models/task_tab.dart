@@ -1,4 +1,4 @@
-import 'dart:convert';
+// ignore_for_file: non_const_argument_for_const_parameter
 import 'package:flutter/material.dart';
 import 'task_item.dart';
 
@@ -10,6 +10,7 @@ class TaskTab {
 
   // Independent Filter State
   String? selectedAccount;
+  Set<String> selectedAccounts;
   String statusFilter; // 'pending', 'completed', 'all'
   String? selectedSpace;
   String? selectedSubspace;
@@ -32,6 +33,7 @@ class TaskTab {
     this.iconCodePoint,
     this.colorValue,
     this.selectedAccount,
+    Set<String>? selectedAccounts,
     this.statusFilter = 'pending',
     this.selectedSpace,
     this.selectedSubspace,
@@ -47,10 +49,23 @@ class TaskTab {
     this.sortField = 'priority',
     this.sortAscending = true,
     this.viewMode,
-  })  : selectedLists = selectedLists != null ? Set.from(selectedLists) : {},
+  })  : selectedAccounts = selectedAccounts != null
+            ? Set.from(selectedAccounts)
+            : (selectedAccount != null && selectedAccount != 'all' ? {selectedAccount} : {}),
+        selectedLists = selectedLists != null ? Set.from(selectedLists) : {},
         selectedTags = selectedTags != null ? Set.from(selectedTags) : {},
         hiddenLists = hiddenLists != null ? Set.from(hiddenLists) : {},
         hiddenTags = hiddenTags != null ? Set.from(hiddenTags) : {};
+
+  Set<String> get effectiveAccounts {
+    if (selectedAccounts.isNotEmpty) {
+      return selectedAccounts;
+    }
+    if (selectedAccount != null && selectedAccount!.isNotEmpty && selectedAccount != 'all') {
+      return {selectedAccount!};
+    }
+    return {};
+  }
 
   IconData get icon {
     if (iconCodePoint != null) {
@@ -76,6 +91,8 @@ class TaskTab {
     int? colorValue,
     String? selectedAccount,
     bool clearAccount = false,
+    Set<String>? selectedAccounts,
+    bool clearAccounts = false,
     String? statusFilter,
     String? selectedSpace,
     bool clearSpace = false,
@@ -102,6 +119,7 @@ class TaskTab {
       iconCodePoint: iconCodePoint ?? this.iconCodePoint,
       colorValue: colorValue ?? this.colorValue,
       selectedAccount: clearAccount ? null : (selectedAccount ?? this.selectedAccount),
+      selectedAccounts: clearAccounts ? {} : (selectedAccounts != null ? Set.from(selectedAccounts) : Set.from(this.selectedAccounts)),
       statusFilter: statusFilter ?? this.statusFilter,
       selectedSpace: clearSpace ? null : (selectedSpace ?? this.selectedSpace),
       selectedSubspace: (clearSpace || clearSubspace) ? null : (selectedSubspace ?? this.selectedSubspace),
@@ -123,9 +141,12 @@ class TaskTab {
   int computeTaskCount(List<TaskItem> allTasks) {
     final now = DateTime.now();
     final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final effAccs = effectiveAccounts;
 
     return allTasks.where((t) {
-      if (selectedAccount != null && selectedAccount != 'all' && t.account != selectedAccount) {
+      if (effAccs.isNotEmpty && !effAccs.contains('all')) {
+        if (!effAccs.contains(t.account)) return false;
+      } else if (selectedAccount != null && selectedAccount != 'all' && t.account != selectedAccount) {
         return false;
       }
       if (statusFilter == 'pending' && t.isCompleted) return false;
@@ -185,6 +206,7 @@ class TaskTab {
       'iconCodePoint': iconCodePoint,
       'colorValue': colorValue,
       'selectedAccount': selectedAccount,
+      'selectedAccounts': effectiveAccounts.toList(),
       'statusFilter': statusFilter,
       'selectedSpace': selectedSpace,
       'selectedSubspace': selectedSubspace,
@@ -214,12 +236,21 @@ class TaskTab {
       }
     }
 
+    final rawAccounts = json['selectedAccounts'] as List?;
+    Set<String> accs = {};
+    if (rawAccounts != null) {
+      accs = rawAccounts.map((e) => e.toString()).toSet();
+    } else if (json['selectedAccount'] != null && json['selectedAccount'] != 'all') {
+      accs = {json['selectedAccount'].toString()};
+    }
+
     return TaskTab(
       id: json['id'] ?? 'tab_${DateTime.now().millisecondsSinceEpoch}',
       title: json['title'] ?? 'Tab',
       iconCodePoint: json['iconCodePoint'] as int?,
       colorValue: json['colorValue'] as int?,
       selectedAccount: json['selectedAccount'] as String?,
+      selectedAccounts: accs,
       statusFilter: json['statusFilter'] as String? ?? 'pending',
       selectedSpace: json['selectedSpace'] as String?,
       selectedSubspace: json['selectedSubspace'] as String?,
@@ -265,6 +296,7 @@ class TaskTab {
       'id': id,
       'title': title,
       'account': selectedAccount,
+      'accounts': effectiveAccounts.toList(),
       'filterType': filterType,
       'filterVal': filterVal,
     };
