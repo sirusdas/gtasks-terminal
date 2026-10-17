@@ -745,8 +745,11 @@ export function updateAccountSelectors() {
     
     selectors.forEach(selector => {
         if (selector) {
-            selector.innerHTML = accounts.map(acc => 
-                `<option value="${acc.id}" ${acc.id === currentAccount ? 'selected' : ''}>${acc.name}</option>`
+            const hasAll = selector.id === 'tasks-account-selector' || selector.id === 'account-selector';
+            const isAllSelected = (!currentAccount || currentAccount === 'all');
+            const allOpt = hasAll ? `<option value="all" ${isAllSelected ? 'selected' : ''}>All Accounts</option>` : '';
+            selector.innerHTML = allOpt + accounts.map(acc => 
+                `<option value="${acc.id}" ${(!isAllSelected && acc.id === currentAccount) ? 'selected' : ''}>${acc.name}</option>`
             ).join('');
         }
     });
@@ -778,7 +781,24 @@ export function switchAccountForHierarchy(accountId) {
 }
 
 export function switchAccountForTasks(accountId) {
-    switchAccount(accountId);
+    const activeTab = getActiveBrowserTab();
+    if (activeTab && activeTab.filters) {
+        activeTab.filters.account = accountId;
+        if (accountId === 'all' || !accountId) {
+            activeTab.filters.accounts = ['all'];
+        } else {
+            activeTab.filters.accounts = [accountId];
+        }
+        saveBrowserTabs();
+    }
+    // Update sidebar counts, lists, spaces, tags & multiselect options instantly without lag
+    updateSidebarAndFiltersForTab(activeTab);
+    filterTasks();
+
+    // Notify backend in background to keep CLI current account in sync (non-blocking)
+    if (accountId && accountId !== 'all') {
+        fetch(apiEndpoints.accountsSwitch(accountId), { method: 'POST' }).catch(() => {});
+    }
 }
 
 // ========== Tasks ==========
@@ -1035,9 +1055,31 @@ export function renderBrowserTabs() {
     checkTabTrackScroll();
 }
 
+export function getScopedTasksForTab(tab) {
+    const pool = (dashboardData.all_tasks && dashboardData.all_tasks.length > 0)
+        ? dashboardData.all_tasks
+        : (dashboardData.tasks || []);
+    const cleanPool = filterOutDeletedTasks(pool);
+    if (!tab || !tab.filters) return cleanPool;
+
+    const f = tab.filters;
+    if (Array.isArray(f.accounts) && f.accounts.length > 0 && !f.accounts.includes('all')) {
+        const lowerAccs = f.accounts.map(a => String(a).toLowerCase());
+        return cleanPool.filter(t => t.account && lowerAccs.includes(String(t.account).toLowerCase()));
+    }
+    if (f.account && f.account !== 'all' && f.account !== '') {
+        const accLower = String(f.account).toLowerCase();
+        return cleanPool.filter(t => t.account && String(t.account).toLowerCase() === accLower);
+    }
+    return cleanPool;
+}
+
 export function updateBrowserTabBadges() {
     if (!browserTabs || browserTabs.length === 0) return;
-    const tasks = filterOutDeletedTasks(dashboardData.tasks || []);
+    const pool = (dashboardData.all_tasks && dashboardData.all_tasks.length > 0)
+        ? dashboardData.all_tasks
+        : (dashboardData.tasks || []);
+    const tasks = filterOutDeletedTasks(pool);
     browserTabs.forEach(tab => {
         const badgeEl = document.getElementById(`tab-badge-${tab.id}`);
         if (!badgeEl) return;
@@ -1091,15 +1133,7 @@ export function switchBrowserTab(tabId) {
     activeSpaceFilter = f.space || null;
     activeSubspaceFilter = f.subspace || null;
 
-    // 6. Multiselects
-    if (statusMultiselect) statusMultiselect.setSelectedValues(f.status || ['pending', 'in_progress']);
-    if (listMultiselect) listMultiselect.setSelectedValues(f.list || []);
-    if (hideListsMultiselect) hideListsMultiselect.setSelectedValues(f.hideLists || []);
-    if (hideRecurringMultiselect) hideRecurringMultiselect.setSelectedValues(f.hideRecurring || []);
-    if (spacesMultiselect) spacesMultiselect.setSelectedValues(f.spaces || []);
-    if (tagsMultiselect) tagsMultiselect.setSelectedValues(f.tags || []);
-
-    // 7. View Mode
+    // 6. View Mode
     if (newTab.viewMode && newTab.viewMode !== currentTaskViewMode) {
         currentTaskViewMode = newTab.viewMode;
         localStorage.setItem('gtasks_task_view_mode', newTab.viewMode);
@@ -1115,25 +1149,25 @@ export function switchBrowserTab(tabId) {
         }
     }
 
-    // 7b. Account sync for per-tab account isolation
-    if (f.account && f.account !== 'all' && f.account !== '') {
-        const accSelect = document.getElementById('tasks-account-selector');
-        if (accSelect && accSelect.value !== f.account) {
-            accSelect.value = f.account;
-            if (dashboardData.current_account && dashboardData.current_account !== f.account) {
-                switchAccountForTasks(f.account);
-                return;
-            }
+    // 7. Account sync for per-tab account isolation (instant local update, no reload)
+    const accSelect = document.getElementById('tasks-account-selector');
+    if (accSelect) {
+        let targetAccount = 'all';
+        if (Array.isArray(f.accounts) && f.accounts.length === 1 && f.accounts[0] !== 'all') {
+            targetAccount = f.accounts[0];
+        } else if (f.account && f.account !== 'all' && f.account !== '') {
+            targetAccount = f.account;
         }
+        accSelect.value = targetAccount;
     }
 
-    // 7c. Update sidebar and filter options for this tab's account smoothly & instantly
+    // 8. Update sidebar and filter options for this tab's account smoothly & instantly
     updateSidebarAndFiltersForTab(newTab);
 
-    // 8. Re-render tab bar active state
+    // 9. Re-render tab bar active state
     renderBrowserTabs();
 
-    // 9. Filter and render tasks for this tab
+    // 10. Filter and render tasks for this tab
     filterTasks();
 }
 
@@ -1142,15 +1176,33 @@ export function switchBrowserTab(tabId) {
  */
 export function updateSidebarAndFiltersForTab(tab) {
     if (!tab) return;
-    const tabAccount = tab.filters?.account;
-    const allTasks = filterOutDeletedTasks(dashboardData.tasks || []);
-    let scopedTasks = allTasks;
-    if (tabAccount && tabAccount !== 'all' && tabAccount !== '') {
-        const accLower = String(tabAccount).toLowerCase();
-        scopedTasks = allTasks.filter(t => t.account && String(t.account).toLowerCase() === accLower);
-    }
+    const scopedTasks = getScopedTasksForTab(tab);
+
+    // Update allTasks pointer so dynamic multiselect filtering reflects scoped account tasks
+    allTasks = scopedTasks;
+
     // Instantly update sidebar counts, lists, spaces, tags for this tab's account without network lag
     populateSidebarTasksSubmenu(scopedTasks);
+
+    // Refresh multiselect dropdown options so available choices match the active tab's account scope
+    if (listMultiselect) listMultiselect.setOptions(getListsWithCounts(scopedTasks));
+    if (hideListsMultiselect) hideListsMultiselect.setOptions(getListsWithCounts(scopedTasks));
+    if (spacesMultiselect) spacesMultiselect.setOptions(getSpacesWithCounts(scopedTasks));
+    if (tagsMultiselect) tagsMultiselect.setOptions(getTagsWithCounts(scopedTasks));
+    if (statusMultiselect) statusMultiselect.setOptions(getStatusWithCounts(scopedTasks));
+    if (hideRecurringMultiselect) hideRecurringMultiselect.setOptions(getRecurringWithCounts(scopedTasks));
+
+    // Restore selected values for this tab
+    const f = tab.filters || {};
+    if (statusMultiselect) statusMultiselect.setSelectedValues(f.status || ['pending', 'in_progress']);
+    if (listMultiselect) listMultiselect.setSelectedValues(f.list || []);
+    if (hideListsMultiselect) hideListsMultiselect.setSelectedValues(f.hideLists || []);
+    if (hideRecurringMultiselect) hideRecurringMultiselect.setSelectedValues(f.hideRecurring || []);
+    if (spacesMultiselect) spacesMultiselect.setSelectedValues(f.spaces || []);
+    if (tagsMultiselect) tagsMultiselect.setSelectedValues(f.tags || []);
+
+    // Update active pills / filter highlights
+    updateFilteredMultiselect();
 }
 
 /**
@@ -1635,6 +1687,7 @@ export function saveFilterState() {
         }
         const activeTab = getActiveBrowserTab();
         const currentAccount = document.getElementById('tasks-account-selector')?.value || activeTab?.filters?.account || '';
+        const currentAccounts = activeTab?.filters?.accounts || (currentAccount && currentAccount !== 'all' ? [currentAccount] : ['all']);
         const state = {
             search: document.getElementById('task-search-filter')?.value || '',
             status: statusValues,
@@ -1645,6 +1698,7 @@ export function saveFilterState() {
             spaces: spacesValues,
             tags: tagValues,
             account: currentAccount,
+            accounts: currentAccounts,
             space: activeSpaceFilter,
             subspace: activeSubspaceFilter,
             dateField: document.getElementById('task-date-field')?.value || 'modified_at',
@@ -1656,7 +1710,7 @@ export function saveFilterState() {
 
         // Sync with active browser tab
         if (activeTab) {
-            activeTab.filters = { ...state };
+            activeTab.filters = { ...activeTab.filters, ...state };
             activeTab.viewMode = currentTaskViewMode;
             saveBrowserTabs();
         }
@@ -1683,27 +1737,38 @@ export function loadFilterState() {
 }
 
 export function loadTasks() {
-    const tasks = dashboardData.tasks || [];
-    const filteredTasks = filterOutDeletedTasks(tasks);
+    const pool = (dashboardData.all_tasks && dashboardData.all_tasks.length > 0)
+        ? dashboardData.all_tasks
+        : (dashboardData.tasks || []);
+    const filteredTasks = filterOutDeletedTasks(pool);
     const container = document.getElementById('tasks-grid');
     if (!container) return;
     
     container.innerHTML = '';
     
     // Initialize task count display
-    updateTasksCountDisplay(filteredTasks.length, tasks.length);
+    updateTasksCountDisplay(filteredTasks.length, pool.length);
 
     // Initialize browser tabs
     initBrowserTabs();
     
     if (filteredTasks.length === 0) {
-        container.innerHTML = '<p style="text-align: center; color: #6b7280;">No tasks found for this account.</p>';
+        container.innerHTML = '<p style="text-align: center; color: #6b7280;">No tasks found.</p>';
         updateBrowserTabBadges();
         return;
     }
     
+    // Get active tab to initialize multiselect filters with properly scoped tasks
+    const activeTab = getActiveBrowserTab();
+    const scopedInitialTasks = activeTab ? getScopedTasksForTab(activeTab) : filteredTasks;
+
     // Initialize multiselect filters with available options (preserving current/saved selections)
-    initMultiselectFilters(tasks);
+    initMultiselectFilters(scopedInitialTasks);
+
+    // Update sidebar & filter options for the active tab
+    if (activeTab) {
+        updateSidebarAndFiltersForTab(activeTab);
+    }
     
     // Apply filters and render tasks according to preserved filter state
     filterTasks();
@@ -2984,6 +3049,10 @@ export function filterTasks() {
         }
     }
     
+    const activeTab = getActiveBrowserTab();
+    const currentAccount = document.getElementById('tasks-account-selector')?.value || activeTab?.filters?.account || '';
+    const currentAccounts = activeTab?.filters?.accounts || (currentAccount && currentAccount !== 'all' ? [currentAccount] : ['all']);
+
     const filters = {
         search: document.getElementById('task-search-filter')?.value.toLowerCase() || '',
         status: statusValues,
@@ -2993,6 +3062,8 @@ export function filterTasks() {
         hideRecurring: hideRecurringValues,
         spaces: spaceValues,
         tags: tagValues,
+        account: currentAccount,
+        accounts: currentAccounts,
         space: activeSpaceFilter,
         subspace: activeSubspaceFilter,
         dateField: document.getElementById('task-date-field')?.value || 'modified_at',
@@ -3002,7 +3073,10 @@ export function filterTasks() {
         sortOrder: document.getElementById('task-sort-order')?.value || 'desc'
     };
     
-    let filteredTasks = dashboardData.tasks || [];
+    const pool = (dashboardData.all_tasks && dashboardData.all_tasks.length > 0)
+        ? dashboardData.all_tasks
+        : (dashboardData.tasks || []);
+    let filteredTasks = filterOutDeletedTasks(pool);
     const totalTasks = filteredTasks.length;
     const container = document.getElementById('tasks-grid');
     if (!container) return;
@@ -3018,9 +3092,6 @@ export function filterTasks() {
     // Synchronize sidebar active list/tag highlight
     syncSidebarActiveFilter(filters);
     
-    // Filter out deleted tasks if setting is enabled
-    filteredTasks = filterOutDeletedTasks(filteredTasks);
-    
     // Apply filters
     filteredTasks = filterTasksByCriteria(filteredTasks, filters);
     
@@ -3030,7 +3101,7 @@ export function filterTasks() {
     if (window.AiChatController && typeof window.AiChatController.onViewContextUpdated === 'function') {
         window.AiChatController.onViewContextUpdated({
             tasks: filteredTasks,
-            allTasks: dashboardData.tasks || [],
+            allTasks: pool,
             filters: filters,
             totalCount: totalTasks,
             filteredCount: filteredTasks.length
@@ -3041,9 +3112,8 @@ export function filterTasks() {
     updateTasksCountDisplay(filteredTasks.length, totalTasks);
 
     // Sync active browser tab filters and update live tab badges
-    const activeTab = getActiveBrowserTab();
     if (activeTab) {
-        activeTab.filters = { ...filters };
+        activeTab.filters = { ...activeTab.filters, ...filters };
         activeTab.viewMode = currentTaskViewMode;
         saveBrowserTabs();
     }

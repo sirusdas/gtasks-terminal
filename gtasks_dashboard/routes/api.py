@@ -328,8 +328,14 @@ def api_refresh_cache():
 
 
 def get_current_tasks():
-    """Get tasks for current account"""
+    """Get tasks for current account (or all accounts if current_account is 'all')"""
     current = _dashboard_state.get('current_account')
+    if current == 'all' or not current:
+        all_t = []
+        for acc in _dashboard_state.get('accounts', []):
+            ensure_cache_fresh(acc.id)
+            all_t.extend(_dashboard_state['tasks'].get(acc.id, []))
+        return all_t
     ensure_cache_fresh(current)
     current = _dashboard_state.get('current_account')
     if current:
@@ -341,24 +347,36 @@ def get_current_tasks():
 def api_data():
     """Get all dashboard data"""
     current_account_id = _dashboard_state.get('current_account')
-    ensure_cache_fresh(current_account_id)
-    current_account_id = _dashboard_state.get('current_account')
-    tasks = _dashboard_state['tasks'].get(current_account_id, []) if current_account_id else []
     
-    # Calculate stats for current account only
+    # Refresh cache for all known accounts
+    for acc in _dashboard_state.get('accounts', []):
+        ensure_cache_fresh(acc.id)
+        
+    all_account_tasks = []
+    for acc in _dashboard_state.get('accounts', []):
+        all_account_tasks.extend(_dashboard_state['tasks'].get(acc.id, []))
+        
+    if current_account_id == 'all' or not current_account_id:
+        tasks = all_account_tasks
+    else:
+        tasks = _dashboard_state['tasks'].get(current_account_id, [])
+    
+    # Calculate stats
     from models.task import DashboardStats
     from models.task import Task
     task_objects = [Task.from_dict(t) for t in tasks]
     stats = DashboardStats.from_tasks(task_objects)
     
-    # Get all unique list names from task_lists table and loaded tasks for the current account
+    # Get all unique list names from task_lists table and loaded tasks
     list_names = set()
-    if current_account_id:
+    accounts_to_check = _dashboard_state.get('accounts', []) if (current_account_id == 'all' or not current_account_id) else [{'id': current_account_id}]
+    for acc_info in accounts_to_check:
+        acc_id = acc_info['id'] if isinstance(acc_info, dict) else acc_info.id
         try:
             from pathlib import Path
             import sqlite3
             gtasks_home = Path.home() / '.gtasks'
-            db_path = gtasks_home / current_account_id / 'tasks.db'
+            db_path = gtasks_home / acc_id / 'tasks.db'
             if not db_path.exists():
                 db_path = gtasks_home / 'tasks.db'
             if db_path.exists():
@@ -370,19 +388,19 @@ def api_data():
                         if row[0]:
                             list_names.add(row[0])
                 except Exception as e:
-                    print(f"⚠️  Error loading list names: {e}")
+                    pass
                 conn.close()
         except Exception as e:
-            print(f"⚠️  Error loading list names: {e}")
+            pass
             
-    for t in tasks:
+    for t in (all_account_tasks if (current_account_id == 'all' or not current_account_id) else tasks):
         lt = t.get('list_title')
         if lt:
             list_names.add(lt)
 
     # Get ALL Google task lists (including empty ones) via Google API for current_account_id
     all_google_lists = []
-    if current_account_id:
+    if current_account_id and current_account_id != 'all':
         try:
             import sys
             from pathlib import Path
@@ -409,8 +427,9 @@ def api_data():
 
     return jsonify({
         'tasks': tasks,
+        'all_tasks': all_account_tasks,
         'accounts': [a.to_dict() for a in _dashboard_state['accounts']],
-        'current_account': current_account_id,
+        'current_account': current_account_id or 'all',
         'lists': sorted_list_names,
         'all_google_lists': all_google_lists,
         'stats': {
@@ -471,22 +490,23 @@ def api_accounts():
 @api.route('/accounts/<account_id>/switch', methods=['POST'])
 def switch_account(account_id):
     """Switch to a different account"""
-    if account_id in [a.id for a in _dashboard_state['accounts']]:
+    if account_id == 'all' or account_id in [a.id for a in _dashboard_state['accounts']]:
         _dashboard_state['current_account'] = account_id
         
-        # Load tasks for this account if not already loaded
-        if account_id not in _dashboard_state['tasks']:
-            tasks = data_manager.load_tasks_for_account(account_id)
-            _dashboard_state['tasks'][account_id] = [t.to_dict() for t in tasks]
-            
-        # Synchronize with CLI state
-        import os
-        from pathlib import Path
-        try:
-            current_account_file = Path.home() / '.gtasks' / '.current_account'
-            current_account_file.write_text(account_id)
-        except Exception as e:
-            print(f"Failed to write current account to CLI file: {e}")
+        if account_id != 'all':
+            # Load tasks for this account if not already loaded
+            if account_id not in _dashboard_state['tasks']:
+                tasks = data_manager.load_tasks_for_account(account_id)
+                _dashboard_state['tasks'][account_id] = [t.to_dict() for t in tasks]
+                
+            # Synchronize with CLI state
+            import os
+            from pathlib import Path
+            try:
+                current_account_file = Path.home() / '.gtasks' / '.current_account'
+                current_account_file.write_text(account_id)
+            except Exception as e:
+                print(f"Failed to write current account to CLI file: {e}")
         
         return jsonify({
             'success': True,
