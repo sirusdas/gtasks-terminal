@@ -31,6 +31,8 @@ _last_db_mtimes = {}
 
 # Background sync lock to prevent concurrent Google sync
 _sync_lock = threading.Lock()
+_remote_sync_lock = threading.Lock()
+_remote_sync_running = False
 
 
 def _resolve_cli_account(account_id: Optional[str] = None) -> Optional[str]:
@@ -2973,9 +2975,20 @@ def api_remote_sync_command():
     import subprocess
     import threading
     
+    global _remote_sync_running
     try:
+        with _remote_sync_lock:
+            if _remote_sync_running:
+                return jsonify({
+                    'success': True,
+                    'already_running': True,
+                    'message': 'Remote sync is already running in background'
+                })
+            _remote_sync_running = True
+
         def run_gtasks_remote_sync():
             """Background function to run gtasks remote sync command."""
+            global _remote_sync_running
             try:
                 print('[Remote Sync] Starting gtasks remote sync...')
                 result = subprocess.run(
@@ -2993,6 +3006,9 @@ def api_remote_sync_command():
                 print('[Remote Sync] Command timed out after 5 minutes')
             except Exception as e:
                 print(f'[Remote Sync] Error executing command: {e}')
+            finally:
+                with _remote_sync_lock:
+                    _remote_sync_running = False
         
         # Start the command in a background thread
         thread = threading.Thread(target=run_gtasks_remote_sync, daemon=True)
@@ -3004,6 +3020,8 @@ def api_remote_sync_command():
         })
     
     except Exception as e:
+        with _remote_sync_lock:
+            _remote_sync_running = False
         return jsonify({
             'success': False,
             'message': f'Error starting remote sync: {str(e)}'

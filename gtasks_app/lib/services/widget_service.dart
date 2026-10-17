@@ -28,9 +28,11 @@ class WidgetService {
   }
 
   /// Requests the native Android AppWidget to refresh its RemoteViews and task count
-  static Future<void> updateWidget() async {
+  static Future<void> updateWidget({String? tabsJson}) async {
     try {
-      await _channel.invokeMethod('updateWidget');
+      await _channel.invokeMethod('updateWidget', {
+        if (tabsJson != null) 'tabsJson': tabsJson,
+      });
     } catch (_) {
       // Gracefully ignore on non-Android platforms or when engine is detaching
     }

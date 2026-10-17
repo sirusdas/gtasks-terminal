@@ -1,5 +1,6 @@
 package com.gtasks.gtasks_app
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
@@ -67,6 +68,11 @@ class MainActivity : FlutterActivity() {
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "updateWidget" -> {
+                    val tabsJson = call.argument<String>("tabsJson")
+                    if (!tabsJson.isNullOrEmpty()) {
+                        val prefs = applicationContext.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                        prefs.edit().putString("tabs_json", tabsJson).apply()
+                    }
                     GTasksWidgetProvider.updateAllWidgets(applicationContext)
                     result.success(true)
                 }

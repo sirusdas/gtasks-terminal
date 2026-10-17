@@ -72,6 +72,9 @@ class GTasksRemoteViewsFactory(
             val hiddenTagsJson = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                 prefs.getString("hidden_tags_$appWidgetId", null)
             } else null
+            val tabAccount = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                prefs.getString("account_$appWidgetId", null)
+            } else null
 
             SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
                 val checkCursor = db.rawQuery(
@@ -89,6 +92,11 @@ class GTasksRemoteViewsFactory(
                     """.trimIndent()
                 )
                 val args = mutableListOf<String>()
+
+                if (!tabAccount.isNullOrBlank() && tabAccount != "all") {
+                    queryBuilder.append(" AND account = ?")
+                    args.add(tabAccount)
+                }
 
                 if (!filterType.isNullOrBlank() && !filterVal.isNullOrBlank()) {
                     when (filterType) {

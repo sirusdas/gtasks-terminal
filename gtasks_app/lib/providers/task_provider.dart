@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
 import '../api/google_tasks_direct_client.dart';
 import '../models/task_item.dart';
 import '../models/account.dart';
+import '../models/task_tab.dart';
 import '../services/widget_service.dart';
 import '../storage/local_database.dart';
 import '../utils/notes_parser.dart';
@@ -194,6 +197,262 @@ class TaskProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
+  bool _isSyncing = false;
+  bool get isSyncing => _isSyncing;
+
+  static const String _keyBrowserTabs = 'gtasks_browser_tabs_v2';
+  static const String _keyActiveTabIndex = 'gtasks_browser_active_tab_index_v2';
+
+  List<TaskTab> _tabs = [];
+  int _activeTabIndex = 0;
+  bool _isApplyingTab = false;
+
+  List<TaskTab> get tabs => List.unmodifiable(_tabs);
+  int get activeTabIndex => _activeTabIndex;
+  TaskTab? get activeTab => _tabs.isNotEmpty && _activeTabIndex < _tabs.length ? _tabs[_activeTabIndex] : null;
+
+  Future<void> _initTabs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final tabsRaw = prefs.getString(_keyBrowserTabs);
+      final activeIdx = prefs.getInt(_keyActiveTabIndex) ?? 0;
+
+      if (tabsRaw != null && tabsRaw.isNotEmpty) {
+        final List decoded = jsonDecode(tabsRaw);
+        _tabs = decoded.map((item) => TaskTab.fromJson(item as Map<String, dynamic>)).toList();
+      }
+
+      if (_tabs.isEmpty) {
+        _tabs = _generateDefaultTabs();
+      }
+
+      _activeTabIndex = (activeIdx >= 0 && activeIdx < _tabs.length) ? activeIdx : 0;
+      _applyTabFilters(_tabs[_activeTabIndex], shouldNotify: false);
+    } catch (e) {
+      debugPrint('[TaskProvider] Error initializing tabs: $e');
+      if (_tabs.isEmpty) {
+        _tabs = _generateDefaultTabs();
+        _activeTabIndex = 0;
+      }
+    }
+  }
+
+  List<TaskTab> _generateDefaultTabs() {
+    return [
+      TaskTab(
+        id: 'tab_all_tasks',
+        title: 'All Tasks',
+        iconCodePoint: Icons.inbox_rounded.codePoint,
+        statusFilter: 'pending',
+      ),
+      TaskTab(
+        id: 'tab_today',
+        title: 'Today & Due',
+        iconCodePoint: Icons.today_rounded.codePoint,
+        statusFilter: 'pending',
+        dateField: 'due',
+        dateRange: DateTimeRange(
+          start: DateTime(2000, 1, 1),
+          end: DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59),
+        ),
+      ),
+      TaskTab(
+        id: 'tab_priority',
+        title: 'High Priority',
+        iconCodePoint: Icons.local_fire_department_rounded.codePoint,
+        statusFilter: 'pending',
+        selectedPriority: 'high',
+      ),
+    ];
+  }
+
+  Future<void> _saveTabs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = jsonEncode(_tabs.map((t) => t.toJson()).toList());
+      await prefs.setString(_keyBrowserTabs, raw);
+      await prefs.setInt(_keyActiveTabIndex, _activeTabIndex);
+      WidgetService.updateWidget(tabsJson: _tabsToJsonString());
+    } catch (e) {
+      debugPrint('[TaskProvider] Error saving tabs: $e');
+    }
+  }
+
+  String _tabsToJsonString() {
+    return jsonEncode(_tabs.map((t) => t.toWidgetJson()).toList());
+  }
+
+  void _applyTabFilters(TaskTab tab, {bool shouldNotify = true}) {
+    _isApplyingTab = true;
+    _selectedAccount = tab.selectedAccount ?? 'all';
+    _statusFilter = tab.statusFilter;
+    _selectedSpace = tab.selectedSpace;
+    _selectedSubspace = tab.selectedSubspace;
+    _selectedPriority = tab.selectedPriority;
+    _selectedLists = Set.from(tab.selectedLists);
+    _selectedTags = Set.from(tab.selectedTags);
+    _searchQuery = tab.searchQuery;
+    _dateField = tab.dateField ?? 'modified_at';
+    _dateRange = tab.dateRange;
+    _hideRecurring = tab.hideRecurring;
+    _hiddenLists = Set.from(tab.hiddenLists);
+    _hiddenTags = Set.from(tab.hiddenTags);
+    _sortField = tab.sortField;
+    _sortAscending = tab.sortAscending;
+    _isApplyingTab = false;
+
+    _recomputeFilteredTasks();
+    if (shouldNotify) {
+      notifyListeners();
+    }
+  }
+
+  void _syncActiveTabFromCurrentFilters() {
+    if (_isApplyingTab || _tabs.isEmpty || _activeTabIndex >= _tabs.length) return;
+    final current = _tabs[_activeTabIndex];
+    _tabs[_activeTabIndex] = current.copyWith(
+      selectedAccount: _selectedAccount,
+      statusFilter: _statusFilter,
+      selectedSpace: _selectedSpace,
+      clearSpace: _selectedSpace == null,
+      selectedSubspace: _selectedSubspace,
+      clearSubspace: _selectedSubspace == null,
+      selectedPriority: _selectedPriority,
+      clearPriority: _selectedPriority == null,
+      selectedLists: _selectedLists,
+      selectedTags: _selectedTags,
+      searchQuery: _searchQuery,
+      dateField: _dateField,
+      dateRange: _dateRange,
+      clearDateRange: _dateRange == null,
+      hideRecurring: _hideRecurring,
+      hiddenLists: _hiddenLists,
+      hiddenTags: _hiddenTags,
+      sortField: _sortField,
+      sortAscending: _sortAscending,
+    );
+    _saveTabs();
+  }
+
+  Future<void> switchToTab(int index) async {
+    if (index < 0 || index >= _tabs.length || index == _activeTabIndex) return;
+    _activeTabIndex = index;
+    final tab = _tabs[index];
+    final targetAccount = tab.selectedAccount ?? 'all';
+    if (targetAccount != _selectedAccount) {
+      await setAccount(targetAccount);
+    }
+    _applyTabFilters(tab);
+    _saveTabs();
+  }
+
+  void switchToTabById(String tabId) {
+    final idx = _tabs.indexWhere((t) => t.id == tabId);
+    if (idx != -1) {
+      switchToTab(idx);
+    }
+  }
+
+  void addNewTab({
+    String? title,
+    String? account,
+    int? iconCodePoint,
+    String? space,
+    String? subspace,
+    String? priority,
+    String? list,
+    String? tag,
+    DateTimeRange? dateRange,
+    String? dateField,
+    String? statusFilter,
+  }) {
+    final newId = 'tab_${DateTime.now().millisecondsSinceEpoch}';
+    final tabTitle = title ?? (account != null ? account : (space != null ? space : (priority != null ? '$priority Priority' : 'New Tab ${_tabs.length + 1}')));
+    final effectiveAccount = account ?? _selectedAccount;
+    final newTab = TaskTab(
+      id: newId,
+      title: tabTitle,
+      selectedAccount: effectiveAccount == 'all' ? null : effectiveAccount,
+      iconCodePoint: iconCodePoint,
+      selectedSpace: space,
+      selectedSubspace: subspace,
+      selectedPriority: priority,
+      selectedLists: list != null ? {list} : {},
+      selectedTags: tag != null ? {tag} : {},
+      dateRange: dateRange,
+      dateField: dateField,
+      statusFilter: statusFilter ?? 'pending',
+    );
+    _tabs.add(newTab);
+    _activeTabIndex = _tabs.length - 1;
+    _applyTabFilters(newTab);
+    _saveTabs();
+  }
+
+  Future<void> updateTabAccount(int index, String? account) async {
+    if (index < 0 || index >= _tabs.length) return;
+    final isAll = account == null || account == 'all';
+    _tabs[index] = _tabs[index].copyWith(
+      selectedAccount: isAll ? null : account,
+      clearAccount: isAll,
+    );
+    if (_activeTabIndex == index) {
+      final targetAccount = isAll ? 'all' : account;
+      if (targetAccount != _selectedAccount) {
+        await setAccount(targetAccount);
+      }
+      _applyTabFilters(_tabs[index]);
+    }
+    _saveTabs();
+    notifyListeners();
+  }
+
+  void closeTab(int index) {
+    if (_tabs.length <= 1) return; // Keep at least one tab
+    _tabs.removeAt(index);
+    if (_activeTabIndex >= _tabs.length) {
+      _activeTabIndex = _tabs.length - 1;
+    } else if (_activeTabIndex > index) {
+      _activeTabIndex--;
+    }
+    _applyTabFilters(_tabs[_activeTabIndex]);
+    _saveTabs();
+  }
+
+  void renameTab(int index, String newTitle) {
+    if (index < 0 || index >= _tabs.length) return;
+    _tabs[index].title = newTitle.trim().isEmpty ? 'Tab' : newTitle.trim();
+    _saveTabs();
+    notifyListeners();
+  }
+
+  void duplicateTab(int index) {
+    if (index < 0 || index >= _tabs.length) return;
+    final source = _tabs[index];
+    final copy = source.copyWith(
+      id: 'tab_${DateTime.now().millisecondsSinceEpoch}',
+      title: '${source.title} (Copy)',
+    );
+    _tabs.insert(index + 1, copy);
+    _activeTabIndex = index + 1;
+    _applyTabFilters(copy);
+    _saveTabs();
+  }
+
+  void reorderTabs(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _tabs.length || newIndex < 0 || newIndex > _tabs.length) return;
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final activeTabId = _tabs[_activeTabIndex].id;
+    final item = _tabs.removeAt(oldIndex);
+    _tabs.insert(newIndex, item);
+    _activeTabIndex = _tabs.indexWhere((t) => t.id == activeTabId);
+    if (_activeTabIndex == -1) _activeTabIndex = 0;
+    _saveTabs();
+    notifyListeners();
+  }
+
   bool get hasActiveFilters {
     return _selectedLists.isNotEmpty ||
         _selectedTags.isNotEmpty ||
@@ -231,7 +490,7 @@ class TaskProvider with ChangeNotifier {
   void _recomputeAllCaches() {
     _recomputeAggregates();
     _recomputeFilteredTasks();
-    WidgetService.updateWidget();
+    WidgetService.updateWidget(tabsJson: _tabsToJsonString());
   }
 
   void _recomputeAggregates() {
@@ -278,6 +537,7 @@ class TaskProvider with ChangeNotifier {
 
   void _recomputeFilteredTasks() {
     _filteredTasksCache = _filteredTasks();
+    _syncActiveTabFromCurrentFilters();
   }
 
   List<TaskItem> _filteredTasks() {
@@ -418,6 +678,7 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      await _initTabs();
       if (_isStandalone) {
         if (_standaloneAccounts.isNotEmpty) {
           _accounts = _standaloneAccounts.values
@@ -506,12 +767,18 @@ class TaskProvider with ChangeNotifier {
   }
 
   Future<bool> syncGoogleTasks({String? account, bool syncAll = false}) async {
-    final targetAccount = account ?? _selectedAccount;
+    if (_isSyncing) {
+      debugPrint('[TaskProvider] Sync already in progress, skipping duplicate request.');
+      return true;
+    }
+    _isSyncing = true;
+    _isLoading = true;
+    notifyListeners();
 
-    if (!_isStandalone) {
-      _isLoading = true;
-      notifyListeners();
-      try {
+    try {
+      final targetAccount = account ?? _selectedAccount;
+
+      if (!_isStandalone) {
         if (targetAccount == 'all') {
           // Sync all accounts
           bool allSuccess = true;
@@ -537,20 +804,9 @@ class TaskProvider with ChangeNotifier {
           await refreshTasks();
           return res['success'] == true;
         }
-      } catch (e) {
-        _errorMessage = 'Sync failed: $e';
-        return false;
-      } finally {
-        _isLoading = false;
-        notifyListeners();
       }
-    }
 
-    // Standalone direct Google Tasks mode
-    try {
-      _isLoading = true;
-      notifyListeners();
-
+      // Standalone direct Google Tasks mode
       List<GTasksAccount> accountsToSync = [];
       if (targetAccount == 'all') {
         accountsToSync = List.from(_accounts);
@@ -669,10 +925,11 @@ class TaskProvider with ChangeNotifier {
       await refreshTasks();
       return anySynced;
     } catch (e) {
-      _errorMessage = 'Standalone Google Sync failed: $e';
+      _errorMessage = 'Sync failed: $e';
       return false;
     } finally {
       _isLoading = false;
+      _isSyncing = false;
       notifyListeners();
     }
   }

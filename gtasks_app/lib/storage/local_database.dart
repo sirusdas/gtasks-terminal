@@ -22,7 +22,7 @@ class LocalDatabase {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: _onUpgradeDB,
     );
@@ -31,6 +31,28 @@ class LocalDatabase {
   Future<void> _onUpgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE tasks ADD COLUMN spaces TEXT;');
+    }
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS ai_sessions (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS ai_messages (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          tool_calls TEXT,
+          tool_results TEXT,
+          created_at TEXT NOT NULL
+        );
+      ''');
     }
   }
 
@@ -68,9 +90,32 @@ class LocalDatabase {
       )
     ''');
 
+    await db.execute('''
+      CREATE TABLE ai_sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE ai_messages (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        tool_calls TEXT,
+        tool_results TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+
     await db.execute('CREATE INDEX idx_tasks_status ON tasks(status);');
     await db.execute('CREATE INDEX idx_tasks_account ON tasks(account);');
     await db.execute('CREATE INDEX idx_tasks_list_id ON tasks(list_id);');
+    await db.execute('CREATE INDEX idx_ai_messages_session ON ai_messages(session_id);');
   }
 
   // ---------------------------------------------------------------------------
@@ -335,5 +380,69 @@ class LocalDatabase {
       'recurrence_type': task.recurrenceType,
       'sync_status': syncStatus,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // AI Sessions & Messages
+  // ---------------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> getAiSessions() async {
+    final db = await database;
+    return await db.query('ai_sessions', orderBy: 'updated_at DESC');
+  }
+
+  Future<void> createAiSession({
+    required String id,
+    required String title,
+    required String provider,
+  }) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.insert('ai_sessions', {
+      'id': id,
+      'title': title,
+      'provider': provider,
+      'created_at': now,
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, dynamic>>> getAiMessages(String sessionId) async {
+    final db = await database;
+    return await db.query(
+      'ai_messages',
+      where: 'session_id = ?',
+      whereArgs: [sessionId],
+      orderBy: 'created_at ASC',
+    );
+  }
+
+  Future<void> deleteAiSession(String sessionId) async {
+    final db = await database;
+    await db.delete('ai_messages', where: 'session_id = ?', whereArgs: [sessionId]);
+    await db.delete('ai_sessions', where: 'id = ?', whereArgs: [sessionId]);
+  }
+
+  Future<void> saveAiMessage({
+    required String id,
+    required String sessionId,
+    required String role,
+    required String content,
+    List<dynamic>? toolCalls,
+    List<dynamic>? toolResults,
+  }) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.insert('ai_messages', {
+      'id': id,
+      'session_id': sessionId,
+      'role': role,
+      'content': content,
+      'tool_calls': toolCalls != null ? jsonEncode(toolCalls) : null,
+      'tool_results': toolResults != null ? jsonEncode(toolResults) : null,
+      'created_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+    await db.update('ai_sessions', {'updated_at': now}, where: 'id = ?', whereArgs: [sessionId]);
   }
 }

@@ -13,12 +13,29 @@ class SyncProgressDialog extends StatefulWidget {
     this.account,
   });
 
-  static Future<void> show(BuildContext context, {bool isFullSync = true, String? account}) {
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => SyncProgressDialog(isFullSync: isFullSync, account: account),
-    );
+  static bool _isShowing = false;
+
+  static Future<void> show(BuildContext context, {bool isFullSync = true, String? account}) async {
+    final provider = context.read<TaskProvider>();
+    if (_isShowing || provider.isSyncing) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sync is already in progress. Please wait...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    _isShowing = true;
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => SyncProgressDialog(isFullSync: isFullSync, account: account),
+      );
+    } finally {
+      _isShowing = false;
+    }
   }
 
   @override

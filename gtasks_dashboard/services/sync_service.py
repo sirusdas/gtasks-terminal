@@ -41,9 +41,15 @@ class SyncService:
         Returns:
             str: Unique sync ID for tracking progress
         """
-        sync_id = str(uuid.uuid4())
-        
         with cls._state_lock:
+            # Check if an advanced sync is already actively running
+            if cls._current_sync_id and cls._current_sync_id in cls._sync_state:
+                current_state = cls._sync_state[cls._current_sync_id]
+                if current_state.get('status') == 'running':
+                    print(f'[SyncService] Sync already in progress ({cls._current_sync_id}), skipping duplicate start request')
+                    return cls._current_sync_id
+
+            sync_id = str(uuid.uuid4())
             # Set initial state
             cls._sync_state[sync_id] = {
                 'percentage': 0,

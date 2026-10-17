@@ -19,26 +19,7 @@ import '../../models/task_item.dart';
 import 'reports_screen.dart';
 import 'ai_chat_screen.dart';
 import '../widgets/task_detail_modal.dart';
-
-class AppTab {
-  final String id;
-  final String title;
-  final IconData icon;
-  final Color? accentColor;
-  final String? space;
-  final String? filterType;
-  final String? filterVal;
-
-  const AppTab({
-    required this.id,
-    required this.title,
-    required this.icon,
-    this.accentColor,
-    this.space,
-    this.filterType,
-    this.filterVal,
-  });
-}
+import '../../models/task_tab.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -51,7 +32,6 @@ class _TasksScreenState extends State<TasksScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _tabScrollController = ScrollController();
   Timer? _searchDebounce;
-  String _activeTabId = 'all';
   String? _pendingPreviewTaskId;
 
   @override
@@ -181,124 +161,342 @@ class _TasksScreenState extends State<TasksScreen> {
 
   void _openTabByAction(String tabId, String filterType, String filterVal) {
     final provider = context.read<TaskProvider>();
-    final allTabs = _buildAvailableTabs(provider);
-    final match = allTabs.firstWhere(
-      (t) => t.id == tabId || (filterType.isNotEmpty && t.filterType == filterType && t.filterVal == filterVal),
-      orElse: () => allTabs.first,
+    final tabIndex = provider.tabs.indexWhere((t) => t.id == tabId);
+    if (tabIndex != -1) {
+      provider.switchToTab(tabIndex);
+    } else if (filterType.isNotEmpty) {
+      final matchIdx = provider.tabs.indexWhere((t) {
+        if (filterType == 'space') return t.selectedSpace == filterVal;
+        if (filterType == 'priority') return t.selectedPriority == filterVal;
+        if (filterType == 'list') return t.selectedLists.contains(filterVal);
+        if (filterType == 'tag') return t.selectedTags.contains(filterVal);
+        return false;
+      });
+      if (matchIdx != -1) {
+        provider.switchToTab(matchIdx);
+      } else {
+        provider.addNewTab(
+          title: filterVal.isNotEmpty ? filterVal : 'Tab',
+          space: filterType == 'space' ? filterVal : null,
+          priority: filterType == 'priority' ? filterVal : null,
+          list: filterType == 'list' ? filterVal : null,
+          tag: filterType == 'tag' ? filterVal : null,
+        );
+      }
+    }
+  }
+
+  void _showNewTabDialog(BuildContext context, TaskProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Icon(Icons.tab, color: Colors.blueAccent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Open New Tab',
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  leading: const Icon(Icons.all_inbox_rounded, color: Colors.blueAccent),
+                  title: const Text('All Tasks (Blank View)'),
+                  subtitle: const Text('Clean tab with all pending tasks'),
+                  dense: true,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    provider.addNewTab(title: 'All Tasks', iconCodePoint: Icons.all_inbox_rounded.codePoint);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.copy_rounded, color: Colors.teal),
+                  title: const Text('Duplicate Current Tab'),
+                  subtitle: const Text('Copy current filters to a new tab'),
+                  dense: true,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    provider.duplicateTab(provider.activeTabIndex);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.today_rounded, color: Colors.amber),
+                  title: const Text('Today & Due'),
+                  subtitle: const Text('Tasks due today or overdue'),
+                  dense: true,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    final now = DateTime.now();
+                    provider.addNewTab(
+                      title: 'Today & Due',
+                      iconCodePoint: Icons.today_rounded.codePoint,
+                      dateField: 'due',
+                      dateRange: DateTimeRange(
+                        start: DateTime(2000, 1, 1),
+                        end: DateTime(now.year, now.month, now.day, 23, 59, 59),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.local_fire_department_rounded, color: Colors.deepOrangeAccent),
+                  title: const Text('High Priority'),
+                  subtitle: const Text('Critical and high priority tasks'),
+                  dense: true,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    provider.addNewTab(
+                      title: 'High Priority',
+                      iconCodePoint: Icons.local_fire_department_rounded.codePoint,
+                      priority: 'high',
+                    );
+                  },
+                ),
+                if (provider.spacesWithCounts.isNotEmpty) ...[
+                  const Divider(height: 24),
+                  Text('Spaces', style: theme.textTheme.labelMedium?.copyWith(color: theme.hintColor)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: provider.spacesWithCounts.keys.map((space) {
+                      return ActionChip(
+                        avatar: const Icon(Icons.rocket_launch_rounded, size: 14, color: Colors.purpleAccent),
+                        label: Text(space),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          provider.addNewTab(
+                            title: space,
+                            space: space,
+                            iconCodePoint: Icons.rocket_launch_rounded.codePoint,
+                          );
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
+                if (provider.accounts.isNotEmpty) ...[
+                  const Divider(height: 24),
+                  Text('Accounts', style: theme.textTheme.labelMedium?.copyWith(color: theme.hintColor)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ActionChip(
+                        avatar: const Icon(Icons.people_alt_rounded, size: 14, color: Colors.blueAccent),
+                        label: const Text('All Accounts'),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          provider.addNewTab(
+                            title: 'All Accounts',
+                            account: 'all',
+                            iconCodePoint: Icons.people_alt_rounded.codePoint,
+                          );
+                        },
+                      ),
+                      ...provider.accounts.map((acc) {
+                        return ActionChip(
+                          avatar: const Icon(Icons.account_circle_rounded, size: 14, color: Colors.teal),
+                          label: Text(acc.name),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            provider.addNewTab(
+                              title: acc.name,
+                              account: acc.id,
+                              iconCodePoint: Icons.account_circle_rounded.codePoint,
+                            );
+                          },
+                        );
+                      }),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        );
+      },
     );
-    _selectTab(match, allTabs);
   }
 
-  List<AppTab> _buildAvailableTabs(TaskProvider provider) {
-    final tabs = <AppTab>[
-      const AppTab(
-        id: 'all',
-        title: 'All Tasks',
-        icon: Icons.all_inbox_rounded,
-        accentColor: Colors.blueAccent,
+  void _showRenameTabDialog(BuildContext context, TaskProvider provider, int tabIndex) {
+    if (tabIndex < 0 || tabIndex >= provider.tabs.length) return;
+    final tab = provider.tabs[tabIndex];
+    final controller = TextEditingController(text: tab.title);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rename Tab'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Tab Name',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newName = controller.text.trim();
+              if (newName.isNotEmpty) {
+                provider.renameTab(tabIndex, newName);
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
-      const AppTab(
-        id: 'today',
-        title: 'Today & Due',
-        icon: Icons.today_rounded,
-        accentColor: Colors.amber,
-        filterType: 'date',
-        filterVal: 'today',
-      ),
-      const AppTab(
-        id: 'priority',
-        title: 'High Priority',
-        icon: Icons.local_fire_department_rounded,
-        accentColor: Colors.deepOrangeAccent,
-        filterType: 'priority',
-        filterVal: 'high',
-      ),
-    ];
-
-    for (final spaceName in provider.spacesWithCounts.keys) {
-      tabs.add(AppTab(
-        id: 'space:$spaceName',
-        title: spaceName,
-        icon: Icons.rocket_launch_rounded,
-        accentColor: Colors.purpleAccent,
-        space: spaceName,
-        filterType: 'space',
-        filterVal: spaceName,
-      ));
-    }
-
-    return tabs;
+    );
   }
 
-  int _getTabCount(AppTab tab, TaskProvider provider) {
-    if (tab.id == 'all') {
-      return provider.allTasksUnfiltered.where((t) => !t.isCompleted).length;
-    } else if (tab.id == 'today') {
-      final now = DateTime.now();
-      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      return provider.allTasksUnfiltered.where((t) {
-        if (t.isCompleted || t.due == null || t.due!.isEmpty) return false;
-        final duePart = t.due!.length >= 10 ? t.due!.substring(0, 10) : t.due!;
-        return duePart.compareTo(todayStr) <= 0;
-      }).length;
-    } else if (tab.id == 'priority') {
-      return provider.allTasksUnfiltered.where((t) {
-        if (t.isCompleted) return false;
-        final p = t.calculatedPriority.toLowerCase();
-        return p == 'critical' || p == 'high';
-      }).length;
-    } else if (tab.space != null) {
-      return provider.spacesWithCounts[tab.space!] ?? 0;
-    }
-    return 0;
+  void _showTabContextMenu(BuildContext context, TaskProvider provider, int tabIndex) {
+    if (tabIndex < 0 || tabIndex >= provider.tabs.length) return;
+    final tab = provider.tabs[tabIndex];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.edit_rounded),
+                  title: const Text('Rename Tab'),
+                  subtitle: Text(tab.title),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showRenameTabDialog(context, provider, tabIndex);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.copy_rounded),
+                  title: const Text('Duplicate Tab'),
+                  subtitle: const Text('Clone this tab and its filters'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    provider.duplicateTab(tabIndex);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.switch_account_rounded, color: Colors.blueAccent),
+                  title: const Text('Filter by Account'),
+                  subtitle: Text(tab.selectedAccount == null || tab.selectedAccount == 'all'
+                      ? 'All Accounts'
+                      : (provider.accounts.any((a) => a.id == tab.selectedAccount)
+                          ? provider.accounts.firstWhere((a) => a.id == tab.selectedAccount).name
+                          : tab.selectedAccount!)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showChangeAccountDialog(context, provider, tabIndex);
+                  },
+                ),
+                if (provider.tabs.length > 1)
+                  ListTile(
+                    leading: const Icon(Icons.close_rounded, color: Colors.redAccent),
+                    title: const Text('Close Tab', style: TextStyle(color: Colors.redAccent)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      provider.closeTab(tabIndex);
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
-  void _selectTab(AppTab tab, List<AppTab> allTabs) {
-    setState(() {
-      _activeTabId = tab.id;
-    });
+  void _showChangeAccountDialog(BuildContext context, TaskProvider provider, int tabIndex) {
+    if (tabIndex < 0 || tabIndex >= provider.tabs.length) return;
+    final tab = provider.tabs[tabIndex];
 
-    final provider = context.read<TaskProvider>();
-    if (tab.id == 'all') {
-      provider.clearSpaceFilter();
-      provider.setPriorityFilter(null);
-      provider.setDateFilter(provider.dateField, null);
-    } else if (tab.id == 'today') {
-      provider.clearSpaceFilter();
-      provider.setPriorityFilter(null);
-      final now = DateTime.now();
-      final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59);
-      provider.setDateFilter('due', DateTimeRange(
-        start: DateTime(2000, 1, 1),
-        end: endOfToday,
-      ));
-    } else if (tab.id == 'priority') {
-      provider.clearSpaceFilter();
-      provider.setDateFilter(provider.dateField, null);
-      provider.setPriorityFilter('high');
-    } else if (tab.space != null) {
-      provider.setDateFilter(provider.dateField, null);
-      provider.setPriorityFilter(null);
-      provider.setSpaceFilter(tab.space!);
-    }
-
-    final tabIndex = allTabs.indexWhere((t) => t.id == tab.id);
-    if (tabIndex != -1 && _tabScrollController.hasClients) {
-      final targetOffset = (tabIndex * 110.0).clamp(0.0, _tabScrollController.position.maxScrollExtent);
-      _tabScrollController.animateTo(
-        targetOffset,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutCubic,
-      );
-    }
-  }
-
-  void _stepTab(int delta, List<AppTab> allTabs) {
-    if (allTabs.isEmpty) return;
-    final currentIndex = allTabs.indexWhere((t) => t.id == _activeTabId);
-    final validIndex = currentIndex == -1 ? 0 : currentIndex;
-    final nextIndex = (validIndex + delta + allTabs.length) % allTabs.length;
-    _selectTab(allTabs[nextIndex], allTabs);
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text('Select Account for Tab', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.people_alt_rounded, color: Colors.blueAccent),
+                title: const Text('All Accounts'),
+                trailing: (tab.selectedAccount == null || tab.selectedAccount == 'all')
+                    ? const Icon(Icons.check_circle_rounded, color: Colors.blueAccent)
+                    : null,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  provider.updateTabAccount(tabIndex, 'all');
+                },
+              ),
+              ...provider.accounts.map((acc) {
+                final isSelected = tab.selectedAccount == acc.id;
+                return ListTile(
+                  leading: const Icon(Icons.account_circle_rounded, color: Colors.teal),
+                  title: Text(acc.name),
+                  subtitle: Text(acc.email ?? acc.id),
+                  trailing: isSelected ? const Icon(Icons.check_circle_rounded, color: Colors.teal) : null,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    provider.updateTabAccount(tabIndex, acc.id);
+                  },
+                );
+              }),
+              const SizedBox(height: 12),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _checkAccountStatusAtStartup(TaskProvider provider) {
@@ -421,24 +619,6 @@ class _TasksScreenState extends State<TasksScreen> {
     final theme = Theme.of(context);
     final hasViewFilters = provider.hasActiveFilters || provider.searchQuery.isNotEmpty;
 
-    // Automatically synchronize active tab state with provider active filters
-    if (provider.selectedSpace != null) {
-      final spaceTabId = 'space:${provider.selectedSpace}';
-      if (_activeTabId != spaceTabId) {
-        _activeTabId = spaceTabId;
-      }
-    } else if (provider.selectedPriority != null && (provider.selectedPriority == 'high' || provider.selectedPriority == 'critical')) {
-      if (_activeTabId != 'priority') {
-        _activeTabId = 'priority';
-      }
-    } else if (provider.dateRange != null && provider.dateField == 'due') {
-      if (_activeTabId != 'today') {
-        _activeTabId = 'today';
-      }
-    } else if (!provider.hasActiveFilters && _activeTabId != 'all') {
-      _activeTabId = 'all';
-    }
-
     return Scaffold(
       drawer: const TasksSidebarDrawer(),
       appBar: AppBar(
@@ -511,7 +691,7 @@ class _TasksScreenState extends State<TasksScreen> {
             },
           ),
           PopupMenuButton<String>(
-            icon: provider.isLoading
+            icon: (provider.isLoading || provider.isSyncing)
                 ? const SizedBox(
                     width: 20,
                     height: 20,
@@ -520,6 +700,15 @@ class _TasksScreenState extends State<TasksScreen> {
                 : const Icon(Icons.sync),
             tooltip: 'Google Sync Options',
             onSelected: (action) {
+              if (provider.isSyncing) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Sync is already in progress...'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+                return;
+              }
               final isAll = action == 'sync_all';
               SyncProgressDialog.show(context, isFullSync: isAll);
             },
@@ -612,243 +801,223 @@ class _TasksScreenState extends State<TasksScreen> {
           ),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(102),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search tasks by title, note, or tag...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchDebounce?.cancel();
-                              _searchController.clear();
-                              provider.setSearchQuery('');
-                              setState(() {});
-                            },
-                          )
-                        : null,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          preferredSize: const Size.fromHeight(50),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 38,
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search tasks, tags, notes...',
+                        hintStyle: TextStyle(fontSize: 13, color: theme.hintColor),
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 16),
+                                onPressed: () {
+                                  _searchDebounce?.cancel();
+                                  _searchController.clear();
+                                  provider.setSearchQuery('');
+                                  setState(() {});
+                                },
+                              )
+                            : null,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onChanged: (val) {
+                        _searchDebounce?.cancel();
+                        _searchDebounce = Timer(const Duration(milliseconds: 200), () {
+                          if (mounted) provider.setSearchQuery(val);
+                        });
+                        setState(() {});
+                      },
+                    ),
                   ),
-                  onChanged: (val) {
-                    _searchDebounce?.cancel();
-                    _searchDebounce = Timer(const Duration(milliseconds: 200), () {
-                      if (mounted) provider.setSearchQuery(val);
-                    });
-                    setState(() {});
-                  },
                 ),
-              ),
-              const SizedBox(height: 6),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    FilterChip(
-                      label: const Text('Pending'),
-                      selected: provider.statusFilter == 'pending',
-                      onSelected: (_) => provider.setStatusFilter('pending'),
-                    ),
-                    const SizedBox(width: 8),
-                    FilterChip(
-                      label: const Text('Completed'),
-                      selected: provider.statusFilter == 'completed',
-                      onSelected: (_) => provider.setStatusFilter('completed'),
-                    ),
-                    const SizedBox(width: 8),
-                    FilterChip(
-                      label: const Text('All Tasks'),
-                      selected: provider.statusFilter == 'all',
-                      onSelected: (_) => provider.setStatusFilter('all'),
-                    ),
-                    if (provider.accounts.isNotEmpty) ...[
-                      const SizedBox(width: 12),
-                      Container(
-                        height: 24,
-                        width: 1,
-                        color: theme.colorScheme.outlineVariant,
-                      ),
-                      const SizedBox(width: 12),
-                      DropdownButton<String>(
-                        value: provider.accounts.any((a) => a.id == provider.selectedAccount) || provider.selectedAccount == 'all'
-                            ? provider.selectedAccount
-                            : 'all',
-                        underline: const SizedBox(),
-                        items: [
-                          const DropdownMenuItem(value: 'all', child: Text('All Accounts')),
-                          ...provider.accounts.map(
-                            (acc) => DropdownMenuItem(
-                              value: acc.id,
-                              child: Text(acc.name),
-                            ),
-                          ),
-                          const DropdownMenuItem(
-                            value: '__add_new__',
-                            child: Row(
-                              children: [
-                                Icon(Icons.add, size: 16, color: Colors.blueAccent),
-                                SizedBox(width: 4),
-                                Text('+ Add Account', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ),
+                const SizedBox(width: 8),
+                // Compact Status Toggle Menu (Pending, Completed, All)
+                PopupMenuButton<String>(
+                  tooltip: 'Status Filter',
+                  initialValue: provider.statusFilter,
+                  onSelected: (val) => provider.setStatusFilter(val),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'pending',
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle_outline, size: 18, color: Colors.blueAccent),
+                          SizedBox(width: 8),
+                          Text('Pending Tasks'),
                         ],
-                        onChanged: (val) {
-                          if (val == '__add_new__') {
-                            showDialog(
-                              context: context,
-                              builder: (_) => const AddGoogleAccountModal(),
-                            );
-                          } else if (val != null) {
-                            provider.setAccount(val);
-                          }
-                        },
                       ),
-                    ] else ...[
-                      const SizedBox(width: 12),
-                      ActionChip(
-                        avatar: const Icon(Icons.add, size: 16, color: Colors.amber),
-                        label: const Text('Add Account', style: TextStyle(fontSize: 12)),
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => const AddGoogleAccountModal(),
-                          );
-                        },
+                    ),
+                    const PopupMenuItem(
+                      value: 'completed',
+                      child: Row(
+                        children: [
+                          Icon(Icons.done_all, size: 18, color: Colors.green),
+                          SizedBox(width: 8),
+                          Text('Completed Tasks'),
+                        ],
                       ),
-                    ],
+                    ),
+                    const PopupMenuItem(
+                      value: 'all',
+                      child: Row(
+                        children: [
+                          Icon(Icons.inbox, size: 18, color: Colors.purpleAccent),
+                          SizedBox(width: 8),
+                          Text('All Tasks'),
+                        ],
+                      ),
+                    ),
                   ],
+                  child: Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: provider.statusFilter != 'pending'
+                          ? theme.colorScheme.primaryContainer
+                          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          provider.statusFilter == 'completed'
+                              ? Icons.done_all
+                              : provider.statusFilter == 'all'
+                                  ? Icons.inbox
+                                  : Icons.pending_actions,
+                          size: 16,
+                          color: provider.statusFilter != 'pending'
+                              ? theme.colorScheme.onPrimaryContainer
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          provider.statusFilter == 'completed'
+                              ? 'Done'
+                              : provider.statusFilter == 'all'
+                                  ? 'All'
+                                  : 'Pending',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: provider.statusFilter != 'pending'
+                                ? theme.colorScheme.onPrimaryContainer
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        const Icon(Icons.arrow_drop_down, size: 16),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-            ],
+              ],
+            ),
           ),
         ),
       ),
       body: Column(
         children: [
           _buildTabBar(context, provider, theme),
-          // Active Filters Strip (Lists / Tags / Priority / Recurring / Hidden Lists & Tags / Date Range)
+          // Compact Micro Active Filters Strip (Saves over 30% vertical screen space)
           if (provider.hasActiveFilters)
             Container(
+              height: 32,
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
                 border: Border(
                   bottom: BorderSide(
-                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
                   ),
                 ),
               ),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                 child: Row(
                   children: [
-                    ...provider.selectedLists.map((l) => Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: Chip(
-                            avatar: const Icon(Icons.folder, size: 14),
-                            label: Text('List: $l', style: const TextStyle(fontSize: 12)),
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            onDeleted: () => provider.toggleSelectedList(l),
-                            visualDensity: VisualDensity.compact,
-                          ),
+                    ...provider.selectedLists.map((l) => _buildMicroFilterPill(
+                          label: 'List: $l',
+                          icon: Icons.folder,
+                          onDeleted: () => provider.toggleSelectedList(l),
+                          color: Colors.blueAccent,
                         )),
-                    ...provider.selectedTags.map((t) => Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: Chip(
-                            avatar: const Icon(Icons.tag, size: 14, color: Colors.teal),
-                            label: Text('Tag: #$t', style: const TextStyle(fontSize: 12)),
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            onDeleted: () => provider.toggleSelectedTag(t),
-                            visualDensity: VisualDensity.compact,
-                          ),
+                    ...provider.selectedTags.map((t) => _buildMicroFilterPill(
+                          label: '#$t',
+                          icon: Icons.tag,
+                          onDeleted: () => provider.toggleSelectedTag(t),
+                          color: Colors.teal,
                         )),
                     if (provider.selectedSpace != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: Chip(
-                          avatar: const Icon(Icons.rocket_launch, size: 14, color: Colors.deepPurpleAccent),
-                          label: Text(
-                            provider.selectedSubspace != null
-                                ? 'Space: ${provider.selectedSpace} › ${provider.selectedSubspace}'
-                                : 'Space: ${provider.selectedSpace}',
-                            style: const TextStyle(fontSize: 12, color: Colors.deepPurple, fontWeight: FontWeight.bold),
-                          ),
-                          deleteIcon: const Icon(Icons.close, size: 14),
-                          onDeleted: () => provider.clearSpaceFilter(),
-                          backgroundColor: Colors.deepPurple.withValues(alpha: 0.1),
-                          visualDensity: VisualDensity.compact,
-                        ),
+                      _buildMicroFilterPill(
+                        label: provider.selectedSubspace != null
+                            ? '${provider.selectedSpace} › ${provider.selectedSubspace}'
+                            : provider.selectedSpace!,
+                        icon: Icons.rocket_launch,
+                        onDeleted: () => provider.clearSpaceFilter(),
+                        color: Colors.deepPurpleAccent,
                       ),
                     if (provider.selectedPriority != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: Chip(
-                          avatar: const Icon(Icons.flag, size: 14),
-                          label: Text('Priority: ${provider.selectedPriority}', style: const TextStyle(fontSize: 12)),
-                          deleteIcon: const Icon(Icons.close, size: 14),
-                          onDeleted: () => provider.setPriorityFilter(null),
-                          visualDensity: VisualDensity.compact,
-                        ),
+                      _buildMicroFilterPill(
+                        label: 'Priority: ${provider.selectedPriority}',
+                        icon: Icons.flag,
+                        onDeleted: () => provider.setPriorityFilter(null),
+                        color: Colors.deepOrangeAccent,
                       ),
                     if (provider.hideRecurring)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: Chip(
-                          avatar: const Icon(Icons.redo_outlined, size: 14, color: Colors.orange),
-                          label: const Text('Hide Recurring', style: TextStyle(fontSize: 12, color: Colors.orange)),
-                          deleteIcon: const Icon(Icons.close, size: 14),
-                          onDeleted: () => provider.setHideRecurring(false),
-                          visualDensity: VisualDensity.compact,
-                        ),
+                      _buildMicroFilterPill(
+                        label: 'Hide Recurring',
+                        icon: Icons.redo_outlined,
+                        onDeleted: () => provider.setHideRecurring(false),
+                        color: Colors.orange,
                       ),
-                    ...provider.hiddenLists.map((hl) => Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: Chip(
-                            avatar: const Icon(Icons.visibility_off, size: 14, color: Colors.red),
-                            label: Text('Hide: $hl', style: const TextStyle(fontSize: 12, color: Colors.red)),
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            onDeleted: () => provider.toggleHiddenList(hl),
-                            visualDensity: VisualDensity.compact,
-                          ),
+                    ...provider.hiddenLists.map((hl) => _buildMicroFilterPill(
+                          label: 'Hide: $hl',
+                          icon: Icons.visibility_off,
+                          onDeleted: () => provider.toggleHiddenList(hl),
+                          color: Colors.redAccent,
                         )),
-                    ...provider.hiddenTags.map((ht) => Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: Chip(
-                            avatar: const Icon(Icons.visibility_off, size: 14, color: Colors.red),
-                            label: Text('Hide: #$ht', style: const TextStyle(fontSize: 12, color: Colors.red)),
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            onDeleted: () => provider.toggleHiddenTag(ht),
-                            visualDensity: VisualDensity.compact,
-                          ),
+                    ...provider.hiddenTags.map((ht) => _buildMicroFilterPill(
+                          label: 'Hide: #$ht',
+                          icon: Icons.visibility_off,
+                          onDeleted: () => provider.toggleHiddenTag(ht),
+                          color: Colors.redAccent,
                         )),
                     if (provider.dateRange != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: Chip(
-                          avatar: const Icon(Icons.date_range, size: 14),
-                          label: Text(
-                            '${provider.dateField}: ${provider.dateRange!.start.month}/${provider.dateRange!.start.day} - ${provider.dateRange!.end.month}/${provider.dateRange!.end.day}',
-                            style: const TextStyle(fontSize: 12),
+                      _buildMicroFilterPill(
+                        label: '${provider.dateField}: ${provider.dateRange!.start.month}/${provider.dateRange!.start.day} - ${provider.dateRange!.end.month}/${provider.dateRange!.end.day}',
+                        icon: Icons.date_range,
+                        onDeleted: () => provider.setDateFilter(provider.dateField, null),
+                        color: Colors.indigoAccent,
+                      ),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => provider.clearAllFilters(),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        child: Text(
+                          'Clear All',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.error,
                           ),
-                          deleteIcon: const Icon(Icons.close, size: 14),
-                          onDeleted: () => provider.setDateFilter(provider.dateField, null),
-                          visualDensity: VisualDensity.compact,
                         ),
                       ),
-                    TextButton(
-                      onPressed: () => provider.clearAllFilters(),
-                      child: const Text('Clear All', style: TextStyle(fontSize: 12)),
                     ),
                   ],
                 ),
@@ -1050,10 +1219,11 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   Widget _buildTabBar(BuildContext context, TaskProvider provider, ThemeData theme) {
-    final tabs = _buildAvailableTabs(provider);
+    final tabs = provider.tabs;
     if (tabs.isEmpty) return const SizedBox.shrink();
 
     final isDark = theme.brightness == Brightness.dark;
+    final activeIndex = provider.activeTabIndex;
 
     return Container(
       decoration: BoxDecoration(
@@ -1075,7 +1245,12 @@ class _TasksScreenState extends State<TasksScreen> {
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            onPressed: () => _stepTab(-1, tabs),
+            onPressed: () {
+              if (tabs.length > 1) {
+                final nextIdx = (activeIndex - 1 + tabs.length) % tabs.length;
+                provider.switchToTab(nextIdx);
+              }
+            },
           ),
 
           // Scrollable Tabs
@@ -1085,67 +1260,153 @@ class _TasksScreenState extends State<TasksScreen> {
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
               child: Row(
-                children: tabs.map((tab) {
-                  final isSelected = _activeTabId == tab.id;
-                  final count = _getTabCount(tab, provider);
-                  final accent = tab.accentColor ?? theme.colorScheme.primary;
+                children: [
+                  ...tabs.asMap().entries.map((entry) {
+                    final idx = entry.key;
+                    final tab = entry.value;
+                    final isSelected = activeIndex == idx;
+                    final count = tab.computeTaskCount(provider.allTasksUnfiltered);
+                    final accent = tab.accentColor ?? (isSelected ? theme.colorScheme.primary : Colors.grey);
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => provider.switchToTab(idx),
+                          onLongPress: () => _showTabContextMenu(context, provider, idx),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOutCubic,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? (isDark ? theme.colorScheme.surfaceContainerHighest : Colors.white)
+                                  : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03)),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ]
+                                  : null,
+                              border: Border.all(
+                                color: isSelected ? accent : theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                                width: isSelected ? 1.5 : 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  tab.icon,
+                                  size: 14,
+                                  color: isSelected ? accent : (isDark ? Colors.white70 : Colors.black54),
+                                ),
+                                const SizedBox(width: 6),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 120),
+                                  child: Text(
+                                    tab.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                      color: isSelected
+                                          ? (isDark ? Colors.white : theme.colorScheme.onSurface)
+                                          : (isDark ? Colors.white70 : Colors.black87),
+                                    ),
+                                  ),
+                                ),
+                                if (tab.selectedAccount != null && tab.selectedAccount != 'all') ...[
+                                  const SizedBox(width: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.teal.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      tab.selectedAccount!,
+                                      style: const TextStyle(fontSize: 9, color: Colors.teal, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? accent.withValues(alpha: 0.2)
+                                        : (isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.08)),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '$count',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: isSelected ? accent : (isDark ? Colors.white60 : Colors.black54),
+                                    ),
+                                  ),
+                                ),
+                                if (tabs.length > 1) ...[
+                                  const SizedBox(width: 4),
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(10),
+                                    onTap: () => provider.closeTab(idx),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(2.0),
+                                      child: Icon(
+                                        Icons.close_rounded,
+                                        size: 13,
+                                        color: isSelected
+                                            ? (isDark ? Colors.white70 : Colors.black54)
+                                            : (isDark ? Colors.white38 : Colors.black38),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                  // Add New Tab [+] button
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, right: 8),
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(20),
-                        onTap: () => _selectTab(tab, tabs),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeOutCubic,
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () => _showNewTabDialog(context, provider),
+                        child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
-                            color: isSelected
-                                ? accent.withValues(alpha: isDark ? 0.22 : 0.15)
-                                : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03)),
-                            borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: isSelected ? accent : theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-                              width: isSelected ? 1.5 : 1.0,
+                              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+                              style: BorderStyle.solid,
                             ),
+                            borderRadius: BorderRadius.circular(16),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                tab.icon,
-                                size: 14,
-                                color: isSelected ? accent : (isDark ? Colors.white70 : Colors.black54),
-                              ),
-                              const SizedBox(width: 5),
+                              Icon(Icons.add_rounded, size: 16, color: theme.colorScheme.primary),
+                              const SizedBox(width: 4),
                               Text(
-                                tab.title,
+                                'New Tab',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                  color: isSelected
-                                      ? (isDark ? Colors.white : accent)
-                                      : (isDark ? Colors.white70 : Colors.black87),
-                                ),
-                              ),
-                              const SizedBox(width: 5),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? accent.withValues(alpha: 0.25)
-                                      : (isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.08)),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  '$count',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: isSelected ? accent : (isDark ? Colors.white60 : Colors.black54),
-                                  ),
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.primary,
                                 ),
                               ),
                             ],
@@ -1153,8 +1414,8 @@ class _TasksScreenState extends State<TasksScreen> {
                         ),
                       ),
                     ),
-                  );
-                }).toList(),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1166,7 +1427,53 @@ class _TasksScreenState extends State<TasksScreen> {
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            onPressed: () => _stepTab(1, tabs),
+            onPressed: () {
+              if (tabs.length > 1) {
+                final nextIdx = (activeIndex + 1) % tabs.length;
+                provider.switchToTab(nextIdx);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMicroFilterPill({
+    required String label,
+    required IconData icon,
+    required VoidCallback onDeleted,
+    Color? color,
+  }) {
+    final pillColor = color ?? Colors.blueAccent;
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: pillColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: pillColor.withValues(alpha: 0.35),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: pillColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: pillColor,
+            ),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: onDeleted,
+            child: Icon(Icons.close_rounded, size: 13, color: pillColor),
           ),
         ],
       ),

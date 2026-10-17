@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="{{ base_path }}/static/css/notifications.css?v=36">
     <link rel="stylesheet" href="{{ base_path }}/static/css/debugger.css?v=36">
     <link rel="stylesheet" href="{{ base_path }}/static/css/ai-chat.css?v=1">
+    <link rel="stylesheet" href="{{ base_path }}/static/css/browser-tabs.css?v=1">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -802,6 +803,71 @@
                         <select id="tasks-account-selector" class="account-selector" onchange="switchAccountForTasks(this.value)">
                             <option value="">Loading accounts...</option>
                         </select>
+                    </div>
+                </div>
+
+                <!-- Browser-Style Multi-Tabs Bar -->
+                <div class="browser-tabs-bar" id="browser-tabs-bar">
+                    <button class="browser-tabs-nav-btn left" id="browser-tabs-scroll-left" onclick="scrollBrowserTabs(-150)" title="Scroll tabs left">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <div class="browser-tabs-track" id="browser-tabs-track">
+                        <!-- Dynamic Tab Chips rendered by dashboard.js -->
+                    </div>
+                    <button class="browser-tabs-nav-btn right" id="browser-tabs-scroll-right" onclick="scrollBrowserTabs(150)" title="Scroll tabs right">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <div class="browser-tab-actions">
+                        <button class="browser-tab-add-btn" id="browser-tab-add-btn" onclick="toggleNewTabMenu(event)" title="Open new tab (Ctrl+T)">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <div class="browser-tab-menu" id="browser-new-tab-dropdown" style="display: none;">
+                            <div class="browser-tab-menu-header">Open New Live Tab</div>
+                            <button class="browser-tab-menu-item" onclick="createBrowserTabPreset('all'); closeNewTabMenu();">
+                                <i class="fas fa-inbox text-blue"></i>
+                                <div>
+                                    <div class="menu-item-title">All Tasks</div>
+                                    <div class="menu-item-sub">All active & pending tasks</div>
+                                </div>
+                            </button>
+                            <button class="browser-tab-menu-item" onclick="createBrowserTabPreset('today'); closeNewTabMenu();">
+                                <i class="fas fa-calendar-day text-amber"></i>
+                                <div>
+                                    <div class="menu-item-title">Due Today</div>
+                                    <div class="menu-item-sub">Tasks due today</div>
+                                </div>
+                            </button>
+                            <button class="browser-tab-menu-item" onclick="createBrowserTabPreset('high_priority'); closeNewTabMenu();">
+                                <i class="fas fa-fire text-red"></i>
+                                <div>
+                                    <div class="menu-item-title">High Priority</div>
+                                    <div class="menu-item-sub">Urgent & high priority items</div>
+                                </div>
+                            </button>
+                            <button class="browser-tab-menu-item" onclick="createBrowserTabPreset('work'); closeNewTabMenu();">
+                                <i class="fas fa-briefcase text-purple"></i>
+                                <div>
+                                    <div class="menu-item-title">Work Space</div>
+                                    <div class="menu-item-sub">Filtered to Work space</div>
+                                </div>
+                            </button>
+                            <button class="browser-tab-menu-item" onclick="createBrowserTabPreset('completed'); closeNewTabMenu();">
+                                <i class="fas fa-check-circle text-green"></i>
+                                <div>
+                                    <div class="menu-item-title">Completed</div>
+                                    <div class="menu-item-sub">Finished task archive</div>
+                                </div>
+                            </button>
+                            <div id="browser-tab-accounts-section"></div>
+                            <div class="browser-tab-menu-divider"></div>
+                            <button class="browser-tab-menu-item" onclick="promptCreateCustomBrowserTab(); closeNewTabMenu();">
+                                <i class="fas fa-plus-circle text-indigo"></i>
+                                <div>
+                                    <div class="menu-item-title">Custom Tab...</div>
+                                    <div class="menu-item-sub">Create blank tab with custom name</div>
+                                </div>
+                            </button>
+                        </div>
                     </div>
                 </div>
 

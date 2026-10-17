@@ -62,7 +62,7 @@ export function createTaskCard(task, options = {}) {
     const isCompleted = task.status === 'completed';
     const completeBtnHtml = `
         <div class="task-complete-btn ${isCompleted ? 'completed' : ''}"
-             onclick="${isCompleted ? '' : `completeTask('${task.id}')`}"
+             onclick="${isCompleted ? 'event.stopPropagation();' : `completeTask('${task.id}'); event.stopPropagation();`}"
              title="${isCompleted ? 'Completed' : 'Mark as complete'}">
             ${isCompleted ? '✅' : '⭕'}
         </div>
@@ -70,7 +70,7 @@ export function createTaskCard(task, options = {}) {
 
     // Quick View button
     const quickViewBtnHtml = `
-        <div class="task-quick-view-btn" onclick="openQuickView('${task.id}')" title="Quick view task details">
+        <div class="task-quick-view-btn" onclick="openQuickView('${task.id}'); event.stopPropagation();" title="Quick view task details">
             <i class="fas fa-eye"></i>
         </div>
     `;
@@ -83,7 +83,7 @@ export function createTaskCard(task, options = {}) {
 
     // Edit button
     const editBtnHtml = `
-        <div class="task-edit-btn" onclick="openEditModal('${task.id}')" title="Edit task">
+        <div class="task-edit-btn" onclick="openEditModal('${task.id}'); event.stopPropagation();" title="Edit task">
             <i class="fas fa-edit"></i>
         </div>
     `;
@@ -108,7 +108,7 @@ export function createTaskCard(task, options = {}) {
             <div class="node-task-header">
                 ${completeBtnHtml}
                 <span class="priority-icon">🔸</span>
-                <div class="node-task-title" onclick="openQuickView('${task.id}')" style="cursor: pointer;" title="Quick view">${task.title}</div>
+                <div class="node-task-title" onclick="openQuickView('${task.id}'); event.stopPropagation();" style="cursor: pointer;" title="Quick view">${task.title}</div>
                 ${recurringBadge}
                 ${quickViewBtnHtml}
                 ${dateStatusBadge}
@@ -184,7 +184,7 @@ export function createTaskCard(task, options = {}) {
                 ${recurringBadge}
                 ${dateStatusBadge}
             </div>
-            <h4 class="task-card-title" onclick="openQuickView('${task.id}')" style="cursor: pointer;" title="Quick view details">${task.title}</h4>
+            <h4 class="task-card-title" onclick="openQuickView('${task.id}'); event.stopPropagation();" style="cursor: pointer;" title="Quick view details">${task.title}</h4>
             <div class="task-card-dates">${compactDates}</div>
             ${cleanNotes ? `<p class="task-card-description">${cleanNotes}</p>` : ''}
             ${spacesDisplay}

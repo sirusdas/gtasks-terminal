@@ -11,6 +11,9 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyGoogleAccessToken = 'gtasks_google_access_token';
   static const String _keyGoogleRefreshToken = 'gtasks_google_refresh_token';
   static const String _keyTaskViewMode = 'gtasks_task_view_mode'; // 'detailed', 'compact', 'two_column'
+  static const String _keyGeminiApiKey = 'gtasks_gemini_api_key';
+  static const String _keyAiProviderType = 'gtasks_ai_provider_type';
+  static const String _keyAiModelName = 'gtasks_ai_model_name';
 
   // Common quick presets
   static const List<String> presetUrls = [
@@ -29,6 +32,9 @@ class SettingsProvider with ChangeNotifier {
   String? _googleAccessToken;
   String? _googleRefreshToken;
   String _taskViewMode = 'detailed'; // 'detailed', 'compact', 'two_column'
+  String? _geminiApiKey;
+  String _aiProviderType = 'gemini';
+  String _aiModelName = 'gemini-1.5-flash';
 
   String get baseUrl => _baseUrl;
   bool get isDevMode => _isDevMode;
@@ -39,6 +45,9 @@ class SettingsProvider with ChangeNotifier {
   String? get googleAccessToken => _googleAccessToken;
   String? get googleRefreshToken => _googleRefreshToken;
   String get taskViewMode => _taskViewMode;
+  String? get geminiApiKey => _geminiApiKey;
+  String get aiProviderType => _aiProviderType;
+  String get aiModelName => _aiModelName;
 
   SettingsProvider() {
     _loadSettings();
@@ -68,6 +77,9 @@ class SettingsProvider with ChangeNotifier {
     _googleAccessToken = prefs.getString(_keyGoogleAccessToken);
     _googleRefreshToken = prefs.getString(_keyGoogleRefreshToken);
     _taskViewMode = prefs.getString(_keyTaskViewMode) ?? 'detailed';
+    _geminiApiKey = prefs.getString(_keyGeminiApiKey);
+    _aiProviderType = prefs.getString(_keyAiProviderType) ?? 'gemini';
+    _aiModelName = prefs.getString(_keyAiModelName) ?? 'gemini-1.5-flash';
 
     final rawDeleted = prefs.getStringList(_keyDeletedAccounts);
     if (rawDeleted != null) {
@@ -231,5 +243,30 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyTaskViewMode, mode);
+  }
+
+  Future<void> setGeminiApiKey(String? key) async {
+    _geminiApiKey = key;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (key == null || key.isEmpty) {
+      await prefs.remove(_keyGeminiApiKey);
+    } else {
+      await prefs.setString(_keyGeminiApiKey, key);
+    }
+  }
+
+  Future<void> setAiProviderType(String type) async {
+    _aiProviderType = type;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyAiProviderType, type);
+  }
+
+  Future<void> setAiModelName(String model) async {
+    _aiModelName = model;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyAiModelName, model);
   }
 }

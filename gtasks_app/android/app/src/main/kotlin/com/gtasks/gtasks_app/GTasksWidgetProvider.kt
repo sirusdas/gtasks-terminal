@@ -35,15 +35,45 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         const val ACTION_NEXT_TAB = "com.gtasks.gtasks_app.ACTION_NEXT_TAB"
         const val ACTION_OPEN_TAB = "com.gtasks.gtasks_app.ACTION_OPEN_TAB"
 
+        private var isSyncing = false
+        private var lastSyncTimestamp = 0L
+
         data class WidgetTab(
             val id: String,
             val title: String,
             val filterType: String?,
-            val filterVal: String?
+            val filterVal: String?,
+            val account: String? = null
         )
 
         fun getAvailableTabs(context: Context): List<WidgetTab> {
             val tabs = mutableListOf<WidgetTab>()
+
+            // Try reading user-configured browser tabs from app SharedPreferences
+            try {
+                val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                val tabsJson = prefs.getString("tabs_json", null)
+                if (!tabsJson.isNullOrEmpty()) {
+                    val arr = JSONArray(tabsJson)
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        val id = obj.optString("id", "tab_$i")
+                        val title = obj.optString("title", "Tab ${i + 1}")
+                        val filterType = obj.optString("filterType").ifEmpty { null }
+                        val filterVal = obj.optString("filterVal").ifEmpty { null }
+                        val account = obj.optString("account").ifEmpty { null }
+                        tabs.add(WidgetTab(id, title, filterType, filterVal, account))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing tabs_json in widget", e)
+            }
+
+            if (tabs.isNotEmpty()) {
+                return tabs
+            }
+
+            // Fallback default tabs if not yet synced from app
             tabs.add(WidgetTab("all", "✦ All Tasks", null, null))
             tabs.add(WidgetTab("today", "⏰ Today & Due", "date", "today"))
             tabs.add(WidgetTab("priority", "🔥 High Priority", "priority", "high"))
@@ -125,11 +155,17 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                     val hideRecurring = prefs.getBoolean("hide_recurring_$appWidgetId", false)
                     val hiddenListsJson = prefs.getString("hidden_lists_$appWidgetId", null)
                     val hiddenTagsJson = prefs.getString("hidden_tags_$appWidgetId", null)
+                    val tabAccount = prefs.getString("account_$appWidgetId", null)
 
                     val queryBuilder = StringBuilder(
                         "SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete'"
                     )
                     val args = mutableListOf<String>()
+
+                    if (!tabAccount.isNullOrBlank() && tabAccount != "all") {
+                        queryBuilder.append(" AND account = ?")
+                        args.add(tabAccount)
+                    }
 
                     if (!filterType.isNullOrBlank() && !filterVal.isNullOrBlank()) {
                         when (filterType) {
@@ -272,8 +308,18 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                     updateAllWidgets(context)
                 }
                 ACTION_QUICK_SYNC -> {
-                    Toast.makeText(context, "Syncing tasks...", Toast.LENGTH_SHORT).show()
-                    updateAllWidgets(context)
+                    val now = System.currentTimeMillis()
+                    if (isSyncing || (now - lastSyncTimestamp < 4000L)) {
+                        Toast.makeText(context, "Sync is already in progress...", Toast.LENGTH_SHORT).show()
+                    } else {
+                        isSyncing = true
+                        lastSyncTimestamp = now
+                        Toast.makeText(context, "Syncing tasks...", Toast.LENGTH_SHORT).show()
+                        updateAllWidgets(context)
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            isSyncing = false
+                        }, 3500L)
+                    }
                 }
                 ACTION_COMPLETE_TASK -> {
                     val taskId = intent.getStringExtra("task_id")
@@ -334,6 +380,11 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                             editor.remove("filter_type_$appWidgetId")
                             editor.remove("filter_val_$appWidgetId")
                         }
+                        if (!tab.account.isNullOrBlank() && tab.account != "all") {
+                            editor.putString("account_$appWidgetId", tab.account)
+                        } else {
+                            editor.remove("account_$appWidgetId")
+                        }
                         editor.apply()
 
                         Toast.makeText(context, "${tab.title} (${newIndex + 1}/${tabs.size})", Toast.LENGTH_SHORT).show()
@@ -355,6 +406,11 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                         } else {
                             editor.remove("filter_type_$appWidgetId")
                             editor.remove("filter_val_$appWidgetId")
+                        }
+                        if (!tab.account.isNullOrBlank() && tab.account != "all") {
+                            editor.putString("account_$appWidgetId", tab.account)
+                        } else {
+                            editor.remove("account_$appWidgetId")
                         }
                         editor.apply()
 
@@ -430,6 +486,11 @@ class GTasksWidgetProvider : AppWidgetProvider() {
             prefs.edit().putInt(tabIndexKey, 0).apply()
         }
         val currentTab = tabs[tabIndex]
+        if (!currentTab.account.isNullOrBlank() && currentTab.account != "all") {
+            prefs.edit().putString("account_$appWidgetId", currentTab.account).apply()
+        } else if (prefs.contains("account_$appWidgetId")) {
+            prefs.edit().remove("account_$appWidgetId").apply()
+        }
 
         views.setTextViewText(R.id.widget_tab_title, currentTab.title)
         views.setTextViewText(R.id.widget_tab_badge, "($count) • ${tabIndex + 1}/${tabs.size}")
@@ -585,8 +646,8 @@ class GTasksWidgetProvider : AppWidgetProvider() {
             openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        views.setOnClickPendingIntent(R.id.widget_root, openAppPendingIntent)
-        views.setOnClickPendingIntent(R.id.widget_header, openAppPendingIntent)
+        // App Icon click -> only clicking the GTasks icon opens the full app (no accidental opens from background/header)
+        views.setOnClickPendingIntent(R.id.widget_app_icon, openAppPendingIntent)
 
         // View Mode Button
         val toggleViewIntent = Intent(context, GTasksWidgetProvider::class.java).apply {

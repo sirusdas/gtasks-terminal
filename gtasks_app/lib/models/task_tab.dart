@@ -1,0 +1,272 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'task_item.dart';
+
+class TaskTab {
+  final String id;
+  String title;
+  int? iconCodePoint;
+  int? colorValue;
+
+  // Independent Filter State
+  String? selectedAccount;
+  String statusFilter; // 'pending', 'completed', 'all'
+  String? selectedSpace;
+  String? selectedSubspace;
+  String? selectedPriority;
+  Set<String> selectedLists;
+  Set<String> selectedTags;
+  String searchQuery;
+  String? dateField; // 'due' or 'completed'
+  DateTimeRange? dateRange;
+  bool hideRecurring;
+  Set<String> hiddenLists;
+  Set<String> hiddenTags;
+  String sortField;
+  bool sortAscending;
+  String? viewMode; // optional override: 'detailed', 'compact', 'two_column', 'two_column_compact'
+
+  TaskTab({
+    required this.id,
+    required this.title,
+    this.iconCodePoint,
+    this.colorValue,
+    this.selectedAccount,
+    this.statusFilter = 'pending',
+    this.selectedSpace,
+    this.selectedSubspace,
+    this.selectedPriority,
+    Set<String>? selectedLists,
+    Set<String>? selectedTags,
+    this.searchQuery = '',
+    this.dateField,
+    this.dateRange,
+    this.hideRecurring = false,
+    Set<String>? hiddenLists,
+    Set<String>? hiddenTags,
+    this.sortField = 'priority',
+    this.sortAscending = true,
+    this.viewMode,
+  })  : selectedLists = selectedLists != null ? Set.from(selectedLists) : {},
+        selectedTags = selectedTags != null ? Set.from(selectedTags) : {},
+        hiddenLists = hiddenLists != null ? Set.from(hiddenLists) : {},
+        hiddenTags = hiddenTags != null ? Set.from(hiddenTags) : {};
+
+  IconData get icon {
+    if (iconCodePoint != null) {
+      return IconData(iconCodePoint!, fontFamily: 'MaterialIcons');
+    }
+    if (selectedSpace != null) return Icons.rocket_launch_rounded;
+    if (selectedPriority != null && (selectedPriority == 'critical' || selectedPriority == 'high')) {
+      return Icons.local_fire_department_rounded;
+    }
+    if (dateRange != null) return Icons.today_rounded;
+    if (selectedTags.isNotEmpty) return Icons.tag_rounded;
+    if (selectedLists.isNotEmpty) return Icons.folder_rounded;
+    if (statusFilter == 'completed') return Icons.check_circle_outline_rounded;
+    return Icons.inbox_rounded;
+  }
+
+  Color? get accentColor => colorValue != null ? Color(colorValue!) : null;
+
+  TaskTab copyWith({
+    String? id,
+    String? title,
+    int? iconCodePoint,
+    int? colorValue,
+    String? selectedAccount,
+    bool clearAccount = false,
+    String? statusFilter,
+    String? selectedSpace,
+    bool clearSpace = false,
+    String? selectedSubspace,
+    bool clearSubspace = false,
+    String? selectedPriority,
+    bool clearPriority = false,
+    Set<String>? selectedLists,
+    Set<String>? selectedTags,
+    String? searchQuery,
+    String? dateField,
+    DateTimeRange? dateRange,
+    bool clearDateRange = false,
+    bool? hideRecurring,
+    Set<String>? hiddenLists,
+    Set<String>? hiddenTags,
+    String? sortField,
+    bool? sortAscending,
+    String? viewMode,
+  }) {
+    return TaskTab(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      iconCodePoint: iconCodePoint ?? this.iconCodePoint,
+      colorValue: colorValue ?? this.colorValue,
+      selectedAccount: clearAccount ? null : (selectedAccount ?? this.selectedAccount),
+      statusFilter: statusFilter ?? this.statusFilter,
+      selectedSpace: clearSpace ? null : (selectedSpace ?? this.selectedSpace),
+      selectedSubspace: (clearSpace || clearSubspace) ? null : (selectedSubspace ?? this.selectedSubspace),
+      selectedPriority: clearPriority ? null : (selectedPriority ?? this.selectedPriority),
+      selectedLists: selectedLists != null ? Set.from(selectedLists) : Set.from(this.selectedLists),
+      selectedTags: selectedTags != null ? Set.from(selectedTags) : Set.from(this.selectedTags),
+      searchQuery: searchQuery ?? this.searchQuery,
+      dateField: dateField ?? this.dateField,
+      dateRange: clearDateRange ? null : (dateRange ?? this.dateRange),
+      hideRecurring: hideRecurring ?? this.hideRecurring,
+      hiddenLists: hiddenLists != null ? Set.from(hiddenLists) : Set.from(this.hiddenLists),
+      hiddenTags: hiddenTags != null ? Set.from(hiddenTags) : Set.from(this.hiddenTags),
+      sortField: sortField ?? this.sortField,
+      sortAscending: sortAscending ?? this.sortAscending,
+      viewMode: viewMode ?? this.viewMode,
+    );
+  }
+
+  int computeTaskCount(List<TaskItem> allTasks) {
+    final now = DateTime.now();
+    final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+    return allTasks.where((t) {
+      if (selectedAccount != null && selectedAccount != 'all' && t.account != selectedAccount) {
+        return false;
+      }
+      if (statusFilter == 'pending' && t.isCompleted) return false;
+      if (statusFilter == 'completed' && !t.isCompleted) return false;
+
+      if (selectedSpace != null) {
+        if (!t.spaces.containsKey(selectedSpace)) return false;
+        if (selectedSubspace != null && selectedSubspace!.isNotEmpty) {
+          final subs = t.spaces[selectedSpace];
+          if (subs == null || !subs.contains(selectedSubspace)) return false;
+        }
+      }
+
+      if (selectedPriority != null) {
+        final p = t.calculatedPriority.toLowerCase();
+        if (selectedPriority == 'high' && p != 'critical' && p != 'high') return false;
+        if (selectedPriority != 'high' && p != selectedPriority) return false;
+      }
+
+      if (selectedLists.isNotEmpty) {
+        if (t.listTitle == null || !selectedLists.contains(t.listTitle)) return false;
+      }
+
+      if (selectedTags.isNotEmpty) {
+        if (!t.allTags.any((tag) => selectedTags.contains(tag))) return false;
+      }
+
+      if (dateRange != null) {
+        if (t.due == null || t.due!.isEmpty) return false;
+        final duePart = t.due!.length >= 10 ? t.due!.substring(0, 10) : t.due!;
+        if (dateField == 'due' && dateRange!.start.year == 2000) {
+          // 'Today & Due' convention
+          if (duePart.compareTo(todayStr) > 0) return false;
+        } else {
+          final dueDt = DateTime.tryParse(duePart);
+          if (dueDt == null) return false;
+          if (dueDt.isBefore(dateRange!.start) || dueDt.isAfter(dateRange!.end)) return false;
+        }
+      }
+
+      if (searchQuery.isNotEmpty) {
+        final q = searchQuery.toLowerCase();
+        final inTitle = t.title.toLowerCase().contains(q);
+        final inNotes = t.description.toLowerCase().contains(q);
+        final inTags = t.allTags.any((tag) => tag.toLowerCase().contains(q));
+        if (!inTitle && !inNotes && !inTags) return false;
+      }
+
+      return true;
+    }).length;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'iconCodePoint': iconCodePoint,
+      'colorValue': colorValue,
+      'selectedAccount': selectedAccount,
+      'statusFilter': statusFilter,
+      'selectedSpace': selectedSpace,
+      'selectedSubspace': selectedSubspace,
+      'selectedPriority': selectedPriority,
+      'selectedLists': selectedLists.toList(),
+      'selectedTags': selectedTags.toList(),
+      'searchQuery': searchQuery,
+      'dateField': dateField,
+      'dateRangeStart': dateRange?.start.toIso8601String(),
+      'dateRangeEnd': dateRange?.end.toIso8601String(),
+      'hideRecurring': hideRecurring,
+      'hiddenLists': hiddenLists.toList(),
+      'hiddenTags': hiddenTags.toList(),
+      'sortField': sortField,
+      'sortAscending': sortAscending,
+      'viewMode': viewMode,
+    };
+  }
+
+  factory TaskTab.fromJson(Map<String, dynamic> json) {
+    DateTimeRange? range;
+    if (json['dateRangeStart'] != null && json['dateRangeEnd'] != null) {
+      final start = DateTime.tryParse(json['dateRangeStart']);
+      final end = DateTime.tryParse(json['dateRangeEnd']);
+      if (start != null && end != null) {
+        range = DateTimeRange(start: start, end: end);
+      }
+    }
+
+    return TaskTab(
+      id: json['id'] ?? 'tab_${DateTime.now().millisecondsSinceEpoch}',
+      title: json['title'] ?? 'Tab',
+      iconCodePoint: json['iconCodePoint'] as int?,
+      colorValue: json['colorValue'] as int?,
+      selectedAccount: json['selectedAccount'] as String?,
+      statusFilter: json['statusFilter'] as String? ?? 'pending',
+      selectedSpace: json['selectedSpace'] as String?,
+      selectedSubspace: json['selectedSubspace'] as String?,
+      selectedPriority: json['selectedPriority'] as String?,
+      selectedLists: (json['selectedLists'] as List?)?.map((e) => e.toString()).toSet(),
+      selectedTags: (json['selectedTags'] as List?)?.map((e) => e.toString()).toSet(),
+      searchQuery: json['searchQuery'] as String? ?? '',
+      dateField: json['dateField'] as String?,
+      dateRange: range,
+      hideRecurring: json['hideRecurring'] as bool? ?? false,
+      hiddenLists: (json['hiddenLists'] as List?)?.map((e) => e.toString()).toSet(),
+      hiddenTags: (json['hiddenTags'] as List?)?.map((e) => e.toString()).toSet(),
+      sortField: json['sortField'] as String? ?? 'priority',
+      sortAscending: json['sortAscending'] as bool? ?? true,
+      viewMode: json['viewMode'] as String?,
+    );
+  }
+
+  /// Compact mapping for the native Android Widget
+  Map<String, dynamic> toWidgetJson() {
+    String? filterType;
+    String? filterVal;
+    if (selectedSpace != null) {
+      filterType = 'space';
+      filterVal = (selectedSubspace != null && selectedSubspace!.isNotEmpty)
+          ? '$selectedSpace › $selectedSubspace'
+          : selectedSpace;
+    } else if (selectedPriority != null) {
+      filterType = 'priority';
+      filterVal = selectedPriority;
+    } else if (selectedLists.isNotEmpty) {
+      filterType = 'list';
+      filterVal = selectedLists.first;
+    } else if (selectedTags.isNotEmpty) {
+      filterType = 'tag';
+      filterVal = selectedTags.first;
+    } else if (dateRange != null && dateField == 'due') {
+      filterType = 'date';
+      filterVal = 'today';
+    }
+
+    return {
+      'id': id,
+      'title': title,
+      'account': selectedAccount,
+      'filterType': filterType,
+      'filterVal': filterVal,
+    };
+  }
+}

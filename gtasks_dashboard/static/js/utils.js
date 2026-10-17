@@ -620,6 +620,15 @@ export function filterTasksByCriteria(tasks, filters) {
             });
         }
     }
+
+    // Apply account filter (supports per-tab multi-account isolation)
+    if (filters.account && filters.account !== 'all' && filters.account !== '') {
+        const filterAccLower = String(filters.account).toLowerCase();
+        filteredTasks = filteredTasks.filter(task => {
+            if (!task.account) return false;
+            return String(task.account).toLowerCase() === filterAccLower;
+        });
+    }
     
     // Apply priority filter
     if (filters.priority) {

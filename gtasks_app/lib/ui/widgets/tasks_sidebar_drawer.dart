@@ -27,6 +27,107 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
     super.dispose();
   }
 
+  void _showSidebarItemOptions(
+    BuildContext context,
+    TaskProvider provider, {
+    required String title,
+    required IconData icon,
+    String? list,
+    String? space,
+    String? subspace,
+    String? tag,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(icon, size: 20, color: theme.colorScheme.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.tab, color: Colors.blueAccent),
+                  title: const Text('Open in New Tab', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Creates a new live tab with these filters'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.pop(context);
+                    provider.addNewTab(
+                      title: title,
+                      iconCodePoint: icon.codePoint,
+                      list: list,
+                      space: space,
+                      subspace: subspace,
+                      tag: tag,
+                      account: provider.selectedAccount,
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Opened "$title" in new tab'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.filter_alt_outlined),
+                  title: const Text('Filter in Current View'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.pop(context);
+                    if (list != null) {
+                      provider.setSelectedLists({list});
+                    } else if (space != null) {
+                      provider.setSelectedSpace(space, subspace: subspace);
+                    } else if (tag != null) {
+                      provider.setSelectedTags({tag});
+                    } else {
+                      provider.clearAllFilters();
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TaskProvider>();
@@ -183,6 +284,12 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                       provider.clearSpaceFilter();
                       Navigator.pop(context);
                     },
+                    onLongPress: () => _showSidebarItemOptions(
+                      context,
+                      provider,
+                      title: 'All Tasks',
+                      icon: Icons.inbox_outlined,
+                    ),
                   ),
 
                   ListTile(
@@ -308,6 +415,13 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                           onTap: () {
                             provider.toggleSelectedList(entry.key);
                           },
+                          onLongPress: () => _showSidebarItemOptions(
+                            context,
+                            provider,
+                            title: entry.key,
+                            icon: Icons.format_list_bulleted,
+                            list: entry.key,
+                          ),
                         );
                       }),
                   ],
@@ -397,6 +511,13 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                               onTap: () {
                                 provider.setSelectedSpace(entry.key);
                               },
+                              onLongPress: () => _showSidebarItemOptions(
+                                context,
+                                provider,
+                                title: entry.key,
+                                icon: Icons.rocket_launch_rounded,
+                                space: entry.key,
+                              ),
                             ),
                             if (filteredSubs.isNotEmpty)
                               ...filteredSubs.map((subEntry) {
@@ -443,6 +564,14 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                                   onTap: () {
                                     provider.setSelectedSpace(entry.key, subspace: subEntry.key);
                                   },
+                                  onLongPress: () => _showSidebarItemOptions(
+                                    context,
+                                    provider,
+                                    title: '${entry.key} › ${subEntry.key}',
+                                    icon: Icons.subdirectory_arrow_right,
+                                    space: entry.key,
+                                    subspace: subEntry.key,
+                                  ),
                                 );
                               }),
                           ],
@@ -554,6 +683,13 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                           onTap: () {
                             provider.toggleSelectedTag(entry.key);
                           },
+                          onLongPress: () => _showSidebarItemOptions(
+                            context,
+                            provider,
+                            title: '#${entry.key}',
+                            icon: Icons.label_outline,
+                            tag: entry.key,
+                          ),
                         );
                       }),
                   ],

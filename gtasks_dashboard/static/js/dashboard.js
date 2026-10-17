@@ -49,10 +49,16 @@ let hierarchyData = {};
 let selectedNode = null;
 let autoRefreshInterval = null;
 
-// Sync state variables
+// Sync state variables & concurrency mutex
 let isSyncing = false;
+let isCacheRefreshInProgress = false;
+let isRemoteSyncInProgress = false;
 let syncProgress = { percentage: 0, message: '', status: 'idle' };
 let syncPollInterval = null;
+
+// Browser Tabs state variables
+let browserTabs = [];
+let activeBrowserTabId = null;
 
 // Space filter state variables
 export let activeSpaceFilter = null;
@@ -266,19 +272,21 @@ export async function loadDashboard() {
  */
 export async function startAdvancedSync() {
     // Prevent multiple simultaneous sync operations
-    if (isSyncing) {
+    if (isSyncing || isCacheRefreshInProgress || isRemoteSyncInProgress) {
         console.log('[Sync] Sync already in progress, ignoring duplicate request');
-        showNotification('Sync already in progress...', 'warning');
+        showNotification('Sync or refresh is already in progress, please wait...', 'warning');
         return;
     }
 
     isSyncing = true;
     syncProgress = { percentage: 0, message: 'Starting sync...', status: 'running' };
 
-    // Disable all refresh buttons
+    // Disable all refresh buttons and animate spinner icon
     document.querySelectorAll('.header-refresh-btn').forEach(refreshBtn => {
         refreshBtn.disabled = true;
         refreshBtn.classList.add('disabled');
+        const icon = refreshBtn.querySelector('i');
+        if (icon) icon.classList.add('fa-spin');
     });
 
     // Show progress UI
@@ -494,10 +502,12 @@ export function stopSyncProgressUI() {
         overlay.classList.remove('active');
     }
 
-    // Re-enable all refresh buttons
+    // Re-enable all refresh buttons and remove spinner animation
     document.querySelectorAll('.header-refresh-btn').forEach(refreshBtn => {
         refreshBtn.disabled = false;
         refreshBtn.classList.remove('disabled');
+        const icon = refreshBtn.querySelector('i');
+        if (icon) icon.classList.remove('fa-spin');
     });
 }
 
@@ -514,12 +524,22 @@ export async function refreshWithAdvancedSync() {
  * This is called when the refresh button is clicked
  */
 export async function simpleCacheRefresh() {
+    if (isCacheRefreshInProgress || isSyncing || isRemoteSyncInProgress) {
+        console.log('[Dashboard] Refresh/sync already running, ignoring duplicate request');
+        showNotification('Sync or refresh is already in progress, please wait...', 'warning');
+        return;
+    }
+
+    isCacheRefreshInProgress = true;
     console.log('[Dashboard] Simple cache refresh...');
     const refreshBtns = document.querySelectorAll('.header-refresh-btn');
     refreshBtns.forEach(btn => {
         btn.disabled = true;
         btn.classList.add('disabled');
+        const icon = btn.querySelector('i');
+        if (icon) icon.classList.add('fa-spin');
     });
+
     try {
         const response = await fetch(apiEndpoints.refresh, {
             method: 'POST',
@@ -547,9 +567,12 @@ export async function simpleCacheRefresh() {
         console.error('[Dashboard] Error during cache refresh:', error);
         showNotification('Error refreshing dashboard', 'error');
     } finally {
+        isCacheRefreshInProgress = false;
         refreshBtns.forEach(btn => {
             btn.disabled = false;
             btn.classList.remove('disabled');
+            const icon = btn.querySelector('i');
+            if (icon) icon.classList.remove('fa-spin');
         });
     }
 }
@@ -604,6 +627,11 @@ export function toggleRefreshDropdown(event) {
  * This is called when "Sync Data" option is selected
  */
 export async function syncAndRefresh() {
+    if (isSyncing || isCacheRefreshInProgress || isRemoteSyncInProgress) {
+        console.log('[Dashboard] Sync/refresh already running, ignoring duplicate request');
+        showNotification('Sync or refresh is already in progress, please wait...', 'warning');
+        return;
+    }
     console.log('[Dashboard] Sync and refresh...');
     // Start advanced sync - this will automatically refresh cache when complete
     await startAdvancedSync();
@@ -614,7 +642,22 @@ export async function syncAndRefresh() {
  * This is called when "Sync External DB" option is selected
  */
 export async function syncRemoteDb() {
+    if (isRemoteSyncInProgress || isSyncing || isCacheRefreshInProgress) {
+        console.log('[Dashboard] Sync already in progress, ignoring duplicate request');
+        showNotification('Sync is already in progress, please wait...', 'warning');
+        return;
+    }
+
+    isRemoteSyncInProgress = true;
     console.log('[Dashboard] Sync External DB - starting background command...');
+    const refreshBtns = document.querySelectorAll('.header-refresh-btn');
+    refreshBtns.forEach(btn => {
+        btn.disabled = true;
+        btn.classList.add('disabled');
+        const icon = btn.querySelector('i');
+        if (icon) icon.classList.add('fa-spin');
+    });
+
     try {
         const basePath = window.GTASKS_BASE_PATH || '';
         const response = await fetch(`${basePath}/api/remote/sync-command`, {
@@ -628,7 +671,7 @@ export async function syncRemoteDb() {
 
         if (data.success) {
             console.log('[Dashboard] Remote sync command started:', data.message);
-            showNotification('Remote sync started in background... ℹ️', 'info');
+            showNotification(data.message || 'Remote sync started in background... ℹ️', 'info');
         } else {
             console.error('[Dashboard] Failed to start remote sync:', data.message);
             showNotification(data.message || 'Failed to start remote sync', 'error');
@@ -636,6 +679,16 @@ export async function syncRemoteDb() {
     } catch (error) {
         console.error('[Dashboard] Error starting remote sync:', error);
         showNotification('Error starting remote sync', 'error');
+    } finally {
+        setTimeout(() => {
+            isRemoteSyncInProgress = false;
+            refreshBtns.forEach(btn => {
+                btn.disabled = false;
+                btn.classList.remove('disabled');
+                const icon = btn.querySelector('i');
+                if (icon) icon.classList.remove('fa-spin');
+            });
+        }, 1500);
     }
 }
 
@@ -646,6 +699,9 @@ export function setupRefreshDropdown() {
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.refresh-dropdown')) {
             closeAllRefreshDropdowns();
+        }
+        if (!e.target.closest('.browser-tab-actions')) {
+            closeNewTabMenu();
         }
     });
 }
@@ -730,6 +786,746 @@ export function switchAccountForTasks(accountId) {
 /**
  * Load tasks
  */
+// ========== Browser-Style Live Multi-Tabs ==========
+
+const BROWSER_TABS_STORAGE_KEY = 'gtasks_browser_tabs_v2';
+const BROWSER_ACTIVE_TAB_KEY = 'gtasks_active_tab_id_v2';
+
+export function getDefaultBrowserTabs() {
+    const defaultDates = getDefaultDateRange(31);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    return [
+        {
+            id: 'tab_all',
+            title: 'All Tasks',
+            icon: 'fas fa-inbox',
+            filters: {
+                search: '',
+                status: ['pending', 'in_progress'],
+                priority: '',
+                list: [],
+                hideLists: [],
+                hideRecurring: [],
+                spaces: [],
+                tags: [],
+                space: null,
+                subspace: null,
+                dateField: 'modified_at',
+                dateStart: defaultDates.start,
+                dateEnd: defaultDates.end,
+                sortField: 'modified_at',
+                sortOrder: 'desc'
+            },
+            viewMode: currentTaskViewMode || 'compact'
+        },
+        {
+            id: 'tab_today',
+            title: 'Due Today',
+            icon: 'fas fa-calendar-day',
+            filters: {
+                search: '',
+                status: ['pending', 'in_progress'],
+                priority: '',
+                list: [],
+                hideLists: [],
+                hideRecurring: [],
+                spaces: [],
+                tags: [],
+                space: null,
+                subspace: null,
+                dateField: 'due',
+                dateStart: todayStr,
+                dateEnd: todayStr,
+                sortField: 'due',
+                sortOrder: 'asc'
+            },
+            viewMode: currentTaskViewMode || 'compact'
+        },
+        {
+            id: 'tab_high_prio',
+            title: 'High Priority',
+            icon: 'fas fa-fire',
+            filters: {
+                search: '',
+                status: ['pending', 'in_progress'],
+                priority: 'high',
+                list: [],
+                hideLists: [],
+                hideRecurring: [],
+                spaces: [],
+                tags: [],
+                space: null,
+                subspace: null,
+                dateField: 'modified_at',
+                dateStart: defaultDates.start,
+                dateEnd: defaultDates.end,
+                sortField: 'priority',
+                sortOrder: 'desc'
+            },
+            viewMode: currentTaskViewMode || 'compact'
+        },
+        {
+            id: 'tab_work',
+            title: 'Work Space',
+            icon: 'fas fa-briefcase',
+            filters: {
+                search: '',
+                status: ['pending', 'in_progress'],
+                priority: '',
+                list: [],
+                hideLists: [],
+                hideRecurring: [],
+                spaces: ['Work'],
+                tags: [],
+                space: 'Work',
+                subspace: null,
+                dateField: 'modified_at',
+                dateStart: defaultDates.start,
+                dateEnd: defaultDates.end,
+                sortField: 'modified_at',
+                sortOrder: 'desc'
+            },
+            viewMode: currentTaskViewMode || 'compact'
+        }
+    ];
+}
+
+export function getActiveBrowserTab() {
+    if (!browserTabs || browserTabs.length === 0) return null;
+    let tab = browserTabs.find(t => t.id === activeBrowserTabId);
+    if (!tab) {
+        tab = browserTabs[0];
+        activeBrowserTabId = tab.id;
+    }
+    return tab;
+}
+
+export function saveBrowserTabs() {
+    try {
+        localStorage.setItem(BROWSER_TABS_STORAGE_KEY, JSON.stringify(browserTabs));
+        if (activeBrowserTabId) {
+            localStorage.setItem(BROWSER_ACTIVE_TAB_KEY, activeBrowserTabId);
+        }
+    } catch (e) {
+        console.error('[BrowserTabs] Error saving tabs:', e);
+    }
+}
+
+export function loadBrowserTabs() {
+    try {
+        const saved = localStorage.getItem(BROWSER_TABS_STORAGE_KEY);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                browserTabs = parsed;
+                const savedActiveId = localStorage.getItem(BROWSER_ACTIVE_TAB_KEY);
+                if (savedActiveId && browserTabs.some(t => t.id === savedActiveId)) {
+                    activeBrowserTabId = savedActiveId;
+                } else {
+                    activeBrowserTabId = browserTabs[0].id;
+                }
+                return;
+            }
+        }
+    } catch (e) {
+        console.error('[BrowserTabs] Error loading tabs from storage:', e);
+    }
+
+    // Default migration if prior filter state existed
+    const defaultTabs = getDefaultBrowserTabs();
+    try {
+        const oldState = localStorage.getItem('gtasks_filter_state');
+        if (oldState) {
+            const parsedOld = JSON.parse(oldState);
+            if (parsedOld && typeof parsedOld === 'object') {
+                defaultTabs[0].filters = { ...defaultTabs[0].filters, ...parsedOld };
+            }
+        }
+    } catch (e) {}
+
+    browserTabs = defaultTabs;
+    activeBrowserTabId = browserTabs[0].id;
+    saveBrowserTabs();
+}
+
+export function initBrowserTabs() {
+    loadBrowserTabs();
+    renderBrowserTabs();
+    updateBrowserTabBadges();
+    initSidebarContextMenu();
+}
+
+export function renderBrowserTabs() {
+    const track = document.getElementById('browser-tabs-track');
+    if (!track) return;
+
+    track.innerHTML = '';
+    const canClose = browserTabs.length > 1;
+
+    browserTabs.forEach(tab => {
+        const isActive = tab.id === activeBrowserTabId;
+        const chip = document.createElement('div');
+        chip.className = `browser-tab-chip ${isActive ? 'active' : ''}`;
+        chip.setAttribute('data-tab-id', tab.id);
+        chip.title = `${tab.title} (Click to switch, double-click to rename)`;
+
+        chip.onclick = (e) => {
+            if (e.target.closest('.browser-tab-chip-actions') || e.target.closest('.browser-tab-rename-input')) return;
+            switchBrowserTab(tab.id);
+        };
+
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'browser-tab-icon';
+        iconSpan.innerHTML = `<i class="${tab.icon || 'fas fa-tasks'}"></i>`;
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'browser-tab-title';
+        titleSpan.textContent = tab.title;
+        titleSpan.ondblclick = (e) => {
+            e.stopPropagation();
+            startTabRename(tab.id, e);
+        };
+
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'browser-tab-badge';
+        badgeSpan.id = `tab-badge-${tab.id}`;
+        badgeSpan.textContent = '...';
+
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'browser-tab-chip-actions';
+        actionsDiv.onclick = (e) => e.stopPropagation();
+
+        actionsDiv.innerHTML = `
+            <button type="button" class="browser-tab-action-btn edit" onclick="window.startTabRename('${tab.id}', event)" title="Rename tab">
+                <i class="fas fa-pen"></i>
+            </button>
+            <button type="button" class="browser-tab-action-btn duplicate" onclick="window.duplicateBrowserTab('${tab.id}', event)" title="Duplicate tab">
+                <i class="fas fa-copy"></i>
+            </button>
+            ${canClose ? `
+            <button type="button" class="browser-tab-action-btn close" onclick="window.closeBrowserTab('${tab.id}', event)" title="Close tab">
+                <i class="fas fa-times"></i>
+            </button>` : ''}
+        `;
+
+        chip.appendChild(iconSpan);
+        chip.appendChild(titleSpan);
+
+        // Account badge if tab is scoped to a specific account
+        if (tab.filters?.account && tab.filters.account !== 'all' && tab.filters.account !== '') {
+            const accBadge = document.createElement('span');
+            accBadge.className = 'browser-tab-account-badge';
+            accBadge.textContent = tab.filters.account;
+            accBadge.title = `Account: ${tab.filters.account}`;
+            chip.appendChild(accBadge);
+        }
+
+        chip.appendChild(badgeSpan);
+        chip.appendChild(actionsDiv);
+
+        track.appendChild(chip);
+
+        if (isActive) {
+            setTimeout(() => {
+                chip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+            }, 30);
+        }
+    });
+
+    checkTabTrackScroll();
+}
+
+export function updateBrowserTabBadges() {
+    if (!browserTabs || browserTabs.length === 0) return;
+    const tasks = filterOutDeletedTasks(dashboardData.tasks || []);
+    browserTabs.forEach(tab => {
+        const badgeEl = document.getElementById(`tab-badge-${tab.id}`);
+        if (!badgeEl) return;
+        const matchingTasks = filterTasksByCriteria(tasks, tab.filters || {});
+        badgeEl.textContent = matchingTasks.length;
+        if (tab.filters?.priority === 'high' && matchingTasks.length > 0) {
+            badgeEl.classList.add('has-urgent');
+        } else {
+            badgeEl.classList.remove('has-urgent');
+        }
+    });
+}
+
+export function switchBrowserTab(tabId) {
+    if (activeBrowserTabId === tabId) return;
+
+    // Save current active tab filter values before switching
+    saveFilterState();
+
+    activeBrowserTabId = tabId;
+    localStorage.setItem(BROWSER_ACTIVE_TAB_KEY, tabId);
+
+    const newTab = getActiveBrowserTab();
+    if (!newTab) return;
+
+    const f = newTab.filters || {};
+
+    // 1. Search filter input
+    const searchEl = document.getElementById('task-search-filter');
+    if (searchEl) searchEl.value = f.search || '';
+
+    // 2. Priority filter select
+    const prioEl = document.getElementById('task-priority-filter');
+    if (prioEl) prioEl.value = f.priority || '';
+
+    // 3. Date fields
+    const dateFieldEl = document.getElementById('task-date-field');
+    if (dateFieldEl) dateFieldEl.value = f.dateField || 'modified_at';
+    const dateStartEl = document.getElementById('task-date-start');
+    if (dateStartEl) dateStartEl.value = f.dateStart || '';
+    const dateEndEl = document.getElementById('task-date-end');
+    if (dateEndEl) dateEndEl.value = f.dateEnd || '';
+
+    // 4. Sort fields
+    const sortFieldEl = document.getElementById('task-sort-field');
+    if (sortFieldEl) sortFieldEl.value = f.sortField || 'modified_at';
+    const sortOrderEl = document.getElementById('task-sort-order');
+    if (sortOrderEl) sortOrderEl.value = f.sortOrder || 'desc';
+
+    // 5. Space and subspace filters
+    activeSpaceFilter = f.space || null;
+    activeSubspaceFilter = f.subspace || null;
+
+    // 6. Multiselects
+    if (statusMultiselect) statusMultiselect.setSelectedValues(f.status || ['pending', 'in_progress']);
+    if (listMultiselect) listMultiselect.setSelectedValues(f.list || []);
+    if (hideListsMultiselect) hideListsMultiselect.setSelectedValues(f.hideLists || []);
+    if (hideRecurringMultiselect) hideRecurringMultiselect.setSelectedValues(f.hideRecurring || []);
+    if (spacesMultiselect) spacesMultiselect.setSelectedValues(f.spaces || []);
+    if (tagsMultiselect) tagsMultiselect.setSelectedValues(f.tags || []);
+
+    // 7. View Mode
+    if (newTab.viewMode && newTab.viewMode !== currentTaskViewMode) {
+        currentTaskViewMode = newTab.viewMode;
+        localStorage.setItem('gtasks_task_view_mode', newTab.viewMode);
+        const compactBtn = document.getElementById('view-mode-compact');
+        const cardBtn = document.getElementById('view-mode-card');
+        if (compactBtn && cardBtn) {
+            compactBtn.classList.toggle('active', newTab.viewMode === 'compact');
+            cardBtn.classList.toggle('active', newTab.viewMode === 'card');
+        }
+        const container = document.getElementById('tasks-grid');
+        if (container) {
+            container.classList.toggle('compact', newTab.viewMode === 'compact');
+        }
+    }
+
+    // 7b. Account sync for per-tab account isolation
+    if (f.account && f.account !== 'all' && f.account !== '') {
+        const accSelect = document.getElementById('tasks-account-selector');
+        if (accSelect && accSelect.value !== f.account) {
+            accSelect.value = f.account;
+            if (dashboardData.current_account && dashboardData.current_account !== f.account) {
+                switchAccountForTasks(f.account);
+                return;
+            }
+        }
+    }
+
+    // 7c. Update sidebar and filter options for this tab's account smoothly & instantly
+    updateSidebarAndFiltersForTab(newTab);
+
+    // 8. Re-render tab bar active state
+    renderBrowserTabs();
+
+    // 9. Filter and render tasks for this tab
+    filterTasks();
+}
+
+/**
+ * Update sidebar lists, spaces, and tags according to tab's account
+ */
+export function updateSidebarAndFiltersForTab(tab) {
+    if (!tab) return;
+    const tabAccount = tab.filters?.account;
+    const allTasks = filterOutDeletedTasks(dashboardData.tasks || []);
+    let scopedTasks = allTasks;
+    if (tabAccount && tabAccount !== 'all' && tabAccount !== '') {
+        const accLower = String(tabAccount).toLowerCase();
+        scopedTasks = allTasks.filter(t => t.account && String(t.account).toLowerCase() === accLower);
+    }
+    // Instantly update sidebar counts, lists, spaces, tags for this tab's account without network lag
+    populateSidebarTasksSubmenu(scopedTasks);
+}
+
+/**
+ * Open a sidebar item (space, subspace, list, tag, or all) directly in a new browser tab
+ */
+export function openSidebarItemInNewTab(type, value, space = null) {
+    const id = 'tab_' + Date.now();
+    const activeTab = getActiveBrowserTab();
+    const currentAccount = activeTab?.filters?.account || '';
+
+    let title = value || 'All Tasks';
+    let icon = 'fas fa-tasks';
+    const filters = getDefaultFilterState();
+    filters.account = currentAccount;
+
+    if (type === 'list') {
+        title = value;
+        icon = 'fas fa-list-ul';
+        filters.list = [value];
+    } else if (type === 'space') {
+        title = value;
+        icon = 'fas fa-layer-group';
+        filters.spaces = [value];
+        filters.space = value;
+    } else if (type === 'subspace') {
+        title = `${space} › ${value}`;
+        icon = 'fas fa-angle-right';
+        filters.spaces = [space];
+        filters.space = space;
+        filters.subspace = value;
+    } else if (type === 'tag') {
+        title = '#' + value;
+        icon = 'fas fa-tag';
+        filters.tags = [value];
+    }
+
+    const tabData = {
+        id,
+        title,
+        icon,
+        filters,
+        viewMode: currentTaskViewMode || 'compact'
+    };
+
+    browserTabs.push(tabData);
+    saveBrowserTabs();
+    renderBrowserTabs();
+    switchBrowserTab(id);
+    showNotification(`Opened "${title}" in new tab`, 'success');
+}
+
+/**
+ * Right-click context menu on sidebar items to open in new tab
+ */
+export function initSidebarContextMenu() {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    let menu = document.getElementById('sidebar-context-menu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'sidebar-context-menu';
+        menu.className = 'sidebar-context-menu';
+        document.body.appendChild(menu);
+    }
+
+    // Dismiss on click outside or escape
+    document.addEventListener('click', (e) => {
+        if (!menu.contains(e.target)) {
+            menu.style.display = 'none';
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') menu.style.display = 'none';
+    });
+
+    sidebar.addEventListener('contextmenu', (e) => {
+        const item = e.target.closest('.sidebar-subitem, .sidebar-item');
+        if (!item) return;
+
+        const type = item.getAttribute('data-type');
+        const value = item.getAttribute('data-value');
+        const space = item.getAttribute('data-space');
+
+        // Only handle items that can be opened as a tab view (lists, spaces, subspaces, tags, or all tasks)
+        const isTasksItem = item.id === 'sidebar-all-tasks' || item.getAttribute('onclick')?.includes('tasks') || type;
+        if (!isTasksItem && !type) return;
+
+        e.preventDefault();
+        const displayTitle = value || 'All Tasks';
+
+        menu.innerHTML = `
+            <div class="sidebar-context-item" id="sidebar-ctx-open-new-tab">
+                <i class="fas fa-folder-plus text-blue"></i>
+                <span>Open "${escapeHtml(displayTitle)}" in New Tab</span>
+            </div>
+            <div class="sidebar-context-item" id="sidebar-ctx-filter-current">
+                <i class="fas fa-filter text-purple"></i>
+                <span>Filter in Current View</span>
+            </div>
+        `;
+
+        const x = Math.min(e.clientX, window.innerWidth - 220);
+        const y = Math.min(e.clientY, window.innerHeight - 120);
+        menu.style.left = `${x}px`;
+        menu.style.top = `${y}px`;
+        menu.style.display = 'block';
+
+        const openBtn = document.getElementById('sidebar-ctx-open-new-tab');
+        if (openBtn) {
+            openBtn.onclick = () => {
+                menu.style.display = 'none';
+                openSidebarItemInNewTab(type, value, space);
+            };
+        }
+
+        const filterBtn = document.getElementById('sidebar-ctx-filter-current');
+        if (filterBtn) {
+            filterBtn.onclick = () => {
+                menu.style.display = 'none';
+                if (type && value) {
+                    selectSidebarFilter(type, value, space);
+                } else if (item.id === 'sidebar-all-tasks') {
+                    resetAllFilters();
+                }
+            };
+        }
+    });
+}
+
+export function createBrowserTabPreset(preset, accountId = null) {
+    const id = 'tab_' + Date.now();
+    let tabData = {
+        id,
+        title: 'New Tab',
+        icon: 'fas fa-tasks',
+        filters: getDefaultFilterState(),
+        viewMode: currentTaskViewMode || 'compact'
+    };
+
+    if (preset === 'account' && accountId) {
+        if (accountId === 'all') {
+            tabData.title = 'All Accounts';
+            tabData.icon = 'fas fa-users';
+            tabData.filters.account = '';
+        } else {
+            const accObj = (dashboardData.accounts || []).find(a => a.id === accountId);
+            tabData.title = accObj ? accObj.name : accountId;
+            tabData.icon = 'fas fa-user-circle';
+            tabData.filters.account = accountId;
+        }
+    } else if (preset === 'all') {
+        tabData.title = 'All Tasks';
+        tabData.icon = 'fas fa-inbox';
+        tabData.filters.status = ['pending', 'completed'];
+        tabData.filters.account = '';
+    } else if (preset === 'today') {
+        tabData.title = 'Due Today';
+        tabData.icon = 'fas fa-calendar-day';
+        const todayStr = new Date().toISOString().slice(0, 10);
+        tabData.filters.dateField = 'due';
+        tabData.filters.dateStart = todayStr;
+        tabData.filters.dateEnd = todayStr;
+        tabData.filters.sortField = 'due';
+        tabData.filters.sortOrder = 'asc';
+    } else if (preset === 'high_priority') {
+        tabData.title = 'High Priority';
+        tabData.icon = 'fas fa-fire';
+        tabData.filters.priority = 'high';
+        tabData.filters.sortField = 'priority';
+        tabData.filters.sortOrder = 'desc';
+    } else if (preset === 'work') {
+        tabData.title = 'Work Space';
+        tabData.icon = 'fas fa-briefcase';
+        tabData.filters.spaces = ['Work'];
+        tabData.filters.space = 'Work';
+    } else if (preset === 'completed') {
+        tabData.title = 'Completed';
+        tabData.icon = 'fas fa-check-circle';
+        tabData.filters.status = ['completed'];
+    }
+
+    browserTabs.push(tabData);
+    saveBrowserTabs();
+    renderBrowserTabs();
+    switchBrowserTab(id);
+    showNotification(`Opened tab "${tabData.title}"`, 'success');
+}
+
+export function promptCreateCustomBrowserTab() {
+    const name = prompt('Enter a name for the new tab:', 'My Custom View');
+    if (!name || !name.trim()) return;
+
+    const id = 'tab_' + Date.now();
+    const tabData = {
+        id,
+        title: name.trim(),
+        icon: 'fas fa-folder',
+        filters: getDefaultFilterState(),
+        viewMode: currentTaskViewMode || 'compact'
+    };
+
+    browserTabs.push(tabData);
+    saveBrowserTabs();
+    renderBrowserTabs();
+    switchBrowserTab(id);
+    showNotification(`Created tab "${tabData.title}"`, 'success');
+}
+
+export function closeBrowserTab(tabId, event) {
+    if (event) event.stopPropagation();
+    if (browserTabs.length <= 1) {
+        showNotification('Cannot close the only tab', 'warning');
+        return;
+    }
+
+    const tabIndex = browserTabs.findIndex(t => t.id === tabId);
+    if (tabIndex === -1) return;
+
+    const wasActive = activeBrowserTabId === tabId;
+    browserTabs.splice(tabIndex, 1);
+
+    if (wasActive) {
+        const nextIndex = Math.min(tabIndex, browserTabs.length - 1);
+        activeBrowserTabId = browserTabs[nextIndex].id;
+        localStorage.setItem(BROWSER_ACTIVE_TAB_KEY, activeBrowserTabId);
+    }
+
+    saveBrowserTabs();
+    renderBrowserTabs();
+    if (wasActive) {
+        const activeTab = getActiveBrowserTab();
+        if (activeTab) {
+            switchBrowserTab(activeTab.id);
+        }
+    }
+}
+
+export function startTabRename(tabId, event) {
+    if (event) event.stopPropagation();
+    const chip = document.querySelector(`.browser-tab-chip[data-tab-id="${tabId}"]`);
+    if (!chip) return;
+    const titleSpan = chip.querySelector('.browser-tab-title');
+    if (!titleSpan) return;
+
+    const currentTitle = titleSpan.textContent;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'browser-tab-rename-input';
+    input.value = currentTitle;
+
+    let finished = false;
+    const finish = () => {
+        if (finished) return;
+        finished = true;
+        const newTitle = input.value.trim() || currentTitle;
+        finishTabRename(tabId, newTitle);
+    };
+
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            finish();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            finished = true;
+            renderBrowserTabs();
+        }
+    };
+
+    input.onblur = finish;
+
+    titleSpan.replaceWith(input);
+    input.focus();
+    input.select();
+}
+
+export function finishTabRename(tabId, newTitle) {
+    const tab = browserTabs.find(t => t.id === tabId);
+    if (tab && newTitle) {
+        tab.title = newTitle;
+        saveBrowserTabs();
+    }
+    renderBrowserTabs();
+}
+
+export function duplicateBrowserTab(tabId, event) {
+    if (event) event.stopPropagation();
+    const tabIndex = browserTabs.findIndex(t => t.id === tabId);
+    if (tabIndex === -1) return;
+
+    const sourceTab = browserTabs[tabIndex];
+    const newId = 'tab_' + Date.now();
+    const clonedTab = {
+        id: newId,
+        title: `${sourceTab.title} (Copy)`,
+        icon: sourceTab.icon || 'fas fa-tasks',
+        filters: JSON.parse(JSON.stringify(sourceTab.filters || {})),
+        viewMode: sourceTab.viewMode || 'compact'
+    };
+
+    browserTabs.splice(tabIndex + 1, 0, clonedTab);
+    saveBrowserTabs();
+    renderBrowserTabs();
+    switchBrowserTab(newId);
+    showNotification(`Duplicated tab "${clonedTab.title}"`, 'info');
+}
+
+export function scrollBrowserTabs(offset) {
+    const track = document.getElementById('browser-tabs-track');
+    if (track) {
+        track.scrollBy({ left: offset, behavior: 'smooth' });
+        setTimeout(checkTabTrackScroll, 200);
+    }
+}
+
+export function checkTabTrackScroll() {
+    const track = document.getElementById('browser-tabs-track');
+    const leftBtn = document.getElementById('browser-tabs-scroll-left');
+    const rightBtn = document.getElementById('browser-tabs-scroll-right');
+    if (!track || !leftBtn || !rightBtn) return;
+    const hasOverflow = track.scrollWidth > track.clientWidth + 2;
+    leftBtn.style.display = (hasOverflow && track.scrollLeft > 10) ? 'inline-flex' : 'none';
+    rightBtn.style.display = (hasOverflow && track.scrollLeft < (track.scrollWidth - track.clientWidth - 10)) ? 'inline-flex' : 'none';
+}
+
+export function populateBrowserTabAccountsMenu() {
+    const container = document.getElementById('browser-tab-accounts-section');
+    if (!container) return;
+    const accounts = dashboardData.accounts || [];
+    if (accounts.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="browser-tab-menu-header">Accounts</div>
+        <button type="button" class="browser-tab-menu-item" onclick="createBrowserTabPreset('account', 'all'); closeNewTabMenu();">
+            <i class="fas fa-users text-blue"></i>
+            <div>
+                <div class="menu-item-title">All Accounts</div>
+                <div class="menu-item-sub">View tasks across all accounts</div>
+            </div>
+        </button>
+        ${accounts.map(acc => `
+            <button type="button" class="browser-tab-menu-item" onclick="createBrowserTabPreset('account', '${acc.id}'); closeNewTabMenu();">
+                <i class="fas fa-user-circle text-teal"></i>
+                <div>
+                    <div class="menu-item-title">${acc.name}</div>
+                    <div class="menu-item-sub">Account: ${acc.id}</div>
+                </div>
+            </button>
+        `).join('')}
+    `;
+}
+
+export function toggleNewTabMenu(event) {
+    if (event) event.stopPropagation();
+    const menu = document.getElementById('browser-new-tab-dropdown');
+    if (!menu) return;
+    const isHidden = menu.style.display === 'none';
+    if (isHidden) {
+        populateBrowserTabAccountsMenu();
+        menu.style.display = 'flex';
+    } else {
+        menu.style.display = 'none';
+    }
+}
+
+export function closeNewTabMenu() {
+    const menu = document.getElementById('browser-new-tab-dropdown');
+    if (menu) menu.style.display = 'none';
+}
+
 /**
  * Get default filter configuration
  * Default: past 31 days (modified date first, then created date), status: pending & in_progress, sorted by modified date desc
@@ -745,6 +1541,9 @@ export function getDefaultFilterState() {
         hideRecurring: [],
         spaces: [],
         tags: [],
+        account: '',
+        space: null,
+        subspace: null,
         dateField: 'modified_at',
         dateStart: defaultDates.start,
         dateEnd: defaultDates.end,
@@ -772,6 +1571,8 @@ export function saveFilterState() {
                 }
             }
         }
+        const activeTab = getActiveBrowserTab();
+        const currentAccount = document.getElementById('tasks-account-selector')?.value || activeTab?.filters?.account || '';
         const state = {
             search: document.getElementById('task-search-filter')?.value || '',
             status: statusValues,
@@ -781,12 +1582,23 @@ export function saveFilterState() {
             hideRecurring: hideRecurringValues,
             spaces: spacesValues,
             tags: tagValues,
+            account: currentAccount,
+            space: activeSpaceFilter,
+            subspace: activeSubspaceFilter,
             dateField: document.getElementById('task-date-field')?.value || 'modified_at',
             dateStart: document.getElementById('task-date-start')?.value || '',
             dateEnd: document.getElementById('task-date-end')?.value || '',
             sortField: document.getElementById('task-sort-field')?.value || 'modified_at',
             sortOrder: document.getElementById('task-sort-order')?.value || 'desc'
         };
+
+        // Sync with active browser tab
+        if (activeTab) {
+            activeTab.filters = { ...state };
+            activeTab.viewMode = currentTaskViewMode;
+            saveBrowserTabs();
+        }
+
         localStorage.setItem('gtasks_filter_state', JSON.stringify(state));
         sessionStorage.setItem('gtasks_filter_state', JSON.stringify(state));
     } catch (e) {
@@ -796,6 +1608,10 @@ export function saveFilterState() {
 
 export function loadFilterState() {
     try {
+        const activeTab = getActiveBrowserTab();
+        if (activeTab && activeTab.filters) {
+            return activeTab.filters;
+        }
         const saved = localStorage.getItem('gtasks_filter_state') || sessionStorage.getItem('gtasks_filter_state');
         return saved ? JSON.parse(saved) : null;
     } catch (e) {
@@ -814,9 +1630,13 @@ export function loadTasks() {
     
     // Initialize task count display
     updateTasksCountDisplay(filteredTasks.length, tasks.length);
+
+    // Initialize browser tabs
+    initBrowserTabs();
     
     if (filteredTasks.length === 0) {
         container.innerHTML = '<p style="text-align: center; color: #6b7280;">No tasks found for this account.</p>';
+        updateBrowserTabBadges();
         return;
     }
     
@@ -1709,6 +2529,12 @@ let currentTaskViewMode = localStorage.getItem('gtasks_task_view_mode') || (wind
 export function setTaskViewMode(mode) {
     currentTaskViewMode = mode;
     localStorage.setItem('gtasks_task_view_mode', mode);
+
+    const activeTab = getActiveBrowserTab();
+    if (activeTab) {
+        activeTab.viewMode = mode;
+        saveBrowserTabs();
+    }
     
     const compactBtn = document.getElementById('view-mode-compact');
     const cardBtn = document.getElementById('view-mode-card');
@@ -2151,6 +2977,15 @@ export function filterTasks() {
     
     // Update task count display
     updateTasksCountDisplay(filteredTasks.length, totalTasks);
+
+    // Sync active browser tab filters and update live tab badges
+    const activeTab = getActiveBrowserTab();
+    if (activeTab) {
+        activeTab.filters = { ...filters };
+        activeTab.viewMode = currentTaskViewMode;
+        saveBrowserTabs();
+    }
+    updateBrowserTabBadges();
     
     if (filteredTasks.length === 0) {
         container.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 2rem;">No tasks match your filters.</p>';
@@ -2567,6 +3402,20 @@ export function setupKeyboardShortcuts() {
         }
         if (e.key === 'Escape' && isFullscreen) {
             toggleFullscreen();
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 't') {
+            const tasksSec = document.getElementById('tasks-section');
+            if (tasksSec && tasksSec.style.display !== 'none') {
+                e.preventDefault();
+                toggleNewTabMenu();
+            }
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') {
+            const tasksSec = document.getElementById('tasks-section');
+            if (tasksSec && tasksSec.style.display !== 'none' && browserTabs && browserTabs.length > 1) {
+                e.preventDefault();
+                closeBrowserTab(activeBrowserTabId);
+            }
         }
     });
 }
@@ -3020,6 +3869,19 @@ window.updateFilteredMultiselect = updateFilteredMultiselect;
 window.populateSidebarTasksSubmenu = populateSidebarTasksSubmenu;
 window.selectSidebarFilter = selectSidebarFilter;
 window.updateSidebarActiveItem = updateSidebarActiveItem;
+window.initBrowserTabs = initBrowserTabs;
+window.renderBrowserTabs = renderBrowserTabs;
+window.switchBrowserTab = switchBrowserTab;
+window.createBrowserTabPreset = createBrowserTabPreset;
+window.promptCreateCustomBrowserTab = promptCreateCustomBrowserTab;
+window.closeBrowserTab = closeBrowserTab;
+window.startTabRename = startTabRename;
+window.finishTabRename = finishTabRename;
+window.duplicateBrowserTab = duplicateBrowserTab;
+window.scrollBrowserTabs = scrollBrowserTabs;
+window.toggleNewTabMenu = toggleNewTabMenu;
+window.closeNewTabMenu = closeNewTabMenu;
+window.updateBrowserTabBadges = updateBrowserTabBadges;
 window.syncSidebarActiveFilter = syncSidebarActiveFilter;
 window.filterSidebarListItems = filterSidebarListItems;
 window.clearSidebarQuickSearch = clearSidebarQuickSearch;
@@ -4079,7 +4941,20 @@ export default {
     filterSidebarListItems,
     clearSidebarQuickSearch,
     toggleSidebarSection,
-    toggleSidebarTasksGroup
+    toggleSidebarTasksGroup,
+    initBrowserTabs,
+    renderBrowserTabs,
+    switchBrowserTab,
+    createBrowserTabPreset,
+    promptCreateCustomBrowserTab,
+    closeBrowserTab,
+    startTabRename,
+    finishTabRename,
+    duplicateBrowserTab,
+    scrollBrowserTabs,
+    toggleNewTabMenu,
+    closeNewTabMenu,
+    updateBrowserTabBadges
 };
 
 // Initialize the dashboard when DOM is ready (or immediately if already parsed)
