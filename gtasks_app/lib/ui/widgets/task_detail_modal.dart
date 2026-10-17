@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../models/task_item.dart';
+import '../../providers/task_provider.dart';
 
 class TaskDetailModal extends StatefulWidget {
   final TaskItem task;
@@ -21,6 +23,7 @@ class TaskDetailModal extends StatefulWidget {
 
 class _TaskDetailModalState extends State<TaskDetailModal> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final TextEditingController _addSubtaskController = TextEditingController();
   double _fontSize = 15.0;
 
   @override
@@ -32,7 +35,20 @@ class _TaskDetailModalState extends State<TaskDetailModal> with SingleTickerProv
   @override
   void dispose() {
     _tabController.dispose();
+    _addSubtaskController.dispose();
     super.dispose();
+  }
+
+  void _createSubtask(TaskProvider provider) {
+    final text = _addSubtaskController.text.trim();
+    if (text.isEmpty) return;
+    provider.addTask(
+      title: text,
+      parentId: widget.task.id,
+      listTitle: widget.task.listTitle,
+      account: widget.task.account,
+    );
+    _addSubtaskController.clear();
   }
 
   @override
@@ -41,6 +57,9 @@ class _TaskDetailModalState extends State<TaskDetailModal> with SingleTickerProv
     final task = widget.task;
     final cleanNotes = task.cleanNotes;
     final tags = task.allTags;
+    final provider = context.watch<TaskProvider>();
+    final subtasks = provider.getSubtasks(task.id);
+    final parentTask = task.parentId != null ? provider.getParentTask(task.parentId!) : null;
 
     final jsonPretty = const JsonEncoder.withIndent('  ').convert(task.toJson());
 
@@ -205,6 +224,25 @@ class _TaskDetailModalState extends State<TaskDetailModal> with SingleTickerProv
                                         ),
                                       ),
                                     ),
+                                  if (task.isSubtask)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: Colors.teal.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.subdirectory_arrow_right, size: 12, color: Colors.teal),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            parentTask != null ? '↳ Sub-task of: ${parentTask.title}' : '↳ Sub-task',
+                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.teal),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                 ],
                               ),
                               const SizedBox(height: 14),
@@ -217,13 +255,100 @@ class _TaskDetailModalState extends State<TaskDetailModal> with SingleTickerProv
                               else
                                 Center(
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 40),
+                                    padding: const EdgeInsets.symmetric(vertical: 20),
                                     child: Text(
                                       'No notes for this task.',
                                       style: TextStyle(color: theme.disabledColor, fontStyle: FontStyle.italic),
                                     ),
                                   ),
                                 ),
+
+                              // Sub-tasks Section (Google Tasks style)
+                              const SizedBox(height: 16),
+                              const Divider(height: 1),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  const Icon(Icons.account_tree_outlined, size: 16, color: Colors.indigo),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Sub-tasks (${subtasks.length})',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              if (subtasks.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Text('No sub-tasks yet.', style: TextStyle(fontSize: 12, color: theme.hintColor, fontStyle: FontStyle.italic)),
+                                )
+                              else
+                                ...subtasks.map((st) => Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: Checkbox(
+                                          value: st.isCompleted,
+                                          onChanged: (_) {
+                                            provider.completeTask(st.id);
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          st.title,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            decoration: st.isCompleted ? TextDecoration.lineThrough : null,
+                                            color: st.isCompleted ? theme.hintColor : null,
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.close, size: 14, color: Colors.grey),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        tooltip: 'Delete subtask',
+                                        onPressed: () {
+                                          provider.deleteTask(st.id, account: st.account);
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                )),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _addSubtaskController,
+                                      decoration: InputDecoration(
+                                        hintText: 'Add a subtask...',
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      style: const TextStyle(fontSize: 13),
+                                      onSubmitted: (_) => _createSubtask(provider),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton.icon(
+                                    icon: const Icon(Icons.add, size: 16),
+                                    label: const Text('Add', style: TextStyle(fontSize: 12)),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      minimumSize: const Size(0, 36),
+                                    ),
+                                    onPressed: () => _createSubtask(provider),
+                                  ),
+                                ],
+                              ),
 
                               if (tags.isNotEmpty) ...[
                                 const SizedBox(height: 24),

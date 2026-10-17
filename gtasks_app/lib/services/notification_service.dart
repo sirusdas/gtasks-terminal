@@ -38,6 +38,9 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     if (androidImpl != null) {
       await androidImpl.requestNotificationsPermission();
+      try {
+        await androidImpl.requestExactAlarmsPermission();
+      } catch (_) {}
     }
 
     _initialized = true;
@@ -48,6 +51,7 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
+    await init();
     const androidDetails = AndroidNotificationDetails(
       'gtasks_reminders_channel',
       'Task Reminders',
@@ -70,42 +74,75 @@ class NotificationService {
   }
 
   Future<void> scheduleTaskReminder(TaskItem task) async {
-    if (task.due == null) return;
+    if (task.due == null || task.due!.trim().isEmpty || task.isCompleted) return;
+    await init();
 
     try {
       final dueDate = DateTime.parse(task.due!);
-      final scheduledTime = tz.TZDateTime.from(dueDate, tz.local);
+      final now = tz.TZDateTime.now(tz.local);
 
-      // Only schedule if the date is in the future
-      if (scheduledTime.isAfter(tz.TZDateTime.now(tz.local))) {
-        const androidDetails = AndroidNotificationDetails(
-          'gtasks_reminders_channel',
-          'Task Reminders',
-          channelDescription: 'Notifications and reminders for due tasks',
-          importance: Importance.high,
-          priority: Priority.high,
-        );
-
-        const details = NotificationDetails(
-          android: androidDetails,
-          linux: LinuxNotificationDetails(),
-        );
-
-        await _notificationsPlugin.zonedSchedule(
-          id: task.id.hashCode,
-          title: 'Task Due: ${task.title}',
-          body: task.description.isNotEmpty ? task.description : 'Your task is due today!',
-          scheduledDate: scheduledTime,
-          notificationDetails: details,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        );
+      // Default reminder time: 9:00 AM on due date
+      int hour = 9;
+      int minute = 0;
+      if (!task.due!.contains('T00:00:00') && (dueDate.hour != 0 || dueDate.minute != 0)) {
+        hour = dueDate.hour;
+        minute = dueDate.minute;
       }
+
+      var scheduledTime = tz.TZDateTime(tz.local, dueDate.year, dueDate.month, dueDate.day, hour, minute);
+
+      // If scheduled morning time has passed but the task is due today,
+      // schedule an alert 1 minute from now so user gets reminded today.
+      if (scheduledTime.isBefore(now)) {
+        final isToday = dueDate.year == now.year && dueDate.month == now.month && dueDate.day == now.day;
+        if (isToday) {
+          scheduledTime = now.add(const Duration(minutes: 1));
+        } else {
+          // Task was due on an earlier date (overdue) - don't schedule an alarm in the past
+          return;
+        }
+      }
+
+      const androidDetails = AndroidNotificationDetails(
+        'gtasks_reminders_channel',
+        'Task Reminders',
+        channelDescription: 'Notifications and reminders for due tasks',
+        importance: Importance.high,
+        priority: Priority.high,
+      );
+
+      const details = NotificationDetails(
+        android: androidDetails,
+        linux: LinuxNotificationDetails(),
+      );
+
+      await _notificationsPlugin.zonedSchedule(
+        id: task.id.hashCode,
+        title: 'Task Due: ${task.title}',
+        body: task.description.isNotEmpty ? task.description : 'Task is due today!',
+        scheduledDate: scheduledTime,
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      );
     } catch (_) {
       // Ignored if invalid date format
     }
   }
 
   Future<void> cancelReminder(int id) async {
-    await _notificationsPlugin.cancel(id: id);
+    try {
+      await _notificationsPlugin.cancel(id: id);
+    } catch (_) {}
+  }
+
+  Future<void> syncAllTaskReminders(List<TaskItem> tasks) async {
+    await init();
+    for (final task in tasks) {
+      if (task.isCompleted || task.due == null || task.due!.isEmpty) {
+        await cancelReminder(task.id.hashCode);
+      } else {
+        await scheduleTaskReminder(task);
+      }
+    }
   }
 }

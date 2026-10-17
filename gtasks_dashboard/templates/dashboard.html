@@ -1509,6 +1509,22 @@
                     </div>
                 </div>
 
+                <!-- Sub-tasks Section -->
+                <div class="quick-view-section" id="quick-view-subtasks-section">
+                    <div class="quick-view-section-header">
+                        <div class="quick-view-section-title">
+                            <i class="fas fa-sitemap"></i> Sub-tasks <span class="badge" id="quick-view-subtasks-badge" style="font-size: 0.75rem; background: rgba(99, 102, 241, 0.2); color: #818cf8; border-radius: 9999px; padding: 2px 8px; margin-left: 6px;">0</span>
+                        </div>
+                    </div>
+                    <div class="quick-view-subtasks-list" id="quick-view-subtasks-list" style="margin-top: 8px;">
+                        <!-- List of subtasks populated dynamically -->
+                    </div>
+                    <div class="quick-view-add-subtask" style="display: flex; gap: 8px; margin-top: 10px;">
+                        <input type="text" id="quick-view-subtask-input" placeholder="Add a new sub-task..." style="flex: 1; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color, #374151); background: var(--bg-secondary, #1f2937); color: inherit; font-size: 0.85rem;" onkeydown="if(event.key==='Enter') addSubtaskFromQuickView();" />
+                        <button class="btn-primary-modal" onclick="addSubtaskFromQuickView()" style="padding: 6px 12px; font-size: 0.85rem; white-space: nowrap;"><i class="fas fa-plus"></i> Add Subtask</button>
+                    </div>
+                </div>
+
                 <!-- Dependencies Section -->
                 <div class="quick-view-section" id="quick-view-deps-section" style="display: none;">
                     <div class="quick-view-section-title"><i class="fas fa-link"></i> Dependencies</div>

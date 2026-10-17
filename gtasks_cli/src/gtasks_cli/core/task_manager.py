@@ -57,23 +57,34 @@ class TaskManager:
                    project: Optional[str] = None, tags: Optional[List[str]] = None,
                    notes: Optional[str] = None, recurrence_rule: Optional[str] = None,
                    tasklist_name: Optional[str] = None, tasklist_id: Optional[str] = None,
-                   estimated_duration: Optional[int] = None) -> Optional[Task]:
+                   estimated_duration: Optional[int] = None,
+                   parent_id: Optional[str] = None) -> Optional[Task]:
         """Create a new task."""
+        # Parse due date if provided
+        parsed_due = None
+        if due:
+            try:
+                parsed_due = datetime.fromisoformat(due)
+            except ValueError:
+                logger.warning(f"Could not parse due date: {due}")
+
         if self.use_google_tasks:
             # Create task via Google Tasks API
-            google_task = self.google_client.create_task(
+            temp_task = Task(
+                id=str(uuid.uuid4()),
                 title=title,
                 description=description,
-                due=due,
+                due=parsed_due,
                 priority=priority,
                 project=project,
                 tags=tags or [],
                 notes=notes,
-                recurrence_rule=recurrence_rule,
-                tasklist_name=tasklist_name,
-                tasklist_id=tasklist_id,
-                estimated_duration=estimated_duration
+                parent_id=parent_id,
+                tasklist_id=tasklist_id or "@default",
+                estimated_duration=estimated_duration,
+                recurrence_rule=recurrence_rule
             )
+            google_task = self.google_client.create_task(temp_task)
             
             if google_task:
                 # Convert Google Task to local Task model
@@ -87,6 +98,8 @@ class TaskManager:
                     project=project,
                     tags=tags or [],
                     tasklist_id=google_task.tasklist_id,
+                    parent_id=google_task.parent_id or parent_id,
+                    position=google_task.position,
                     notes=notes,
                     created_at=google_task.created_at,
                     modified_at=google_task.modified_at,
@@ -116,23 +129,16 @@ class TaskManager:
                 id=str(uuid.uuid4()),
                 title=title,
                 description=description,
+                due=parsed_due,
                 priority=priority,
                 project=project,
                 tags=tags or [],
                 notes=notes,
+                parent_id=parent_id,
                 tasklist_id=tasklist_id or "default",
                 estimated_duration=estimated_duration,
                 recurrence_rule=recurrence_rule
             )
-            
-            # Parse due date if provided
-            if due:
-                try:
-                    # Try parsing as ISO format
-                    task.due = datetime.fromisoformat(due)
-                except ValueError:
-                    # Handle other date formats as needed
-                    logger.warning(f"Could not parse due date: {due}")
             
             # Save to local storage
             if isinstance(self.storage, SQLiteStorage):

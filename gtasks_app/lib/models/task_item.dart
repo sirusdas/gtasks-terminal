@@ -19,6 +19,8 @@ class TaskItem {
   final String cleanNotes;
   final List<String> allTags;
   final String? formattedDueDate;
+  final String? parentId;
+  final int position;
 
   TaskItem({
     required this.id,
@@ -39,6 +41,8 @@ class TaskItem {
     String? cleanNotes,
     List<String>? allTags,
     String? formattedDueDate,
+    this.parentId,
+    this.position = 0,
   })  : formattedDueDate = formattedDueDate ??
             (due != null ? (due.length > 10 ? due.substring(0, 10) : due) : null),
         cleanNotes = (cleanNotes != null && cleanNotes.isNotEmpty)
@@ -57,6 +61,7 @@ class TaskItem {
 
   bool get isCompleted => status.toLowerCase() == 'completed';
   bool get hasSpaces => spaces.isNotEmpty;
+  bool get isSubtask => parentId != null && parentId!.isNotEmpty;
 
   String get spacesDisplay {
     if (spaces.isEmpty) return '';
@@ -123,6 +128,8 @@ class TaskItem {
       cleanNotes: parsed.cleanNotes,
       allTags: tagSet.toList(),
       formattedDueDate: formattedDue,
+      parentId: json['parent_id']?.toString() ?? json['parent']?.toString(),
+      position: int.tryParse(json['position']?.toString() ?? '0') ?? 0,
     );
   }
 
@@ -138,6 +145,8 @@ class TaskItem {
       'account': account,
       'tags': tags,
       'spaces': spaces,
+      'parent_id': parentId,
+      'position': position,
     };
   }
 
@@ -157,6 +166,8 @@ class TaskItem {
     String? completedAt,
     bool? isRecurring,
     String? recurrenceType,
+    String? parentId,
+    int? position,
   }) {
     return TaskItem(
       id: id ?? this.id,
@@ -174,6 +185,8 @@ class TaskItem {
       completedAt: completedAt ?? this.completedAt,
       isRecurring: isRecurring ?? this.isRecurring,
       recurrenceType: recurrenceType ?? this.recurrenceType,
+      parentId: parentId ?? this.parentId,
+      position: position ?? this.position,
     );
   }
 }

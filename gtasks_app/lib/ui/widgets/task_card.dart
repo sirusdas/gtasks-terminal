@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/task_item.dart';
+import '../../providers/task_provider.dart';
 import 'task_detail_modal.dart';
 
 class TaskCard extends StatefulWidget {
@@ -54,6 +56,7 @@ class _TaskCardState extends State<TaskCard> {
     final isDone = task.isCompleted;
     final cleanNotes = task.cleanNotes;
     final tags = task.allTags;
+    final subtasksCount = context.watch<TaskProvider>().getSubtasksCount(task.id);
 
     return Card(
       elevation: 0,
@@ -170,6 +173,24 @@ class _TaskCardState extends State<TaskCard> {
                             label: Text(
                               task.formattedDueDate!,
                               style: const TextStyle(fontSize: 11),
+                            ),
+                          ),
+                        if (task.isSubtask)
+                          _TaskBadge(
+                            avatar: const Icon(Icons.subdirectory_arrow_right, size: 12, color: Colors.teal),
+                            backgroundColor: Colors.teal.withValues(alpha: 0.12),
+                            label: const Text(
+                              '↳ Sub-task',
+                              style: TextStyle(fontSize: 10.5, color: Colors.teal, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        if (subtasksCount > 0)
+                          _TaskBadge(
+                            avatar: const Icon(Icons.account_tree_outlined, size: 12, color: Colors.indigo),
+                            backgroundColor: Colors.indigo.withValues(alpha: 0.12),
+                            label: Text(
+                              '↳ $subtasksCount subtask${subtasksCount > 1 ? 's' : ''}',
+                              style: const TextStyle(fontSize: 10.5, color: Colors.indigo, fontWeight: FontWeight.bold),
                             ),
                           ),
                       ],

@@ -22,7 +22,7 @@ class LocalDatabase {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _onUpgradeDB,
     );
@@ -54,6 +54,11 @@ class LocalDatabase {
         );
       ''');
     }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE tasks ADD COLUMN parent_id TEXT;');
+      await db.execute('ALTER TABLE tasks ADD COLUMN position INTEGER DEFAULT 0;');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_id);');
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -76,6 +81,8 @@ class LocalDatabase {
         completed_at TEXT,
         is_recurring INTEGER DEFAULT 0,
         recurrence_type TEXT,
+        parent_id TEXT,
+        position INTEGER DEFAULT 0,
         sync_status TEXT DEFAULT 'synced' -- 'synced', 'pending_insert', 'pending_update', 'pending_delete'
       )
     ''');
@@ -115,6 +122,7 @@ class LocalDatabase {
     await db.execute('CREATE INDEX idx_tasks_status ON tasks(status);');
     await db.execute('CREATE INDEX idx_tasks_account ON tasks(account);');
     await db.execute('CREATE INDEX idx_tasks_list_id ON tasks(list_id);');
+    await db.execute('CREATE INDEX idx_tasks_parent_id ON tasks(parent_id);');
     await db.execute('CREATE INDEX idx_ai_messages_session ON ai_messages(session_id);');
   }
 
@@ -357,6 +365,8 @@ class LocalDatabase {
       cleanNotes: parsed.cleanNotes,
       allTags: allTagsSet.toList(),
       formattedDueDate: formattedDue,
+      parentId: row['parent_id']?.toString(),
+      position: int.tryParse(row['position']?.toString() ?? '0') ?? 0,
     );
   }
 
@@ -378,6 +388,8 @@ class LocalDatabase {
       'completed_at': task.completedAt,
       'is_recurring': task.isRecurring ? 1 : 0,
       'recurrence_type': task.recurrenceType,
+      'parent_id': task.parentId,
+      'position': task.position,
       'sync_status': syncStatus,
     };
   }

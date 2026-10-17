@@ -84,9 +84,19 @@ class SQLiteStorage:
                         actual_duration INTEGER,
                         is_recurring BOOLEAN,
                         recurring_task_id TEXT,
-                        tasklist_id TEXT
+                        tasklist_id TEXT,
+                        parent_id TEXT,
+                        position INTEGER DEFAULT 0
                     )
                 ''')
+                
+                # Check and add parent_id and position if missing in existing table
+                cursor.execute("PRAGMA table_info(tasks)")
+                existing_cols = {col[1] for col in cursor.fetchall()}
+                if 'parent_id' not in existing_cols:
+                    cursor.execute('ALTER TABLE tasks ADD COLUMN parent_id TEXT;')
+                if 'position' not in existing_cols:
+                    cursor.execute('ALTER TABLE tasks ADD COLUMN position INTEGER DEFAULT 0;')
                 
                 # Create lists table for task list mappings with foreign key constraint
                 cursor.execute('''
@@ -102,6 +112,7 @@ class SQLiteStorage:
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_list ON task_lists(list_name)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_id)')
                 
                 conn.commit()
                 logger.debug("Database initialized successfully")
@@ -134,8 +145,8 @@ class SQLiteStorage:
                             id, title, description, due, priority, status, project,
                             tags, notes, dependencies, recurrence_rule, created_at,
                             modified_at, completed_at, estimated_duration, actual_duration,
-                            is_recurring, recurring_task_id, tasklist_id
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            is_recurring, recurring_task_id, tasklist_id, parent_id, position
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         task.get('id'),
                         task.get('title'),
@@ -155,7 +166,9 @@ class SQLiteStorage:
                         task.get('actual_duration'),
                         task.get('is_recurring', False),
                         task.get('recurring_task_id'),
-                        task.get('tasklist_id')
+                        task.get('tasklist_id'),
+                        task.get('parent_id'),
+                        task.get('position', 0)
                     ))
                     
                     # Save list mapping if available and not None
@@ -189,7 +202,7 @@ class SQLiteStorage:
                         t.tags, t.notes, t.dependencies, t.recurrence_rule, t.created_at,
                         t.modified_at, t.completed_at, t.estimated_duration, t.actual_duration,
                         t.is_recurring, t.recurring_task_id, t.tasklist_id,
-                        l.list_name
+                        l.list_name, t.parent_id, t.position
                     FROM tasks t
                     LEFT JOIN task_lists l ON t.id = l.task_id
                 ''')
@@ -224,7 +237,9 @@ class SQLiteStorage:
                         'is_recurring': bool(row[16]) if row[16] is not None else False,
                         'recurring_task_id': row[17],
                         'tasklist_id': row[18] or "@default",
-                        'list_name': row[19] if len(row) > 19 else None
+                        'list_name': row[19] if len(row) > 19 else None,
+                        'parent_id': row[20] if len(row) > 20 else None,
+                        'position': row[21] if len(row) > 21 and row[21] is not None else 0
                     }
                     tasks.append(task)
                 

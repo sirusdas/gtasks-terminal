@@ -1216,6 +1216,7 @@ def api_create_task():
     status = data.get('status', 'pending')
     due = data.get('due', None)
     notes = data.get('notes', '')
+    parent_id = data.get('parent_id', None)
 
     import re
     import json
@@ -1236,6 +1237,7 @@ def api_create_task():
         'due': due,
         'list_title': list_title,
         'account_id': account_id,
+        'parent_id': parent_id,
         'created_at': now_iso,
         'modified_at': now_iso,
         'tags': extracted_tags,
@@ -1260,12 +1262,25 @@ def api_create_task():
             conn = sqlite3.connect(str(db_path))
             cursor = conn.cursor()
 
-            # Check table schema for list_title and tags
+            # Check table schema for list_title, tags, and parent_id
             cursor.execute("PRAGMA table_info(tasks)")
             columns = [col[1] for col in cursor.fetchall()]
 
             tags_json = json.dumps(extracted_tags)
-            if 'list_title' in columns:
+            has_parent = 'parent_id' in columns
+            has_list = 'list_title' in columns
+
+            if has_parent and has_list:
+                cursor.execute("""
+                    INSERT INTO tasks (id, title, description, notes, priority, status, due, tags, created_at, modified_at, list_title, parent_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (task_id, title, notes, notes, priority, status, due, tags_json, now_iso, now_iso, list_title, parent_id))
+            elif has_parent:
+                cursor.execute("""
+                    INSERT INTO tasks (id, title, description, notes, priority, status, due, tags, created_at, modified_at, parent_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (task_id, title, notes, notes, priority, status, due, tags_json, now_iso, now_iso, parent_id))
+            elif has_list:
                 cursor.execute("""
                     INSERT INTO tasks (id, title, description, notes, priority, status, due, tags, created_at, modified_at, list_title)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1280,7 +1295,7 @@ def api_create_task():
 
             conn.commit()
             conn.close()
-            print(f'[API] Task {task_id} created in local DB for account {account_id}')
+            print(f'[API] Task {task_id} (parent: {parent_id}) created in local DB for account {account_id}')
     except Exception as e:
         print(f'[API] Error saving new task to local DB: {e}')
 
@@ -1330,6 +1345,7 @@ def api_create_task():
                 due=due,
                 status=cli_status,
                 priority=cli_prio,
+                parent_id=parent_id,
                 tasklist_id=target_list_id
             )
 
@@ -1448,10 +1464,13 @@ def update_task(task_id):
                 set_clauses.append('tags = ?')
                 values.append(json.dumps(extracted_tags))
 
-            for field in ['title', 'priority', 'status', 'due', 'list_title']:
+            if 'parent_id' in data:
+                target_task['parent_id'] = data['parent_id']
+
+            for field in ['title', 'priority', 'status', 'due', 'list_title', 'parent_id']:
                 if field in data and field in columns:
                     set_clauses.append(f'{field} = ?')
-                    values.append(target_task[field])
+                    values.append(target_task.get(field))
 
             values.append(task_id)
             query = f"UPDATE tasks SET {', '.join(set_clauses)} WHERE id = ?"

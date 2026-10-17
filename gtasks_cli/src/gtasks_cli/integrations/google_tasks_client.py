@@ -261,11 +261,17 @@ class GoogleTasksClient:
             
             logger.debug(f"Creating task in tasklist: {tasklist_id}")
             
-            # Create the task
-            result = self.service.tasks().insert(
-                tasklist=tasklist_id,
-                body=task_data
-            ).execute()
+            # Create the task (with parent if this is a subtask)
+            insert_kwargs = {
+                'tasklist': tasklist_id,
+                'body': task_data
+            }
+            parent_id = getattr(task, 'parent_id', None)
+            if parent_id:
+                insert_kwargs['parent'] = parent_id
+                logger.info(f"Nesting task under parent ID: {parent_id}")
+                
+            result = self.service.tasks().insert(**insert_kwargs).execute()
             
             # Convert to Task object
             created_task = self._convert_google_task_to_local(result)
@@ -815,6 +821,14 @@ class GoogleTasksClient:
                     except ValueError:
                         pass
             
+            # Parse parent and position
+            parent_id = google_task.get('parent')
+            raw_pos = google_task.get('position', 0)
+            try:
+                position = int(raw_pos) if str(raw_pos).isdigit() else 0
+            except Exception:
+                position = 0
+
             # Create the local task
             local_task = Task(
                 id=google_task['id'],
@@ -826,6 +840,8 @@ class GoogleTasksClient:
                 project=None,  # Google Tasks doesn't have projects
                 tags=[],  # Google Tasks doesn't have tags
                 tasklist_id='@default',  # Default tasklist
+                parent_id=parent_id,
+                position=position,
                 created_at=created_at,
                 modified_at=created_at,
                 completed_at=completed_at
@@ -834,4 +850,44 @@ class GoogleTasksClient:
             return local_task
         except Exception as e:
             logger.error(f"Failed to convert Google task to local format: {e}")
+            return None
+
+    def move_task(self, task_id: str, tasklist_id: str = '@default', 
+                  parent_id: Optional[str] = None, previous_id: Optional[str] = None) -> Optional[Task]:
+        """
+        Move a task in Google Tasks, either reordering it or changing its parent (making it a subtask).
+        
+        Args:
+            task_id: ID of the task to move
+            tasklist_id: Task list ID
+            parent_id: New parent task ID (optional)
+            previous_id: ID of the sibling task that should precede this task (optional)
+            
+        Returns:
+            Task: Updated task object or None
+        """
+        try:
+            if not self.service and not self.connect():
+                logger.error("Not connected to Google Tasks")
+                return None
+                
+            if tasklist_id == 'default':
+                tasklist_id = '@default'
+                
+            move_params = {
+                'tasklist': tasklist_id,
+                'task': task_id,
+            }
+            if parent_id is not None:
+                move_params['parent'] = parent_id
+            if previous_id is not None:
+                move_params['previous'] = previous_id
+                
+            result = self.service.tasks().move(**move_params).execute()
+            updated_task = self._convert_google_task_to_local(result)
+            if updated_task:
+                updated_task.tasklist_id = tasklist_id
+            return updated_task
+        except Exception as e:
+            logger.error(f"Failed to move task '{task_id}' in Google Tasks: {e}")
             return None

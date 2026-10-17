@@ -44,73 +44,81 @@ def display_tasks_grouped_by_list(tasks: List[Task]) -> None:
         table.add_column("Created", style="dim", min_width=10)
         table.add_column("Modified", style="dim", min_width=10)
         
+        # Organize into hierarchy (top-level tasks and subtasks)
+        task_id_map = {t.id: t for t in list_tasks}
+        subtasks_by_parent = defaultdict(list)
+        top_tasks = []
+        for t in list_tasks:
+            p_id = getattr(t, 'parent_id', None)
+            if p_id and p_id in task_id_map:
+                subtasks_by_parent[p_id].append(t)
+            else:
+                top_tasks.append(t)
+        
+        def _format_due(due_val):
+            if not due_val:
+                return ""
+            d_date = due_val.date() if isinstance(due_val, datetime) else due_val
+            today = datetime.now().date()
+            diff = (d_date - today).days
+            if diff < 0:
+                return f"[red]{d_date}[/red]"
+            elif diff == 0:
+                return f"[yellow]{d_date}[/yellow]"
+            elif diff <= 3:
+                return f"[orange1]{d_date}[/orange1]"
+            elif diff <= 7:
+                return f"[yellow]{d_date}[/yellow]"
+            else:
+                return f"[green]{d_date}[/green]"
+
+        def _format_priority(prio_val):
+            val = prio_val.value if hasattr(prio_val, 'value') else str(prio_val)
+            p_colors = {'critical': 'red', 'high': 'orange1', 'medium': 'yellow', 'low': 'green'}
+            return f"[{p_colors.get(val, 'white')}]{val.title()}[/{p_colors.get(val, 'white')}]"
+
+        def _format_status(status_val):
+            val = status_val.value if hasattr(status_val, 'value') else str(status_val)
+            s_colors = {'pending': 'yellow', 'in_progress': 'blue', 'completed': 'green', 'waiting': 'magenta', 'deleted': 'red'}
+            return f"[{s_colors.get(val, 'white')}]{val.replace('_', ' ').title()}[/{s_colors.get(val, 'white')}]"
+
         # Add tasks to table
-        for task in list_tasks:
-            # Format task number
-            task_number = str(task_count)
+        for task in top_tasks:
+            parent_no = str(task_count)
             task_count += 1
             
-            # Format task title with notes indicator
             task_title = task.title
             if task.notes:
                 task_title = f"{task_title} [italic](+)[/italic]"
             
-            # Format due date with color coding
-            due_date_str = ""
-            if task.due:
-                due_date = task.due.date() if isinstance(task.due, datetime) else task.due
-                today = datetime.now().date()
-                diff = (due_date - today).days
-                
-                if diff < 0:
-                    due_date_str = f"[red]{due_date}[/red]"  # Overdue
-                elif diff == 0:
-                    due_date_str = f"[yellow]{due_date}[/yellow]"  # Today
-                elif diff <= 3:
-                    due_date_str = f"[orange1]{due_date}[/orange1]"  # Due soon
-                elif diff <= 7:
-                    due_date_str = f"[yellow]{due_date}[/yellow]"  # This week
-                else:
-                    due_date_str = f"[green]{due_date}[/green]"  # Future
-            
-            # Format priority with color coding
-            # Handle both string and enum priorities
-            priority_value = task.priority
-            if hasattr(task.priority, 'value'):
-                priority_value = task.priority.value
-            
-            priority_colors = {
-                'critical': 'red',
-                'high': 'orange1',
-                'medium': 'yellow',
-                'low': 'green'
-            }
-            priority_str = f"[{priority_colors.get(priority_value, 'white')}]{priority_value.title()}[/{priority_colors.get(priority_value, 'white')}]"
-            
-            # Format status with color coding
-            # Handle both string and enum statuses
-            status_value = task.status
-            if hasattr(task.status, 'value'):
-                status_value = task.status.value
-                
-            status_colors = {
-                'pending': 'yellow',
-                'in_progress': 'blue',
-                'completed': 'green',
-                'waiting': 'magenta',
-                'deleted': 'red'
-            }
-            status_str = f"[{status_colors.get(status_value, 'white')}]{status_value.replace('_', ' ').title()}[/{status_colors.get(status_value, 'white')}]"
+            children = subtasks_by_parent.get(task.id, [])
+            if children:
+                task_title = f"{task_title} [cyan]({len(children)} subtask{'s' if len(children) != 1 else ''})[/cyan]"
             
             table.add_row(
-                task_number,
+                parent_no,
                 task_title,
-                due_date_str,
-                priority_str,
-                status_str,
+                _format_due(task.due),
+                _format_priority(task.priority),
+                _format_status(task.status),
                 task.created_at.strftime('%Y-%m-%d') if task.created_at else "",
                 task.modified_at.strftime('%Y-%m-%d') if task.modified_at else ""
             )
+
+            # Add nested subtasks
+            for sub_idx, sub in enumerate(children, 1):
+                sub_title = f"  ↳ [dim]{sub.title}[/dim]"
+                if sub.notes:
+                    sub_title = f"{sub_title} [italic](+)[/italic]"
+                table.add_row(
+                    f"[dim]{parent_no}.{sub_idx}[/dim]",
+                    sub_title,
+                    _format_due(sub.due),
+                    _format_priority(sub.priority),
+                    _format_status(sub.status),
+                    sub.created_at.strftime('%Y-%m-%d') if sub.created_at else "",
+                    sub.modified_at.strftime('%Y-%m-%d') if sub.modified_at else ""
+                )
         
         console.print(table)
         console.print()  # Add spacing between lists

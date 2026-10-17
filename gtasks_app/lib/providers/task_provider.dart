@@ -7,6 +7,7 @@ import '../models/task_item.dart';
 import '../models/account.dart';
 import '../models/task_tab.dart';
 import '../services/widget_service.dart';
+import '../services/notification_service.dart';
 import '../storage/local_database.dart';
 import '../utils/notes_parser.dart';
 
@@ -18,6 +19,25 @@ class TaskProvider with ChangeNotifier {
 
   List<TaskItem> _tasks = [];
   List<GTasksAccount> _accounts = [];
+
+  List<TaskItem> getSubtasks(String parentTaskId) {
+    return _tasks
+        .where((t) => t.parentId == parentTaskId && t.status != 'deleted')
+        .toList()
+      ..sort((a, b) => a.position.compareTo(b.position));
+  }
+
+  int getSubtasksCount(String parentTaskId) {
+    return _tasks.where((t) => t.parentId == parentTaskId && t.status != 'deleted').length;
+  }
+
+  TaskItem? getParentTask(String parentId) {
+    try {
+      return _tasks.firstWhere((t) => t.id == parentId);
+    } catch (_) {
+      return null;
+    }
+  }
   String _selectedAccount = 'all';
   String _statusFilter = 'pending'; // 'pending', 'completed', 'all'
   String _searchQuery = '';
@@ -764,6 +784,7 @@ class TaskProvider with ChangeNotifier {
     }
     _recomputeAllCaches();
     notifyListeners();
+    NotificationService().syncAllTaskReminders(_tasks);
   }
 
   Future<bool> syncGoogleTasks({String? account, bool syncAll = false}) async {
@@ -1193,11 +1214,15 @@ class TaskProvider with ChangeNotifier {
       if (targetTask != null) {
         _syncStandaloneTaskToGoogle(targetTask, isComplete: true);
       }
+      NotificationService().cancelReminder(taskId.hashCode);
       return true;
     }
 
     final acc = targetTask?.account ?? (_selectedAccount == 'all' ? 'default' : _selectedAccount);
     final success = await apiClient.completeTask(taskId, account: acc);
+    if (success) {
+      NotificationService().cancelReminder(taskId.hashCode);
+    }
     return success;
   }
 
@@ -1210,6 +1235,7 @@ class TaskProvider with ChangeNotifier {
     String? priority,
     List<String>? tags,
     Map<String, List<String>>? spaces,
+    String? parentId,
   }) async {
     final effectiveAccount = account ??
         ((_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
@@ -1231,12 +1257,14 @@ class TaskProvider with ChangeNotifier {
         tags: effectiveTags,
         spaces: spaces,
         account: effectiveAccount,
+        parentId: parentId,
         createdAt: DateTime.now().toUtc().toIso8601String(),
       );
       await localDb.upsertTask(newTask, syncStatus: 'pending_insert');
       await refreshTasks();
       // Sync immediately to Google Tasks in background
       _syncStandaloneTaskToGoogle(newTask, isCreate: true);
+      NotificationService().scheduleTaskReminder(newTask);
       return true;
     }
 
@@ -1249,6 +1277,7 @@ class TaskProvider with ChangeNotifier {
         listTitle: effectiveList,
         priority: priority,
         tags: tags,
+        parentId: parentId,
       );
       if (success) {
         await refreshTasks();
@@ -1271,6 +1300,7 @@ class TaskProvider with ChangeNotifier {
     String? priority,
     List<String>? tags,
     Map<String, List<String>>? spaces,
+    String? parentId,
   }) async {
     final effectiveAccount = account ??
         ((_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
@@ -1296,10 +1326,12 @@ class TaskProvider with ChangeNotifier {
           account: effectiveAccount,
           calculatedPriority: newPriority,
           createdAt: existing.createdAt,
+          parentId: parentId ?? existing.parentId,
         );
         await localDb.upsertTask(updated, syncStatus: 'pending_update');
         await refreshTasks();
         _syncStandaloneTaskToGoogle(updated, isUpdate: true);
+        NotificationService().scheduleTaskReminder(updated);
         return true;
       }
       return false;
@@ -1314,6 +1346,7 @@ class TaskProvider with ChangeNotifier {
       listTitle: listTitle,
       priority: priority,
       tags: tags,
+      parentId: parentId,
     );
     if (success) {
       await refreshTasks();
@@ -1323,6 +1356,7 @@ class TaskProvider with ChangeNotifier {
 
   Future<bool> deleteTask(String taskId, {String? account}) async {
     final effectiveAccount = account ?? (_selectedAccount == 'all' ? 'default' : _selectedAccount);
+    NotificationService().cancelReminder(taskId.hashCode);
     if (_isStandalone) {
       final existing = await localDb.getTaskById(taskId);
       await localDb.markTaskPendingDelete(taskId);
@@ -1599,6 +1633,7 @@ class TaskProvider with ChangeNotifier {
           due: task.due,
           listTitle: task.listTitle,
           account: accId,
+          parentId: task.parentId,
         );
         // Replace temporary local ID with Google's ID
         await localDb.deleteTask(task.id);

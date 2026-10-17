@@ -4893,6 +4893,34 @@ export function openQuickView(taskId) {
         }
     }
 
+    // Sub-tasks Section
+    const subtasksList = document.getElementById('quick-view-subtasks-list');
+    const subtasksBadge = document.getElementById('quick-view-subtasks-badge');
+    const allTasksPool = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : (window._allLoadedTasks || []);
+    const childSubtasks = allTasksPool.filter(t => t.parent_id === taskId);
+    
+    if (subtasksBadge) {
+        subtasksBadge.textContent = childSubtasks.length;
+    }
+    if (subtasksList) {
+        if (childSubtasks.length === 0) {
+            subtasksList.innerHTML = '<div style="font-size: 0.82rem; color: var(--text-muted, #9ca3af); font-style: italic; padding: 4px 0;">No sub-tasks yet. Add one below!</div>';
+        } else {
+            subtasksList.innerHTML = childSubtasks.map(sub => {
+                const subCompleted = sub.status === 'completed';
+                return `
+                    <div class="subtask-row" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; margin-bottom: 4px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+                        <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                            <input type="checkbox" ${subCompleted ? 'checked' : ''} onchange="toggleSubtaskComplete('${sub.id}', '${taskId}')" style="cursor: pointer;" />
+                            <span style="font-size: 0.85rem; ${subCompleted ? 'text-decoration: line-through; opacity: 0.6;' : ''}">${escapeHtml(sub.title)}</span>
+                        </div>
+                        ${sub.due ? `<span style="font-size: 0.75rem; color: #f59e0b; margin-left: 8px;"><i class="fas fa-calendar-alt"></i> ${String(sub.due).slice(0, 10)}</span>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+
     // Complete / Pending Button
     const completeBtn = document.getElementById('quick-view-complete-btn');
     if (completeBtn) {
@@ -4911,6 +4939,61 @@ export function openQuickView(taskId) {
         modal.classList.add('active');
     }
 }
+
+export async function toggleSubtaskComplete(subtaskId, parentId) {
+    if (typeof completeTask === 'function') {
+        await completeTask(subtaskId);
+        setTimeout(() => {
+            if (parentId) openQuickView(parentId);
+        }, 300);
+    }
+}
+window.toggleSubtaskComplete = toggleSubtaskComplete;
+
+export async function addSubtaskFromQuickView() {
+    const input = document.getElementById('quick-view-subtask-input');
+    if (!input) return;
+    const title = input.value.trim();
+    if (!title) return;
+    const parentId = window.quickViewingTaskId;
+    if (!parentId) return;
+
+    const tasks = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : [];
+    let parentTask = tasks.find(t => t.id === parentId);
+    if (!parentTask && window._allLoadedTasks) {
+        parentTask = window._allLoadedTasks.find(t => t.id === parentId);
+    }
+    const listTitle = parentTask ? parentTask.list_title : 'My Tasks';
+    const accountId = parentTask ? (parentTask.account || parentTask.account_id) : (window.currentAccountId || 'default');
+
+    try {
+        const resp = await fetch('/api/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: title,
+                parent_id: parentId,
+                list_title: listTitle,
+                account_id: accountId
+            })
+        });
+        const res = await resp.json();
+        if (res.success) {
+            input.value = '';
+            if (typeof loadTasks === 'function') {
+                await loadTasks(accountId);
+            }
+            setTimeout(() => {
+                openQuickView(parentId);
+            }, 300);
+        } else {
+            alert('Failed to add subtask: ' + (res.error || 'Unknown error'));
+        }
+    } catch (e) {
+        console.error('Error adding subtask:', e);
+    }
+}
+window.addSubtaskFromQuickView = addSubtaskFromQuickView;
 
 export function closeQuickView() {
     const modal = document.getElementById('quick-view-modal');

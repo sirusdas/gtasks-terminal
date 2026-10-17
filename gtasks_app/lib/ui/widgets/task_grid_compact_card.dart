@@ -93,6 +93,11 @@ class TaskGridCompactCard extends StatelessWidget {
                 const SizedBox(width: 4),
               ],
 
+              if (task.isSubtask) ...[
+                const Icon(Icons.subdirectory_arrow_right, size: 12, color: Colors.teal),
+                const SizedBox(width: 2),
+              ],
+
               // Title (1 line)
               Expanded(
                 child: Text(

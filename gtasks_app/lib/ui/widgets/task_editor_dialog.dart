@@ -12,12 +12,14 @@ class TaskEditorDialog extends StatefulWidget {
   final TaskItem? task; // null when adding a new task
   final bool isFullScreen;
   final bool isFromWidget;
+  final String? parentId;
 
   const TaskEditorDialog({
     super.key,
     this.task,
     this.isFullScreen = true,
     this.isFromWidget = false,
+    this.parentId,
   });
 
   @override
@@ -35,12 +37,14 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
   String? _selectedAccount;
   String _selectedPriority = 'medium';
   DateTime? _selectedDueDate;
+  String? _parentId;
   bool _isFullscreenNotes = false;
   bool _isPreviewMode = false;
 
   @override
   void initState() {
     super.initState();
+    _parentId = widget.task?.parentId ?? widget.parentId;
     final task = widget.task;
     if (task != null) {
       _titleController = TextEditingController(text: task.title);
@@ -178,7 +182,9 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
 
     final provider = context.read<TaskProvider>();
     final listTitle = _listController.text.trim().isEmpty ? 'My Tasks' : _listController.text.trim();
-    final dueStr = _selectedDueDate?.toIso8601String();
+    final dueStr = _selectedDueDate != null
+        ? DateTime.utc(_selectedDueDate!.year, _selectedDueDate!.month, _selectedDueDate!.day).toIso8601String()
+        : null;
 
     if (widget.task != null) {
       provider.updateTask(
@@ -191,6 +197,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
         due: dueStr,
         tags: tags,
         spaces: spaces,
+        parentId: _parentId,
       );
     } else {
       provider.addTask(
@@ -202,6 +209,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
         due: dueStr,
         tags: tags,
         spaces: spaces,
+        parentId: _parentId,
       );
     }
 
@@ -212,7 +220,32 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
   }
 
   List<Widget> _buildFormFields(BuildContext context, ThemeData theme, TaskProvider provider, List<dynamic> availableAccounts, bool isEditing) {
+    final parentTask = _parentId != null ? provider.getParentTask(_parentId!) : null;
     return [
+      if (_parentId != null) ...[
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.teal.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.subdirectory_arrow_right, size: 16, color: Colors.teal),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Sub-task of: ${parentTask?.title ?? _parentId}',
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.teal),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
       const SizedBox(height: 6),
       TextField(
         controller: _titleController,
