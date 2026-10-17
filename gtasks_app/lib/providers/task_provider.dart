@@ -8,6 +8,7 @@ import '../models/account.dart';
 import '../models/task_tab.dart';
 import '../services/widget_service.dart';
 import '../services/notification_service.dart';
+import '../services/subscriber_service.dart';
 import '../storage/local_database.dart';
 import '../utils/notes_parser.dart';
 
@@ -708,6 +709,11 @@ class TaskProvider with ChangeNotifier {
         _accounts = accountsList;
       }
       _accounts = _accounts.where((a) => !_deletedAccounts.contains(a.id)).toList();
+      for (final acc in _accounts) {
+        if (acc.email != null && acc.email!.isNotEmpty) {
+          SubscriberService().syncSubscriber(email: acc.email!, name: acc.name, accountId: acc.id);
+        }
+      }
       await refreshTasks();
     } catch (e) {
       _errorMessage = e.toString();

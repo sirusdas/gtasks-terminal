@@ -543,6 +543,35 @@ def api_update_settings_root():
     from routes.api import api_update_settings
     return api_update_settings()
 
+@app.route(f'{BASE_PATH}/api/backups', methods=['GET'])
+@app.route('/api/backups', methods=['GET'])
+def api_backups_root():
+    """List backups"""
+    from routes.api import api_list_backups
+    return api_list_backups()
+
+@app.route(f'{BASE_PATH}/api/backups/create', methods=['POST'])
+@app.route('/api/backups/create', methods=['POST'])
+def api_backups_create_root():
+    """Create backup snapshot"""
+    from routes.api import api_create_backup
+    return api_create_backup()
+
+@app.route(f'{BASE_PATH}/api/backups/restore', methods=['POST'])
+@app.route('/api/backups/restore', methods=['POST'])
+def api_backups_restore_root():
+    """Restore from backup"""
+    from routes.api import api_restore_backup
+    return api_restore_backup()
+
+@app.route(f'{BASE_PATH}/api/backups/download/<filename>', methods=['GET'])
+@app.route('/api/backups/download/<filename>', methods=['GET'])
+def api_backups_download_root(filename):
+    """Download backup file"""
+    from routes.api import api_download_backup
+    return api_download_backup(filename)
+
+
 @app.route('/api/tasks/<task_id>/delete', methods=['POST'])
 def api_delete_task_root(task_id):
     """Soft delete a task (local development)"""

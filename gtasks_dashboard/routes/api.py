@@ -1,7 +1,7 @@
 """
 API Routes
 """
-from flask import Blueprint, jsonify, request, Response
+from flask import Blueprint, jsonify, request, Response, send_from_directory
 from typing import Optional
 from services.data_manager import DataManager
 import os
@@ -656,6 +656,155 @@ def api_restore_account(account_id):
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/backups', methods=['GET'])
+def api_list_backups():
+    """List all available database snapshots and JSON backups."""
+    import sqlite3
+    from datetime import datetime
+    from pathlib import Path
+
+    bdir = Path.home() / '.gtasks' / 'backups'
+    if not bdir.exists():
+        return jsonify({'backups': []})
+
+    db_files = sorted(bdir.glob("tasks_backup_*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+    backups = []
+    for f in db_files:
+        stat = f.stat()
+        created = datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+        size_kb = stat.st_size / 1024
+        task_count = 0
+        try:
+            conn = sqlite3.connect(str(f))
+            task_count = conn.cursor().execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+            conn.close()
+        except Exception:
+            pass
+
+        json_companion = f.with_suffix('.json')
+        backups.append({
+            'filename': f.name,
+            'created_at': created,
+            'size_kb': round(size_kb, 1),
+            'task_count': task_count,
+            'has_json': json_companion.exists()
+        })
+    return jsonify({'backups': backups})
+
+
+@api.route('/backups/create', methods=['POST'])
+def api_create_backup():
+    """Create a new database backup snapshot and JSON export."""
+    import shutil
+    import sqlite3
+    import json
+    from datetime import datetime
+    from pathlib import Path
+
+    try:
+        data = request.get_json(silent=True) or {}
+        note = data.get('note', 'Manual Web Snapshot')
+        account = data.get('account')
+
+        gtasks_dir = Path.home() / '.gtasks'
+        if account and account.lower() not in ('default', 'personal'):
+            gtasks_dir = gtasks_dir / account
+        db_path = gtasks_dir / 'tasks.db'
+
+        if not db_path.exists():
+            return jsonify({'success': False, 'error': f'Database not found: {db_path}'}), 404
+
+        bdir = Path.home() / '.gtasks' / 'backups'
+        bdir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        db_backup_path = bdir / f"tasks_backup_{timestamp}.db"
+        json_backup_path = bdir / f"tasks_backup_{timestamp}.json"
+
+        shutil.copy2(db_path, db_backup_path)
+
+        tasks_data = []
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        try:
+            c.execute("SELECT * FROM tasks")
+            tasks_data = [dict(r) for r in c.fetchall()]
+        except Exception:
+            pass
+        conn.close()
+
+        with open(json_backup_path, 'w', encoding='utf-8') as jf:
+            json.dump({
+                'version': 1,
+                'created_at': datetime.now().isoformat(),
+                'note': note,
+                'task_count': len(tasks_data),
+                'tasks': tasks_data,
+            }, jf, indent=2, default=str)
+
+        return jsonify({
+            'success': True,
+            'filename': db_backup_path.name,
+            'task_count': len(tasks_data),
+            'size_kb': round(db_backup_path.stat().st_size / 1024, 1),
+            'message': f'Backup created: {db_backup_path.name}'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/backups/restore', methods=['POST'])
+def api_restore_backup():
+    """Restore database from a backup file."""
+    import shutil
+    import sqlite3
+    import time
+    from pathlib import Path
+
+    try:
+        data = request.get_json(silent=True) or {}
+        filename = data.get('filename')
+        if not filename:
+            return jsonify({'success': False, 'error': 'Filename is required'}), 400
+
+        bdir = Path.home() / '.gtasks' / 'backups'
+        target_path = bdir / filename
+        if not target_path.exists():
+            return jsonify({'success': False, 'error': f'Backup file not found: {filename}'}), 404
+
+        db_path = Path.home() / '.gtasks' / 'tasks.db'
+
+        # Safety snapshot
+        if db_path.exists():
+            safety = bdir / f"tasks_backup_pre_restore_{int(time.time())}.db"
+            shutil.copy2(db_path, safety)
+
+        shutil.copy2(target_path, db_path)
+
+        conn = sqlite3.connect(str(db_path))
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM tasks")
+        task_count = c.fetchone()[0]
+        conn.close()
+
+        refresh_dashboard_cache()
+        return jsonify({
+            'success': True,
+            'task_count': task_count,
+            'message': f'Successfully restored from {filename} ({task_count} tasks)'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/backups/download/<filename>', methods=['GET'])
+def api_download_backup(filename):
+    """Download a backup file."""
+    from pathlib import Path
+    bdir = Path.home() / '.gtasks' / 'backups'
+    return send_from_directory(str(bdir), filename, as_attachment=True)
 
 
 
