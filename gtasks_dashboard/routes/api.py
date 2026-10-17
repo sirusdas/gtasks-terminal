@@ -1787,6 +1787,190 @@ def api_parse_tag_filter():
     })
 
 
+@api.route('/tags/<tag_name>', methods=['DELETE'])
+@api.route('/tags/delete', methods=['POST'])
+def api_delete_tag(tag_name=None):
+    """Remove a tag globally from tasks (or scoped to an account)."""
+    data = request.get_json(silent=True) or {}
+    target_tag = (tag_name or data.get('tag') or request.args.get('tag') or '').strip().lstrip('#')
+    if not target_tag:
+        return jsonify({'success': False, 'message': 'No tag specified'}), 400
+
+    account_id = data.get('account') or data.get('account_id') or request.args.get('account') or _dashboard_state.get('current_account')
+
+    from gtasks_cli.utils.space_extractor import split_notes_and_metadata, combine_notes_and_metadata
+    from datetime import datetime
+    import sqlite3
+    import json
+    from pathlib import Path
+
+    gtasks_home = Path.home() / '.gtasks'
+    updated_count = 0
+
+    accounts_to_search = [account_id] if account_id and account_id != 'all' and account_id in _dashboard_state['tasks'] else list(_dashboard_state['tasks'].keys())
+
+    for acc in accounts_to_search:
+        db_path = gtasks_home / acc / 'tasks.db'
+        if not db_path.exists():
+            db_path = gtasks_home / 'tasks.db'
+
+        db_conn = None
+        if db_path.exists():
+            db_conn = sqlite3.connect(str(db_path))
+
+        tasks_list = _dashboard_state['tasks'].get(acc, [])
+        for task in tasks_list:
+            raw_notes = task.get('notes') or task.get('description') or ''
+            clean_notes, tags, spaces = split_notes_and_metadata(raw_notes)
+
+            matching = [t for t in tags if t.lower() == target_tag.lower()]
+            if matching or (task.get('tags') and any(t.lower() == target_tag.lower() for t in task['tags'])):
+                new_tags = [t for t in tags if t.lower() != target_tag.lower()]
+                new_notes = combine_notes_and_metadata(clean_notes, new_tags, spaces)
+
+                task['notes'] = new_notes
+                task['description'] = new_notes
+                task['tags'] = new_tags
+                task['modified_at'] = datetime.now().isoformat()
+
+                if db_conn:
+                    try:
+                        cursor = db_conn.cursor()
+                        cursor.execute("PRAGMA table_info(tasks)")
+                        cols = [c[1] for c in cursor.fetchall()]
+                        set_parts = ['modified_at = ?']
+                        vals = [task['modified_at']]
+                        if 'notes' in cols:
+                            set_parts.append('notes = ?')
+                            vals.append(new_notes)
+                        if 'description' in cols:
+                            set_parts.append('description = ?')
+                            vals.append(new_notes)
+                        if 'tags' in cols:
+                            set_parts.append('tags = ?')
+                            vals.append(json.dumps(new_tags))
+                        vals.append(task.get('id'))
+                        cursor.execute(f"UPDATE tasks SET {', '.join(set_parts)} WHERE id = ?", vals)
+                    except Exception as e:
+                        print(f"[API] Error updating task {task.get('id')} in DB: {e}")
+
+                updated_count += 1
+
+        if db_conn:
+            db_conn.commit()
+            db_conn.close()
+
+    try:
+        refresh_dashboard_cache()
+    except Exception as e:
+        print(f"[API] Error refreshing cache after tag deletion: {e}")
+
+    return jsonify({
+        'success': True,
+        'count': updated_count,
+        'message': f"Removed tag '#{target_tag}' from {updated_count} task(s)"
+    })
+
+
+@api.route('/spaces/<space_name>', methods=['DELETE'])
+@api.route('/spaces/delete', methods=['POST'])
+def api_delete_space(space_name=None):
+    """Remove a space or sub-space globally from tasks (or scoped to an account)."""
+    data = request.get_json(silent=True) or {}
+    target_space = (space_name or data.get('space') or request.args.get('space') or '').strip()
+    target_subspace = (data.get('subspace') or request.args.get('subspace') or '').strip()
+    if not target_space:
+        return jsonify({'success': False, 'message': 'No space specified'}), 400
+
+    account_id = data.get('account') or data.get('account_id') or request.args.get('account') or _dashboard_state.get('current_account')
+
+    from gtasks_cli.utils.space_extractor import split_notes_and_metadata, combine_notes_and_metadata
+    from datetime import datetime
+    import sqlite3
+    from pathlib import Path
+
+    gtasks_home = Path.home() / '.gtasks'
+    updated_count = 0
+
+    accounts_to_search = [account_id] if account_id and account_id != 'all' and account_id in _dashboard_state['tasks'] else list(_dashboard_state['tasks'].keys())
+
+    for acc in accounts_to_search:
+        db_path = gtasks_home / acc / 'tasks.db'
+        if not db_path.exists():
+            db_path = gtasks_home / 'tasks.db'
+
+        db_conn = None
+        if db_path.exists():
+            db_conn = sqlite3.connect(str(db_path))
+
+        tasks_list = _dashboard_state['tasks'].get(acc, [])
+        for task in tasks_list:
+            raw_notes = task.get('notes') or task.get('description') or ''
+            clean_notes, tags, spaces = split_notes_and_metadata(raw_notes)
+
+            matched_key = None
+            for k in spaces.keys():
+                if k.lower() == target_space.lower():
+                    matched_key = k
+                    break
+
+            if matched_key:
+                new_spaces = {k: list(v) for k, v in spaces.items()}
+                changed = False
+                if target_subspace:
+                    original_subs = new_spaces.get(matched_key, [])
+                    filtered_subs = [s for s in original_subs if s.lower() != target_subspace.lower()]
+                    if len(filtered_subs) != len(original_subs):
+                        new_spaces[matched_key] = filtered_subs
+                        changed = True
+                else:
+                    del new_spaces[matched_key]
+                    changed = True
+
+                if changed:
+                    new_notes = combine_notes_and_metadata(clean_notes, tags, new_spaces)
+                    task['notes'] = new_notes
+                    task['description'] = new_notes
+                    task['spaces'] = new_spaces
+                    task['modified_at'] = datetime.now().isoformat()
+
+                    if db_conn:
+                        try:
+                            cursor = db_conn.cursor()
+                            cursor.execute("PRAGMA table_info(tasks)")
+                            cols = [c[1] for c in cursor.fetchall()]
+                            set_parts = ['modified_at = ?']
+                            vals = [task['modified_at']]
+                            if 'notes' in cols:
+                                set_parts.append('notes = ?')
+                                vals.append(new_notes)
+                            if 'description' in cols:
+                                set_parts.append('description = ?')
+                                vals.append(new_notes)
+                            vals.append(task.get('id'))
+                            cursor.execute(f"UPDATE tasks SET {', '.join(set_parts)} WHERE id = ?", vals)
+                        except Exception as e:
+                            print(f"[API] Error updating task {task.get('id')} in DB: {e}")
+
+                    updated_count += 1
+
+        if db_conn:
+            db_conn.commit()
+            db_conn.close()
+
+    try:
+        refresh_dashboard_cache()
+    except Exception as e:
+        print(f"[API] Error refreshing cache after space deletion: {e}")
+
+    item_label = f"sub-space '{target_space} › {target_subspace}'" if target_subspace else f"space '{target_space}'"
+    return jsonify({
+        'success': True,
+        'count': updated_count,
+        'message': f"Removed {item_label} from {updated_count} task(s)"
+    })
+
+
 @api.route('/tasks/due-today')
 def api_tasks_due_today():
     """Get tasks due today"""

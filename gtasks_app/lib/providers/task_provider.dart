@@ -1344,6 +1344,197 @@ class TaskProvider with ChangeNotifier {
     return success;
   }
 
+  Future<int> removeTagGlobally(String tag, {String? account}) async {
+    final effectiveAccount = account ?? _selectedAccount;
+    final targetTag = tag.trim().toLowerCase().replaceAll(RegExp(r'^[\[#]+|[\]]+$'), '');
+    int updatedCount = 0;
+
+    if (_isStandalone) {
+      final List<TaskItem> tasksToUpdate = [];
+      for (int i = 0; i < _tasks.length; i++) {
+        final task = _tasks[i];
+        if (effectiveAccount != 'all' && effectiveAccount.isNotEmpty && task.account != effectiveAccount) {
+          continue;
+        }
+
+        final rawNotes = task.description ?? '';
+        final parsed = NotesParser.splitNotesAndMetadata(rawNotes);
+        final hasTag = parsed.tags.any((t) => t.toLowerCase() == targetTag) ||
+            task.tags.any((t) => t.toLowerCase() == targetTag);
+
+        if (hasTag) {
+          final newTags = parsed.tags.where((t) => t.toLowerCase() != targetTag).toList();
+          final newNotes = NotesParser.combineNotesAndMetadata(parsed.cleanNotes, newTags, spaces: parsed.spaces);
+          final updated = TaskItem(
+            id: task.id,
+            title: task.title,
+            description: newNotes,
+            due: task.due,
+            status: task.status,
+            tags: newTags,
+            spaces: parsed.spaces,
+            listId: task.listId,
+            listTitle: task.listTitle,
+            account: task.account,
+            calculatedPriority: task.calculatedPriority,
+            createdAt: task.createdAt,
+          );
+          _tasks[i] = updated;
+          tasksToUpdate.add(updated);
+          updatedCount++;
+        }
+      }
+
+      if (tasksToUpdate.isNotEmpty) {
+        await localDb.upsertTasks(tasksToUpdate, syncStatus: 'pending_update');
+        for (final t in tasksToUpdate) {
+          _syncStandaloneTaskToGoogle(t, isUpdate: true);
+        }
+      }
+      _recomputeAllCaches();
+      notifyListeners();
+      return updatedCount;
+    } else {
+      final success = await apiClient.deleteTag(targetTag, account: effectiveAccount);
+      if (success) {
+        await refreshTasks();
+        return 1;
+      }
+      return 0;
+    }
+  }
+
+  Future<int> removeSpaceGlobally(String space, {String? account}) async {
+    final effectiveAccount = account ?? _selectedAccount;
+    final targetSpace = space.trim().toLowerCase();
+    int updatedCount = 0;
+
+    if (_isStandalone) {
+      final List<TaskItem> tasksToUpdate = [];
+      for (int i = 0; i < _tasks.length; i++) {
+        final task = _tasks[i];
+        if (effectiveAccount != 'all' && effectiveAccount.isNotEmpty && task.account != effectiveAccount) {
+          continue;
+        }
+
+        final rawNotes = task.description ?? '';
+        final parsed = NotesParser.splitNotesAndMetadata(rawNotes);
+        final matchedKey = parsed.spaces.keys.firstWhere(
+          (k) => k.toLowerCase() == targetSpace,
+          orElse: () => '',
+        );
+
+        if (matchedKey.isNotEmpty) {
+          final newSpaces = Map<String, List<String>>.from(parsed.spaces);
+          newSpaces.remove(matchedKey);
+          final newNotes = NotesParser.combineNotesAndMetadata(parsed.cleanNotes, parsed.tags, spaces: newSpaces);
+          final updated = TaskItem(
+            id: task.id,
+            title: task.title,
+            description: newNotes,
+            due: task.due,
+            status: task.status,
+            tags: parsed.tags,
+            spaces: newSpaces,
+            listId: task.listId,
+            listTitle: task.listTitle,
+            account: task.account,
+            calculatedPriority: task.calculatedPriority,
+            createdAt: task.createdAt,
+          );
+          _tasks[i] = updated;
+          tasksToUpdate.add(updated);
+          updatedCount++;
+        }
+      }
+
+      if (tasksToUpdate.isNotEmpty) {
+        await localDb.upsertTasks(tasksToUpdate, syncStatus: 'pending_update');
+        for (final t in tasksToUpdate) {
+          _syncStandaloneTaskToGoogle(t, isUpdate: true);
+        }
+      }
+      _recomputeAllCaches();
+      notifyListeners();
+      return updatedCount;
+    } else {
+      final success = await apiClient.deleteSpace(space, account: effectiveAccount);
+      if (success) {
+        await refreshTasks();
+        return 1;
+      }
+      return 0;
+    }
+  }
+
+  Future<int> removeSubspaceGlobally(String space, String subspace, {String? account}) async {
+    final effectiveAccount = account ?? _selectedAccount;
+    final targetSpace = space.trim().toLowerCase();
+    final targetSubspace = subspace.trim().toLowerCase();
+    int updatedCount = 0;
+
+    if (_isStandalone) {
+      final List<TaskItem> tasksToUpdate = [];
+      for (int i = 0; i < _tasks.length; i++) {
+        final task = _tasks[i];
+        if (effectiveAccount != 'all' && effectiveAccount.isNotEmpty && task.account != effectiveAccount) {
+          continue;
+        }
+
+        final rawNotes = task.description ?? '';
+        final parsed = NotesParser.splitNotesAndMetadata(rawNotes);
+        final matchedKey = parsed.spaces.keys.firstWhere(
+          (k) => k.toLowerCase() == targetSpace,
+          orElse: () => '',
+        );
+
+        if (matchedKey.isNotEmpty) {
+          final currentSubs = parsed.spaces[matchedKey] ?? [];
+          final hasSub = currentSubs.any((s) => s.toLowerCase() == targetSubspace);
+          if (hasSub) {
+            final newSpaces = Map<String, List<String>>.from(parsed.spaces);
+            newSpaces[matchedKey] = currentSubs.where((s) => s.toLowerCase() != targetSubspace).toList();
+            final newNotes = NotesParser.combineNotesAndMetadata(parsed.cleanNotes, parsed.tags, spaces: newSpaces);
+            final updated = TaskItem(
+              id: task.id,
+              title: task.title,
+              description: newNotes,
+              due: task.due,
+              status: task.status,
+              tags: parsed.tags,
+              spaces: newSpaces,
+              listId: task.listId,
+              listTitle: task.listTitle,
+              account: task.account,
+              calculatedPriority: task.calculatedPriority,
+              createdAt: task.createdAt,
+            );
+            _tasks[i] = updated;
+            tasksToUpdate.add(updated);
+            updatedCount++;
+          }
+        }
+      }
+
+      if (tasksToUpdate.isNotEmpty) {
+        await localDb.upsertTasks(tasksToUpdate, syncStatus: 'pending_update');
+        for (final t in tasksToUpdate) {
+          _syncStandaloneTaskToGoogle(t, isUpdate: true);
+        }
+      }
+      _recomputeAllCaches();
+      notifyListeners();
+      return updatedCount;
+    } else {
+      final success = await apiClient.deleteSpace(space, subspace: subspace, account: effectiveAccount);
+      if (success) {
+        await refreshTasks();
+        return 1;
+      }
+      return 0;
+    }
+  }
+
   void _syncStandaloneTaskToGoogle(
     TaskItem task, {
     bool isCreate = false,

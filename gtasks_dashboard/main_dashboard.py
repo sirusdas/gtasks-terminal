@@ -497,6 +497,34 @@ def api_parse_tag_filter_root():
     from routes.api import api_parse_tag_filter
     return api_parse_tag_filter()
 
+@app.route(f'{BASE_PATH}/api/tags/<tag_name>', methods=['DELETE'])
+@app.route(f'{BASE_PATH}/api/tags/delete', methods=['POST'])
+def api_delete_tag_local(tag_name=None):
+    """Delete a tag globally (subpath deployment)"""
+    from routes.api import api_delete_tag
+    return api_delete_tag(tag_name)
+
+@app.route('/api/tags/<tag_name>', methods=['DELETE'])
+@app.route('/api/tags/delete', methods=['POST'])
+def api_delete_tag_root(tag_name=None):
+    """Delete a tag globally (local development)"""
+    from routes.api import api_delete_tag
+    return api_delete_tag(tag_name)
+
+@app.route(f'{BASE_PATH}/api/spaces/<space_name>', methods=['DELETE'])
+@app.route(f'{BASE_PATH}/api/spaces/delete', methods=['POST'])
+def api_delete_space_local(space_name=None):
+    """Delete a space or sub-space globally (subpath deployment)"""
+    from routes.api import api_delete_space
+    return api_delete_space(space_name)
+
+@app.route('/api/spaces/<space_name>', methods=['DELETE'])
+@app.route('/api/spaces/delete', methods=['POST'])
+def api_delete_space_root(space_name=None):
+    """Delete a space or sub-space globally (local development)"""
+    from routes.api import api_delete_space
+    return api_delete_space(space_name)
+
 @app.route('/api/tasks/due-today')
 def api_tasks_due_today_root():
     """Get tasks due today (local development)"""

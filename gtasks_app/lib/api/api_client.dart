@@ -218,6 +218,41 @@ class ApiClient {
     return response.statusCode == 200;
   }
 
+  Future<bool> deleteTag(String tag, {String? account}) async {
+    final uri = Uri.parse('$baseUrl/api/tags/delete');
+    try {
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'tag': tag,
+          if (account != null && account != 'all') 'account': account,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> deleteSpace(String space, {String? subspace, String? account}) async {
+    final uri = Uri.parse('$baseUrl/api/spaces/delete');
+    try {
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'space': space,
+          if (subspace != null) 'subspace': subspace,
+          if (account != null && account != 'all') 'account': account,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<Map<String, dynamic>> triggerGoogleSync({String? account, bool syncAll = false}) async {
     final Map<String, dynamic> body = {
       'sync_type': 'both',

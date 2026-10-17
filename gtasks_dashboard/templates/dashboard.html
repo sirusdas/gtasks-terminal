@@ -1040,6 +1040,9 @@
                 <button type="button" class="settings-tab-btn active" id="tab-btn-general" onclick="switchSettingsTab('general')">
                     <i class="fas fa-sliders-h"></i> General & Display
                 </button>
+                <button type="button" class="settings-tab-btn" id="tab-btn-tags-spaces" onclick="switchSettingsTab('tags-spaces')">
+                    <i class="fas fa-tags"></i> Tags & Spaces
+                </button>
                 <button type="button" class="settings-tab-btn" id="tab-btn-sync" onclick="switchSettingsTab('sync')">
                     <i class="fas fa-sync"></i> Sync & Auto-Save
                 </button>
@@ -1125,6 +1128,39 @@
                                 <span>Launch Debugger & Live Logs</span>
                             </button>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Tags & Spaces Management -->
+            <div class="settings-tab-pane" id="tab-pane-tags-spaces">
+                <div style="margin-bottom: 1.25rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                        <h4 style="font-size: 0.95rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-layer-group text-primary"></i> Spaces & Sub-spaces
+                        </h4>
+                        <span id="settings-spaces-summary" style="font-size: 0.75rem; color: var(--text-muted);"></span>
+                    </div>
+                    <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+                        Remove spaces or individual sub-spaces across all tasks.
+                    </p>
+                    <div id="settings-spaces-list" style="display: flex; flex-direction: column; gap: 0.6rem; max-height: 220px; overflow-y: auto; padding-right: 4px;">
+                        <!-- Rendered dynamically -->
+                    </div>
+                </div>
+
+                <div style="padding-top: 1rem; border-top: 1px solid var(--border-color, #e2e8f0);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                        <h4 style="font-size: 0.95rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-tags" style="color: #0d9488;"></i> Tags
+                        </h4>
+                        <span id="settings-tags-summary" style="font-size: 0.75rem; color: var(--text-muted);"></span>
+                    </div>
+                    <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+                        Remove tags globally across tasks.
+                    </p>
+                    <div id="settings-tags-list" style="display: flex; flex-wrap: wrap; gap: 0.5rem; max-height: 180px; overflow-y: auto; padding-right: 4px;">
+                        <!-- Rendered dynamically -->
                     </div>
                 </div>
             </div>

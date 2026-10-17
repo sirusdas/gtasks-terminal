@@ -120,11 +120,84 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                     }
                   },
                 ),
+                if (space != null || tag != null)
+                  ListTile(
+                    leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    title: Text(
+                      tag != null
+                          ? 'Delete Tag #$tag from All Tasks'
+                          : (subspace != null
+                              ? 'Delete Sub-space $subspace from All Tasks'
+                              : 'Delete Space $space from All Tasks'),
+                      style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _confirmSidebarItemDelete(
+                        context,
+                        provider,
+                        tag: tag,
+                        space: space,
+                        subspace: subspace,
+                      );
+                    },
+                  ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  void _confirmSidebarItemDelete(
+    BuildContext context,
+    TaskProvider provider, {
+    String? tag,
+    String? space,
+    String? subspace,
+  }) {
+    final label = tag != null
+        ? "tag '#$tag'"
+        : (subspace != null ? "sub-space '$space › $subspace'" : "space '$space'");
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Confirm Removal'),
+          ],
+        ),
+        content: Text('Are you sure you want to remove $label from all tasks?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              if (tag != null) {
+                await provider.removeTagGlobally(tag);
+              } else if (subspace != null) {
+                await provider.removeSubspaceGlobally(space!, subspace);
+              } else if (space != null) {
+                await provider.removeSpaceGlobally(space);
+              }
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Removed $label')),
+                );
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
   }
 

@@ -22,7 +22,7 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     final settings = context.read<SettingsProvider>();
     _urlController = TextEditingController(text: settings.baseUrl);
   }
@@ -255,6 +255,7 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
               indicatorColor: theme.colorScheme.primary,
               tabs: const [
                 Tab(icon: Icon(Icons.manage_accounts, size: 18), text: 'Accounts'),
+                Tab(icon: Icon(Icons.category_outlined, size: 18), text: 'Tags & Spaces'),
                 Tab(icon: Icon(Icons.palette_outlined, size: 18), text: 'General & Theme'),
                 Tab(icon: Icon(Icons.sync, size: 18), text: 'Sync & Network'),
                 Tab(icon: Icon(Icons.bug_report_outlined, size: 18), text: 'Diagnostics'),
@@ -271,13 +272,16 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
                   // Tab 1: Accounts Management
                   _buildAccountsTab(context, settings, taskProvider, theme),
 
-                  // Tab 2: General & Theme
+                  // Tab 2: Tags & Spaces Management
+                  _buildTagsSpacesTab(context, taskProvider, theme),
+
+                  // Tab 3: General & Theme
                   _buildGeneralTab(context, settings, theme),
 
-                  // Tab 3: Sync & Network
+                  // Tab 4: Sync & Network
                   _buildSyncTab(context, settings, taskProvider, theme),
 
-                  // Tab 4: Diagnostics
+                  // Tab 5: Diagnostics
                   _buildDiagnosticsTab(context, settings, taskProvider, theme),
                 ],
               ),
@@ -755,6 +759,290 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
         children: [
           Text(label, style: const TextStyle(fontSize: 13)),
           Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTagsSpacesTab(
+    BuildContext context,
+    TaskProvider taskProvider,
+    ThemeData theme,
+  ) {
+    final spaces = taskProvider.spacesWithCounts;
+    final subspaces = taskProvider.subspacesWithCounts;
+    final tags = taskProvider.tagsWithCounts;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.rocket_launch, size: 18, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                const Text(
+                  'Spaces & Sub-spaces',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ],
+            ),
+            Text(
+              '${spaces.length} space(s)',
+              style: TextStyle(fontSize: 12, color: theme.hintColor),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Remove spaces or individual sub-spaces across all tasks.',
+          style: TextStyle(fontSize: 12, color: theme.hintColor),
+        ),
+        const SizedBox(height: 12),
+        if (spaces.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'No spaces found in tasks.',
+              style: TextStyle(fontStyle: FontStyle.italic, color: theme.hintColor, fontSize: 13),
+            ),
+          )
+        else
+          ...spaces.entries.map((entry) {
+            final spaceName = entry.key;
+            final count = entry.value;
+            final spaceSubs = subspaces[spaceName] ?? {};
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.rocket_launch, size: 16, color: Colors.deepPurpleAccent),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          spaceName,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$count task${count != 1 ? 's' : ''}',
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.deepPurpleAccent),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                        tooltip: 'Delete Space',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                        onPressed: () => _confirmDeleteSpace(context, taskProvider, spaceName, null, count),
+                      ),
+                    ],
+                  ),
+                  if (spaceSubs.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: spaceSubs.entries.map((subEntry) {
+                        final subName = subEntry.key;
+                        final subCount = subEntry.value;
+                        return Chip(
+                          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                          label: Text(
+                            '$subName ($subCount)',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          deleteIcon: const Icon(Icons.close_rounded, size: 14, color: Colors.redAccent),
+                          onDeleted: () => _confirmDeleteSpace(context, taskProvider, spaceName, subName, subCount),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+
+        const Divider(height: 28),
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.tag, size: 18, color: Colors.teal),
+                SizedBox(width: 8),
+                Text(
+                  'Tags',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ],
+            ),
+            Text(
+              '${tags.length} tag(s)',
+              style: TextStyle(fontSize: 12, color: theme.hintColor),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Remove tags globally from tasks.',
+          style: TextStyle(fontSize: 12, color: theme.hintColor),
+        ),
+        const SizedBox(height: 12),
+        if (tags.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'No tags found in tasks.',
+              style: TextStyle(fontStyle: FontStyle.italic, color: theme.hintColor, fontSize: 13),
+            ),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: tags.entries.map((entry) {
+              final tagName = entry.key;
+              final count = entry.value;
+              return Container(
+                padding: const EdgeInsets.only(left: 8, right: 4, top: 4, bottom: 4),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '#$tagName',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.teal),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '($count)',
+                      style: TextStyle(fontSize: 11, color: theme.hintColor),
+                    ),
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: () => _confirmDeleteTag(context, taskProvider, tagName, count),
+                      child: const Icon(Icons.close_rounded, size: 16, color: Colors.redAccent),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  void _confirmDeleteSpace(
+    BuildContext context,
+    TaskProvider taskProvider,
+    String space,
+    String? subspace,
+    int count,
+  ) {
+    final label = subspace != null ? "sub-space '$space › $subspace'" : "space '$space' and its sub-spaces";
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Confirm Removal'),
+          ],
+        ),
+        content: Text('Are you sure you want to remove $label from $count task(s)?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              if (subspace != null) {
+                await taskProvider.removeSubspaceGlobally(space, subspace);
+              } else {
+                await taskProvider.removeSpaceGlobally(space);
+              }
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Removed $label')),
+                );
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteTag(
+    BuildContext context,
+    TaskProvider taskProvider,
+    String tag,
+    int count,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Confirm Tag Removal'),
+          ],
+        ),
+        content: Text('Are you sure you want to remove tag \'#$tag\' from $count task(s)?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await taskProvider.removeTagGlobally(tag);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Removed tag \'#$tag\'')),
+                );
+              }
+            },
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );

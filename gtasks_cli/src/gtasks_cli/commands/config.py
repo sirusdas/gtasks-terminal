@@ -50,3 +50,26 @@ def get_config(ctx, key, account):
     config_manager = ConfigManager(account_name=account_name)
     value = config_manager.get(key)
     click.echo(f"{key}: {value}")
+
+
+@config.command(name='remove-space')
+@click.argument('space_name')
+@click.option('--subspace', '-s', help='Specific sub-space to remove')
+@click.option('--account', '-a', help='Account name for multi-account support')
+@click.option('--yes', '-y', is_flag=True, help='Skip confirmation prompt')
+@click.pass_context
+def remove_space_config(ctx, space_name, subspace, account, yes):
+    """Remove a space or sub-space from tasks (setting/configuration)."""
+    from gtasks_cli.commands.spaces import remove_space
+    ctx.invoke(remove_space, space_name=space_name, subspace=subspace, account=account, yes=yes)
+
+
+@config.command(name='remove-tag')
+@click.argument('tag_name')
+@click.option('--account', '-a', help='Account name for multi-account support')
+@click.option('--yes', '-y', is_flag=True, help='Skip confirmation prompt')
+@click.pass_context
+def remove_tag_config(ctx, tag_name, account, yes):
+    """Remove a tag from tasks (setting/configuration)."""
+    from gtasks_cli.commands.tags import remove_tag
+    ctx.invoke(remove_tag, tag_name=tag_name, account=account, yes=yes)

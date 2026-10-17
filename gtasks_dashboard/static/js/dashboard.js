@@ -1243,6 +1243,30 @@ export function initSidebarContextMenu() {
         e.preventDefault();
         const displayTitle = value || 'All Tasks';
 
+        let deleteHtml = '';
+        if (type === 'space') {
+            deleteHtml = `
+                <div class="sidebar-context-item text-danger" id="sidebar-ctx-delete" style="color: #ef4444; border-top: 1px solid var(--border-color, #e2e8f0); margin-top: 4px; padding-top: 6px;">
+                    <i class="fas fa-trash-alt text-danger"></i>
+                    <span>Delete Space "${escapeHtml(value)}"</span>
+                </div>
+            `;
+        } else if (type === 'subspace') {
+            deleteHtml = `
+                <div class="sidebar-context-item text-danger" id="sidebar-ctx-delete" style="color: #ef4444; border-top: 1px solid var(--border-color, #e2e8f0); margin-top: 4px; padding-top: 6px;">
+                    <i class="fas fa-trash-alt text-danger"></i>
+                    <span>Delete Sub-space "${escapeHtml(value)}"</span>
+                </div>
+            `;
+        } else if (type === 'tag') {
+            deleteHtml = `
+                <div class="sidebar-context-item text-danger" id="sidebar-ctx-delete" style="color: #ef4444; border-top: 1px solid var(--border-color, #e2e8f0); margin-top: 4px; padding-top: 6px;">
+                    <i class="fas fa-trash-alt text-danger"></i>
+                    <span>Delete Tag "#${escapeHtml(value)}"</span>
+                </div>
+            `;
+        }
+
         menu.innerHTML = `
             <div class="sidebar-context-item" id="sidebar-ctx-open-new-tab">
                 <i class="fas fa-folder-plus text-blue"></i>
@@ -1252,10 +1276,11 @@ export function initSidebarContextMenu() {
                 <i class="fas fa-filter text-purple"></i>
                 <span>Filter in Current View</span>
             </div>
+            ${deleteHtml}
         `;
 
         const x = Math.min(e.clientX, window.innerWidth - 220);
-        const y = Math.min(e.clientY, window.innerHeight - 120);
+        const y = Math.min(e.clientY, window.innerHeight - 150);
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.style.display = 'block';
@@ -1276,6 +1301,20 @@ export function initSidebarContextMenu() {
                     selectSidebarFilter(type, value, space);
                 } else if (item.id === 'sidebar-all-tasks') {
                     resetAllFilters();
+                }
+            };
+        }
+
+        const deleteBtn = document.getElementById('sidebar-ctx-delete');
+        if (deleteBtn) {
+            deleteBtn.onclick = () => {
+                menu.style.display = 'none';
+                if (type === 'space') {
+                    deleteSpaceFromDashboard(value);
+                } else if (type === 'subspace') {
+                    deleteSpaceFromDashboard(space, value);
+                } else if (type === 'tag') {
+                    deleteTagFromDashboard(value);
                 }
             };
         }
@@ -3205,6 +3244,9 @@ export async function openSettings() {
     if (!modal) return;
     modal.classList.add('active');
 
+    // Pre-render Tags and Spaces management view
+    renderSettingsTagsAndSpaces();
+
     // Fetch live backend config
     try {
         const basePath = window.GTASKS_BASE_PATH || '';
@@ -3259,6 +3301,185 @@ export function switchSettingsTab(tabName) {
 
     if (btn) btn.classList.add('active');
     if (pane) pane.classList.add('active');
+
+    if (tabName === 'tags-spaces') {
+        renderSettingsTagsAndSpaces();
+    }
+}
+
+export function renderSettingsTagsAndSpaces() {
+    const spacesListEl = document.getElementById('settings-spaces-list');
+    const tagsListEl = document.getElementById('settings-tags-list');
+    const spacesSummaryEl = document.getElementById('settings-spaces-summary');
+    const tagsSummaryEl = document.getElementById('settings-tags-summary');
+    if (!spacesListEl || !tagsListEl) return;
+
+    // Collect all tasks across accounts
+    const allTasks = [];
+    if (dashboardData && dashboardData.tasks) {
+        if (Array.isArray(dashboardData.tasks)) {
+            allTasks.push(...dashboardData.tasks);
+        } else {
+            Object.values(dashboardData.tasks).forEach(list => {
+                if (Array.isArray(list)) allTasks.push(...list);
+            });
+        }
+    }
+
+    const spacesMap = {};
+    const tagsMap = {};
+
+    allTasks.forEach(task => {
+        let spaces = task.spaces;
+        if (!spaces && (task.notes || task.description)) {
+            spaces = extractSpacesFromText(task.notes || task.description || '');
+        }
+        if (spaces && typeof spaces === 'object') {
+            Object.entries(spaces).forEach(([sName, subs]) => {
+                const sClean = sName.trim();
+                if (!sClean) return;
+                if (!spacesMap[sClean]) {
+                    spacesMap[sClean] = { total: 0, subspaces: {} };
+                }
+                spacesMap[sClean].total++;
+                if (Array.isArray(subs)) {
+                    subs.forEach(sub => {
+                        const subClean = sub.trim().replace(/^sub::/i, '');
+                        if (subClean) {
+                            spacesMap[sClean].subspaces[subClean] = (spacesMap[sClean].subspaces[subClean] || 0) + 1;
+                        }
+                    });
+                }
+            });
+        }
+
+        let tags = task.tags;
+        if ((!tags || tags.length === 0) && (task.notes || task.description)) {
+            const split = splitNotesAndTags(task.notes || task.description || '');
+            tags = split.tags;
+        }
+        if (Array.isArray(tags)) {
+            tags.forEach(t => {
+                const tClean = String(t).trim().toLowerCase().replace(/^[\[#]+|[\]]+$/g, '');
+                if (tClean && isValidTag(tClean)) {
+                    tagsMap[tClean] = (tagsMap[tClean] || 0) + 1;
+                }
+            });
+        }
+    });
+
+    const spaceKeys = Object.keys(spacesMap).sort();
+    const tagKeys = Object.keys(tagsMap).sort();
+
+    if (spacesSummaryEl) spacesSummaryEl.textContent = `${spaceKeys.length} space(s)`;
+    if (tagsSummaryEl) tagsSummaryEl.textContent = `${tagKeys.length} tag(s)`;
+
+    if (spaceKeys.length === 0) {
+        spacesListEl.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-muted); font-style: italic; padding: 0.5rem 0;">No spaces found in tasks.</div>`;
+    } else {
+        spacesListEl.innerHTML = spaceKeys.map(space => {
+            const data = spacesMap[space];
+            const subKeys = Object.keys(data.subspaces).sort();
+            const subsHtml = subKeys.length > 0 ? `
+                <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.4rem; padding-left: 0.25rem;">
+                    ${subKeys.map(sub => `
+                        <span class="subspace-pill" style="display: inline-flex; align-items: center; gap: 0.35rem; background: var(--hover-bg, rgba(0,0,0,0.05)); border: 1px solid var(--border-color, #e2e8f0); border-radius: 12px; padding: 0.15rem 0.55rem; font-size: 0.75rem;">
+                            <span>${escapeHtml(sub)}</span>
+                            <span style="font-size: 0.65rem; color: var(--text-muted);">(${data.subspaces[sub]})</span>
+                            <button type="button" onclick="deleteSpaceFromDashboard('${escapeJsString(space)}', '${escapeJsString(sub)}')" style="background: none; border: none; cursor: pointer; padding: 0; color: #ef4444; font-size: 0.75rem; display: flex; align-items: center;" title="Remove sub-space '${escapeHtml(sub)}'">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </span>
+                    `).join('')}
+                </div>
+            ` : '';
+
+            return `
+                <div style="background: var(--bg-secondary, rgba(0,0,0,0.02)); border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; padding: 0.6rem 0.75rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-rocket text-primary" style="font-size: 0.85rem;"></i>
+                            <span style="font-weight: 600; font-size: 0.85rem;">${escapeHtml(space)}</span>
+                            <span class="badge" style="background: rgba(99, 102, 241, 0.15); color: #6366f1; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.45rem; border-radius: 10px;">${data.total} tasks</span>
+                        </div>
+                        <button type="button" class="btn btn-sm" onclick="deleteSpaceFromDashboard('${escapeJsString(space)}')" style="color: #ef4444; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 6px; padding: 0.25rem 0.6rem; font-size: 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;" title="Delete entire space '${escapeHtml(space)}'">
+                            <i class="fas fa-trash-alt"></i>
+                            <span>Delete Space</span>
+                        </button>
+                    </div>
+                    ${subsHtml}
+                </div>
+            `;
+        }).join('');
+    }
+
+    if (tagKeys.length === 0) {
+        tagsListEl.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-muted); font-style: italic; padding: 0.5rem 0;">No tags found in tasks.</div>`;
+    } else {
+        tagsListEl.innerHTML = tagKeys.map(tag => {
+            const count = tagsMap[tag];
+            return `
+                <span style="display: inline-flex; align-items: center; gap: 0.4rem; background: rgba(13, 148, 136, 0.1); border: 1px solid rgba(13, 148, 136, 0.25); color: #0d9488; border-radius: 14px; padding: 0.25rem 0.6rem; font-size: 0.8rem; font-weight: 500;">
+                    <span>#${escapeHtml(tag)}</span>
+                    <span style="font-size: 0.7rem; opacity: 0.8;">(${count})</span>
+                    <button type="button" onclick="deleteTagFromDashboard('${escapeJsString(tag)}')" style="background: none; border: none; cursor: pointer; padding: 0 0 0 2px; color: #ef4444; font-size: 0.8rem; display: flex; align-items: center;" title="Remove tag '#${escapeHtml(tag)}' from all tasks">
+                        <i class="fas fa-times-circle"></i>
+                    </button>
+                </span>
+            `;
+        }).join('');
+    }
+}
+
+export async function deleteTagFromDashboard(tagName) {
+    if (!tagName) return;
+    const confirmed = confirm(`Are you sure you want to remove tag '#${tagName}' from all tasks?`);
+    if (!confirmed) return;
+
+    try {
+        const basePath = window.GTASKS_BASE_PATH || '';
+        const res = await fetch(`${basePath}/api/tags/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tag: tagName })
+        });
+        const json = await res.json();
+        if (json.success) {
+            alert(`✅ ${json.message}`);
+            await fetchDashboardData();
+            renderSettingsTagsAndSpaces();
+        } else {
+            alert(`❌ Error: ${json.message || 'Failed to remove tag'}`);
+        }
+    } catch (e) {
+        alert(`❌ Network error: ${e.message}`);
+    }
+}
+
+export async function deleteSpaceFromDashboard(spaceName, subspaceName = null) {
+    if (!spaceName) return;
+    const label = subspaceName ? `sub-space '${spaceName} › ${subspaceName}'` : `space '${spaceName}' and all its sub-spaces`;
+    const confirmed = confirm(`Are you sure you want to remove ${label} from all tasks?`);
+    if (!confirmed) return;
+
+    try {
+        const basePath = window.GTASKS_BASE_PATH || '';
+        const res = await fetch(`${basePath}/api/spaces/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ space: spaceName, subspace: subspaceName || undefined })
+        });
+        const json = await res.json();
+        if (json.success) {
+            alert(`✅ ${json.message}`);
+            await fetchDashboardData();
+            renderSettingsTagsAndSpaces();
+        } else {
+            alert(`❌ Error: ${json.message || 'Failed to remove space'}`);
+        }
+    } catch (e) {
+        alert(`❌ Network error: ${e.message}`);
+    }
 }
 
 export async function saveAllSettings() {
@@ -3834,6 +4055,9 @@ window.initSettings = initSettings;
 window.openSettings = openSettings;
 window.closeSettings = closeSettings;
 window.switchSettingsTab = switchSettingsTab;
+window.renderSettingsTagsAndSpaces = renderSettingsTagsAndSpaces;
+window.deleteTagFromDashboard = deleteTagFromDashboard;
+window.deleteSpaceFromDashboard = deleteSpaceFromDashboard;
 window.saveAllSettings = saveAllSettings;
 window.toggleAutoRefresh = toggleAutoRefresh;
 window.updateRefreshInterval = updateRefreshInterval;
