@@ -140,7 +140,6 @@ class ApiClient {
     String? listTitle,
     String? priority,
     List<String>? tags,
-    String? parentId,
   }) async {
     final payload = json.encode({
       'title': title,
@@ -151,7 +150,6 @@ class ApiClient {
       'list_title': listTitle ?? 'My Tasks',
       'priority': priority ?? 'medium',
       'tags': tags ?? [],
-      if (parentId != null) 'parent_id': parentId,
     });
 
     try {
@@ -188,7 +186,6 @@ class ApiClient {
     String? listTitle,
     String? priority,
     List<String>? tags,
-    String? parentId,
   }) async {
     final uri = Uri.parse('$baseUrl/api/tasks/$taskId');
     final response = await http.put(
@@ -203,7 +200,6 @@ class ApiClient {
         if (listTitle != null) 'list_title': listTitle,
         if (priority != null) 'priority': priority,
         'tags': tags ?? [],
-        if (parentId != null) 'parent_id': parentId,
       }),
     );
     return response.statusCode == 200;

@@ -24,10 +24,9 @@ logger = setup_logger(__name__)
 @click.option('--recurrence', '-r', help='Recurrence rule (e.g., "daily", "weekly", "monthly")')
 @click.option('--list-name', '-l', help='Task list name')
 @click.option('--estimated-duration', '-e', type=int, help='Estimated duration in minutes')
-@click.option('--parent', help='Parent task ID (creates task as a subtask)')
 @click.option('--account', '-a', help='Account name for multi-account support')
 @click.pass_context
-def add(ctx, title, description, due, priority, project, tags, notes, recurrence, list_name, estimated_duration, parent, account):
+def add(ctx, title, description, due, priority, project, tags, notes, recurrence, list_name, estimated_duration, account):
     """Add a new task."""
     use_google_tasks = ctx.obj.get('use_google_tasks', False)
     storage_backend = ctx.obj.get('storage_backend', 'json')
@@ -62,9 +61,7 @@ def add(ctx, title, description, due, priority, project, tags, notes, recurrence
         tags=list(tags),
         notes=notes,
         recurrence_rule=recurrence,
-        tasklist_name=list_name,
-        estimated_duration=estimated_duration,
-        parent_id=parent
+        tasklist_name=list_name
     )
     
     if task:

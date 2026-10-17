@@ -50,17 +50,6 @@ export function createTaskCard(task, options = {}) {
 
     // Spaces display
     const spacesDisplay = getSpacesDisplay(task);
-
-    // Subtask detection
-    const allTasksPool = (typeof dashboardData !== 'undefined' && dashboardData.tasks) ? dashboardData.tasks : (window._allLoadedTasks || []);
-    const childSubtasks = allTasksPool.filter(t => t.parent_id === task.id);
-    const hasSubtasks = childSubtasks.length > 0;
-    const isSubtask = Boolean(task.parent_id);
-    const subtaskBadgeHtml = isSubtask 
-        ? `<span class="task-badge" style="background: rgba(147, 51, 234, 0.15); color: #c084fc; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px;"><i class="fas fa-level-up-alt fa-rotate-90"></i> Sub-task</span>`
-        : (hasSubtasks 
-            ? `<span class="task-badge" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px;" title="${childSubtasks.length} subtask(s)"><i class="fas fa-sitemap"></i> ${childSubtasks.length} subtask${childSubtasks.length > 1 ? 's' : ''}</span>`
-            : '');
     
     // Check if this task has dependencies (for node task cards)
     const hasDeps = task.dependencies && task.dependencies.length > 0;
@@ -154,7 +143,6 @@ export function createTaskCard(task, options = {}) {
                 </div>
                 <div class="compact-meta-row">
                     ${compactRecurringBadge}
-                    ${subtaskBadgeHtml}
                     ${task.due ? `<span class="compact-due ${dateStatus}"><i class="fas fa-calendar-alt"></i> ${task.due}</span>` : ''}
                     ${task.list_title ? `<span class="compact-list"><i class="fas fa-list"></i> ${task.list_title}</span>` : ''}
                     <span class="compact-status-badge ${statusClass}">${task.status}</span>
@@ -195,7 +183,6 @@ export function createTaskCard(task, options = {}) {
                 <span class="task-status-badge ${statusClass}">${task.status}</span>
                 ${recurringBadge}
                 ${dateStatusBadge}
-                ${subtaskBadgeHtml}
             </div>
             <h4 class="task-card-title" onclick="openQuickView('${task.id}'); event.stopPropagation();" style="cursor: pointer;" title="Quick view details">${task.title}</h4>
             <div class="task-card-dates">${compactDates}</div>

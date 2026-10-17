@@ -27,23 +27,13 @@ def display_tasks_grouped_by_list(tasks: List[Task]):
     # Display tasks grouped by list
     for list_info in tasks_by_list.values():
         list_title = list_info['title']
-        tasks_in_list = list_info['tasks']
+        tasks = list_info['tasks']
         
         # Use different colors for different lists
         list_title_color = _get_list_color(list_title)
         click.secho(f"\n{list_title}", fg=list_title_color, bold=True)
-
-        task_id_map = {t.id: t for t in tasks_in_list}
-        subtasks_by_parent = {}
-        top_level_tasks = []
-        for t in tasks_in_list:
-            p_id = getattr(t, 'parent_id', None)
-            if p_id and p_id in task_id_map:
-                subtasks_by_parent.setdefault(p_id, []).append(t)
-            else:
-                top_level_tasks.append(t)
         
-        for i, task in enumerate(top_level_tasks, 1):
+        for i, task in enumerate(tasks, 1):
             # Format the task line with priority indicator
             priority_icon = _get_priority_icon(task.priority)
             
@@ -61,12 +51,8 @@ def display_tasks_grouped_by_list(tasks: List[Task]):
             if task.modified_at:
                 dates_str += f" [M:{task.modified_at.strftime('%Y-%m-%d')}]"
             
-            # Subtask count tag if has subtasks
-            child_subtasks = subtasks_by_parent.get(task.id, [])
-            sub_count_str = f" ({len(child_subtasks)} subtask{'s' if len(child_subtasks) != 1 else ''})" if child_subtasks else ""
-
             # Build the task line
-            task_line = f"{i:2d}. {priority_icon} {task.title}{sub_count_str}{due_str}{dates_str}"
+            task_line = f"{i:2d}. {priority_icon} {task.title}{due_str}{dates_str}"
             
             # Color code task status
             task_color = _get_status_color(task.status)
@@ -88,21 +74,6 @@ def display_tasks_grouped_by_list(tasks: List[Task]):
             clean_desc, _, _ = split_notes_and_metadata(raw_desc)
             if clean_desc:
                 click.echo(f"     📝 {clean_desc[:60]}{'...' if len(clean_desc) > 60 else ''}")
-
-            # Render nested subtasks
-            for j, sub in enumerate(child_subtasks, 1):
-                sub_icon = _get_priority_icon(sub.priority)
-                sub_due = _format_due_date(sub.due)
-                sub_dates = ""
-                if sub.due:
-                    sub_d_str = sub.due.strftime('%Y-%m-%d') if hasattr(sub.due, 'strftime') else str(sub.due)[:10]
-                    sub_dates += f" [D:{sub_d_str}]"
-                sub_status_color = _get_status_color(sub.status)
-                sub_prefix = "   ↳"
-                click.secho(f"   {sub_prefix} {i}.{j} {sub_icon} {sub.title}{sub_due}{sub_dates}", fg=sub_status_color)
-                sub_clean, _, _ = split_notes_and_metadata(sub.description or sub.notes or '')
-                if sub_clean:
-                    click.echo(f"         📝 {sub_clean[:50]}{'...' if len(sub_clean) > 50 else ''}")
     
     # Summary
     click.echo(f"\nTotal: {len(tasks)} task(s) across {len(tasks_by_list)} list(s)")

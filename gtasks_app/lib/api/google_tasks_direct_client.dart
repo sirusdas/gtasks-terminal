@@ -174,8 +174,6 @@ class GoogleTasksDirectClient {
             calculatedPriority: calculatePriorityFromTags(split.tags),
             createdAt: raw['updated']?.toString(), // Google uses 'updated'
             completedAt: raw['completed']?.toString(),
-            parentId: raw['parent']?.toString(),
-            position: int.tryParse(raw['position']?.toString() ?? '0') ?? 0,
           ));
         }
 
@@ -195,10 +193,8 @@ class GoogleTasksDirectClient {
     String? due,
     String? listTitle,
     String account = 'default',
-    String? parentId,
   }) async {
-    final queryParams = parentId != null ? {'parent': parentId} : null;
-    final uri = Uri.parse('$_tasksBaseUrl/lists/$listId/tasks').replace(queryParameters: queryParams);
+    final uri = Uri.parse('$_tasksBaseUrl/lists/$listId/tasks');
     final payload = {
       'title': title,
       if (notes != null) 'notes': notes,
@@ -231,27 +227,10 @@ class GoogleTasksDirectClient {
         spaces: split.spaces,
         calculatedPriority: calculatePriorityFromTags(split.tags),
         createdAt: raw['updated']?.toString(),
-        parentId: raw['parent']?.toString() ?? parentId,
-        position: int.tryParse(raw['position']?.toString() ?? '0') ?? 0,
       );
     } else {
       throw Exception('Failed to create task: ${response.statusCode} - ${response.body}');
     }
-  }
-
-  Future<bool> moveTask({
-    required String listId,
-    required String taskId,
-    String? parentId,
-    String? previous,
-  }) async {
-    final Map<String, String> queryParams = {};
-    if (parentId != null) queryParams['parent'] = parentId;
-    if (previous != null) queryParams['previous'] = previous;
-    final uri = Uri.parse('$_tasksBaseUrl/lists/$listId/tasks/$taskId/move')
-        .replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
-    final response = await _sendWithAuthRetry(() => http.post(uri, headers: _headers));
-    return response.statusCode == 200;
   }
 
   Future<bool> updateTask({

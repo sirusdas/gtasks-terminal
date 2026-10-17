@@ -187,7 +187,7 @@ class DataManager:
                 # Build query based on available columns
                 select_columns = ['id', 'title', 'description', 'due', 'priority', 'status', 'tags', 'notes', 
                                 'created_at', 'modified_at', 'dependencies']
-                for opt_col in ['completed_at', 'list_title', 'tasklist_id', 'is_recurring', 'recurrence_rule', 'recurring_task_id', 'parent_id', 'position']:
+                for opt_col in ['completed_at', 'list_title', 'tasklist_id', 'is_recurring', 'recurrence_rule', 'recurring_task_id']:
                     if opt_col in columns:
                         select_columns.append(opt_col)
                 
@@ -347,8 +347,6 @@ class DataManager:
             t_is_rec = bool(row[col_idx['is_recurring']]) if 'is_recurring' in col_idx and len(row) > col_idx['is_recurring'] and row[col_idx['is_recurring']] else False
             t_rrule = row[col_idx['recurrence_rule']] if 'recurrence_rule' in col_idx and len(row) > col_idx['recurrence_rule'] else None
             t_rec_id = row[col_idx['recurring_task_id']] if 'recurring_task_id' in col_idx and len(row) > col_idx['recurring_task_id'] else None
-            t_parent_id = row[col_idx['parent_id']] if 'parent_id' in col_idx and len(row) > col_idx['parent_id'] else None
-            t_position = row[col_idx['position']] if 'position' in col_idx and len(row) > col_idx['position'] and row[col_idx['position']] is not None else 0
 
             # Parse tags JSON safely
             tags_list = []
@@ -388,8 +386,6 @@ class DataManager:
                 'is_recurring': t_is_rec,
                 'recurrence_rule': t_rrule,
                 'recurring_task_id': t_rec_id,
-                'parent_id': t_parent_id,
-                'position': t_position,
             }
             parsed_task_dicts.append(task_dict)
             title_norm = (task_dict['title'] or '').strip()

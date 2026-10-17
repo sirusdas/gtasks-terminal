@@ -19,25 +19,6 @@ class TaskProvider with ChangeNotifier {
 
   List<TaskItem> _tasks = [];
   List<GTasksAccount> _accounts = [];
-
-  List<TaskItem> getSubtasks(String parentTaskId) {
-    return _tasks
-        .where((t) => t.parentId == parentTaskId && t.status != 'deleted')
-        .toList()
-      ..sort((a, b) => a.position.compareTo(b.position));
-  }
-
-  int getSubtasksCount(String parentTaskId) {
-    return _tasks.where((t) => t.parentId == parentTaskId && t.status != 'deleted').length;
-  }
-
-  TaskItem? getParentTask(String parentId) {
-    try {
-      return _tasks.firstWhere((t) => t.id == parentId);
-    } catch (_) {
-      return null;
-    }
-  }
   String _selectedAccount = 'all';
   String _statusFilter = 'pending'; // 'pending', 'completed', 'all'
   String _searchQuery = '';
@@ -1235,7 +1216,6 @@ class TaskProvider with ChangeNotifier {
     String? priority,
     List<String>? tags,
     Map<String, List<String>>? spaces,
-    String? parentId,
   }) async {
     final effectiveAccount = account ??
         ((_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
@@ -1257,7 +1237,6 @@ class TaskProvider with ChangeNotifier {
         tags: effectiveTags,
         spaces: spaces,
         account: effectiveAccount,
-        parentId: parentId,
         createdAt: DateTime.now().toUtc().toIso8601String(),
       );
       await localDb.upsertTask(newTask, syncStatus: 'pending_insert');
@@ -1277,7 +1256,6 @@ class TaskProvider with ChangeNotifier {
         listTitle: effectiveList,
         priority: priority,
         tags: tags,
-        parentId: parentId,
       );
       if (success) {
         await refreshTasks();
@@ -1300,7 +1278,6 @@ class TaskProvider with ChangeNotifier {
     String? priority,
     List<String>? tags,
     Map<String, List<String>>? spaces,
-    String? parentId,
   }) async {
     final effectiveAccount = account ??
         ((_selectedAccount != 'all' && _selectedAccount.isNotEmpty)
@@ -1326,7 +1303,6 @@ class TaskProvider with ChangeNotifier {
           account: effectiveAccount,
           calculatedPriority: newPriority,
           createdAt: existing.createdAt,
-          parentId: parentId ?? existing.parentId,
         );
         await localDb.upsertTask(updated, syncStatus: 'pending_update');
         await refreshTasks();
@@ -1346,7 +1322,6 @@ class TaskProvider with ChangeNotifier {
       listTitle: listTitle,
       priority: priority,
       tags: tags,
-      parentId: parentId,
     );
     if (success) {
       await refreshTasks();
@@ -1633,7 +1608,6 @@ class TaskProvider with ChangeNotifier {
           due: task.due,
           listTitle: task.listTitle,
           account: accId,
-          parentId: task.parentId,
         );
         // Replace temporary local ID with Google's ID
         await localDb.deleteTask(task.id);
