@@ -56,6 +56,7 @@ class AiChatController {
         this.resetConversation();
         this.updateContextFromWindow();
         this.renderChainerBar();
+        this.updateFabPosition();
     }
 
     ensureDomElements() {
@@ -411,6 +412,18 @@ class AiChatController {
         this.updateBadgeCounts();
         this.updateScopeBanner();
         this.renderTopPills();
+        this.updateFabPosition();
+    }
+
+    updateFabPosition() {
+        const fab = document.getElementById('ai-assistant-fab');
+        const tasksSec = document.getElementById('tasks-section');
+        const isTasksActive = document.body.classList.contains('tasks-view-active') ||
+            (tasksSec && tasksSec.style.display !== 'none');
+
+        if (fab) {
+            fab.classList.toggle('elevated-fab', !!isTasksActive);
+        }
     }
 
     getFilterDescription() {

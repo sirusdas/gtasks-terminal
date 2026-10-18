@@ -154,6 +154,12 @@ export function showSection(section, updateUrl = true) {
         sectionEl.style.display = 'block';
     }
     
+    // Toggle body class and notify AI FAB positioning
+    document.body.classList.toggle('tasks-view-active', section === 'tasks');
+    if (window.AiChatController && typeof window.AiChatController.updateFabPosition === 'function') {
+        window.AiChatController.updateFabPosition();
+    }
+    
     // Update navigation active state
     updateNavActiveState(section);
     
