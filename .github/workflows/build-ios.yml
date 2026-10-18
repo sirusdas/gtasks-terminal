@@ -1,0 +1,70 @@
+name: Build iOS App
+
+on:
+  push:
+    branches:
+      - feature/spaces-and-subspaces
+      - feature/flutter-app
+      - main
+    paths:
+      - 'gtasks_app/**'
+      - '.github/workflows/build-ios.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build iOS Unsigned IPA & App
+    runs-on: macos-14
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Flutter Dependencies
+        working-directory: gtasks_app
+        run: flutter pub get
+
+      - name: Build iOS Application (Release, Unsigned)
+        working-directory: gtasks_app
+        run: flutter build ios --release --no-codesign
+
+      - name: Package Payload into Unsigned IPA & Zip
+        working-directory: gtasks_app/build/ios/iphoneos
+        run: |
+          mkdir Payload
+          cp -r Runner.app Payload/
+          zip -qr GTasks-unsigned.ipa Payload
+          zip -qr Runner.app.zip Runner.app
+
+      - name: Upload iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtasks-ios-ipa
+          path: gtasks_app/build/ios/iphoneos/GTasks-unsigned.ipa
+
+      - name: Upload Runner.app Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtasks-runner-app
+          path: gtasks_app/build/ios/iphoneos/Runner.app.zip
+
+      - name: Publish Nightly Release with iOS IPA
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/feature/spaces-and-subspaces'
+        with:
+          tag_name: nightly-build
+          name: "GTasks App Nightly Build"
+          prerelease: true
+          files: |
+            gtasks_app/build/ios/iphoneos/GTasks-unsigned.ipa
+            gtasks_app/build/ios/iphoneos/Runner.app.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
