@@ -765,6 +765,76 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
+  void _handleToggleComplete(BuildContext context, TaskProvider provider, TaskItem task) async {
+    final title = task.title.trim().isEmpty ? 'Task' : task.title.trim();
+
+    // Show in-progress toast message immediately
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(milliseconds: 1400),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Completing "$title"...',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final success = await provider.completeTask(task.id);
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(milliseconds: 2200),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: success ? const Color(0xFF15803D) : Colors.red.shade800,
+        content: Row(
+          children: [
+            Icon(
+              success ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                success ? 'Completed "$title"' : 'Failed to complete "$title"',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   TaskViewContext _buildCurrentViewContext(TaskProvider provider) {
     return TaskViewContext(
       visibleTasks: List.unmodifiable(provider.tasks),
@@ -1294,7 +1364,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                       return TaskGridCompactCard(
                                         key: ValueKey(task.id),
                                         task: task,
-                                        onToggleComplete: () => provider.completeTask(task.id),
+                                        onToggleComplete: () => _handleToggleComplete(context, provider, task),
                                         onEdit: () => _showEditTaskSheet(context, task),
                                         onDelete: () => provider.deleteTask(task.id),
                                       );
@@ -1322,7 +1392,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                       return TaskGridCard(
                                         key: ValueKey(task.id),
                                         task: task,
-                                        onToggleComplete: () => provider.completeTask(task.id),
+                                        onToggleComplete: () => _handleToggleComplete(context, provider, task),
                                         onEdit: () => _showEditTaskSheet(context, task),
                                         onDelete: () => provider.deleteTask(task.id),
                                       );
@@ -1344,7 +1414,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                       return TaskCompactRow(
                                         key: ValueKey(task.id),
                                         task: task,
-                                        onToggleComplete: () => provider.completeTask(task.id),
+                                        onToggleComplete: () => _handleToggleComplete(context, provider, task),
                                         onEdit: () => _showEditTaskSheet(context, task),
                                         onDelete: () => provider.deleteTask(task.id),
                                       );
@@ -1365,7 +1435,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                       return TaskCard(
                                         key: ValueKey(task.id),
                                         task: task,
-                                        onToggleComplete: () => provider.completeTask(task.id),
+                                        onToggleComplete: () => _handleToggleComplete(context, provider, task),
                                         onEdit: () => _showEditTaskSheet(context, task),
                                         onDelete: () => provider.deleteTask(task.id),
                                       );

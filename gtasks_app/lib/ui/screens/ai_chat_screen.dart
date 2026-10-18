@@ -2005,8 +2005,67 @@ class _AiChatScreenState extends State<AiChatScreen> {
           value: task.isCompleted,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
           onChanged: (_) async {
-            await provider.completeTask(task.id);
-            if (mounted) setState(() {});
+            final title = task.title.trim().isEmpty ? 'Task' : task.title.trim();
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                duration: const Duration(milliseconds: 1400),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                content: Row(
+                  children: [
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Completing "$title"...',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+            final success = await provider.completeTask(task.id);
+            if (mounted) {
+              setState(() {});
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  duration: const Duration(milliseconds: 2000),
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor: success ? const Color(0xFF15803D) : Colors.red.shade800,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  content: Row(
+                    children: [
+                      Icon(
+                        success ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          success ? 'Completed "$title"' : 'Failed to complete task',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
           },
         ),
         title: Text(
