@@ -1,26 +1,30 @@
 /**
  * GTasks Dashboard - AI Assistant & Chat Bot
- * Full feature parity with mobile app:
- * - Active view context scoping & dynamic toggle banner
- * - Claude CLI-style interactive step-by-step Q&A Task Wizard
- * - Interactive Command Palette modal with instant search
- * - Command chaining (| or && or +)
- * - Scoped summary, earliest due, most urgent, bulk complete
- * - Grounded backend AI integration with Markdown rendering
+ * 1:1 Parity with Flutter Mobile App (AiChatScreen & SearchableSpacePickerModal):
+ * - Active view context scoping & dynamic toggle banner (View Scope vs Global Scope)
+ * - Pinned Top Action Chips Bar (_activeQuickActionPills)
+ * - Interactive Command Chainer Bar (_buildQuickChainerBar: today, high, pending, overdue)
+ * - Interactive Chat Task Cards (_buildChatTaskCard: completion checkbox, due/prio/space/tags badges, quick view, edit, delete)
+ * - Claude CLI-style interactive step-by-step Q&A Task Wizard with pinned active banner & review card
+ * - Command Palette modal with instant live search and keyboard navigation
+ * - Window expand/maximize toggle for desktop wide-screen viewing
+ * - Grounded backend AI integration with live view grounding & Markdown rendering
  * - Keyboard shortcuts (Ctrl+Space, Ctrl+/, Escape)
  */
 
 class AiChatController {
     constructor() {
         this.isOpen = false;
+        this.isExpanded = false;
         this.isScopedToView = true;
         this.isProcessing = false;
         this.messages = [];
         this.history = [];
         this.historyIndex = -1;
         this.confirmingBulkComplete = false;
+        this.chainedFilters = new Set();
         
-        // Claude CLI-style Task Creation Wizard
+        // Claude CLI-style Task Creation Wizard state
         this.wizardState = {
             step: 'none', // 'none' | 'title' | 'due' | 'priority' | 'space' | 'confirm'
             draft: {
@@ -51,10 +55,10 @@ class AiChatController {
         this.bindEvents();
         this.resetConversation();
         this.updateContextFromWindow();
+        this.renderChainerBar();
     }
 
     ensureDomElements() {
-        // If drawer container doesn't exist, inject it
         if (!document.getElementById('ai-chat-drawer')) {
             const drawerHtml = `
                 <div class="ai-chat-backdrop" id="ai-chat-backdrop"></div>
@@ -65,9 +69,9 @@ class AiChatController {
                             <div class="ai-drawer-icon-wrap">
                                 <i class="fas fa-sparkles"></i>
                             </div>
-                            <div>
+                            <div class="ai-drawer-title-col">
                                 <div class="ai-drawer-title">GTasks AI Assistant</div>
-                                <div class="ai-drawer-subtitle">Claude CLI Wizard • View Context-Aware</div>
+                                <div class="ai-drawer-subtitle" id="ai-drawer-subtitle">Claude Wizard • View Context-Aware</div>
                             </div>
                         </div>
                         <div class="ai-drawer-actions">
@@ -76,6 +80,9 @@ class AiChatController {
                             </button>
                             <button class="ai-header-btn" id="ai-drawer-clear-btn" title="Clear Chat (/clear)">
                                 <i class="fas fa-trash-alt"></i>
+                            </button>
+                            <button class="ai-header-btn" id="ai-drawer-expand-btn" title="Expand / Restore Width">
+                                <i class="fas fa-expand-alt"></i>
                             </button>
                             <button class="ai-header-btn" id="ai-drawer-close-btn" title="Close (Esc)">
                                 <i class="fas fa-times"></i>
@@ -88,20 +95,43 @@ class AiChatController {
                         <div class="ai-scope-info">
                             <i class="fas fa-bullseye ai-scope-icon" id="ai-scope-icon"></i>
                             <div class="ai-scope-text-wrap">
-                                <div class="ai-scope-badge-label" id="ai-scope-badge-label">VIEW SCOPE</div>
-                                <div class="ai-scope-desc" id="ai-scope-desc">All Tasks • 0 tasks</div>
+                                <div class="ai-scope-row-top">
+                                    <span class="ai-scope-badge-label" id="ai-scope-badge-label">VIEW SCOPE</span>
+                                    <span class="ai-scope-title" id="ai-scope-title">All Tasks</span>
+                                </div>
+                                <div class="ai-scope-subtitle" id="ai-scope-subtitle">0 tasks</div>
                             </div>
                         </div>
                         <button class="ai-scope-toggle-btn" id="ai-scope-toggle-btn">
-                            <i class="fas fa-exchange-alt"></i> Switch to Global
+                            <i class="fas fa-globe"></i> Switch to Global
                         </button>
                     </div>
+
+                    <!-- Pinned Top Action Chips Bar -->
+                    <div class="ai-top-pills-bar" id="ai-top-pills-bar"></div>
 
                     <!-- Messages Scroll Area -->
                     <div class="ai-chat-messages" id="ai-chat-messages"></div>
 
-                    <!-- Quick Suggestion Pills -->
-                    <div class="ai-quick-pills" id="ai-quick-pills"></div>
+                    <!-- Active Wizard Banner -->
+                    <div class="ai-wizard-active-banner" id="ai-wizard-active-banner" style="display: none;">
+                        <div class="ai-wizard-info" id="ai-wizard-info">
+                            <i class="fas fa-magic"></i>
+                            <span id="ai-wizard-info-text">Task Creation Wizard in progress</span>
+                        </div>
+                        <button class="ai-wizard-cancel-btn" id="ai-wizard-cancel-banner-btn">Cancel Wizard</button>
+                    </div>
+
+                    <!-- Quick Chainer Bar -->
+                    <div class="ai-chainer-bar" id="ai-chainer-bar">
+                        <div class="ai-chainer-label">
+                            <i class="fas fa-link"></i> Chain:
+                        </div>
+                        <div class="ai-chainer-chips" id="ai-chainer-chips"></div>
+                        <button class="ai-chainer-run-btn" id="ai-chainer-run-btn" style="display: none;">
+                            <i class="fas fa-play"></i> Run
+                        </button>
+                    </div>
 
                     <!-- Input Bar -->
                     <form class="ai-input-form" id="ai-input-form">
@@ -137,9 +167,7 @@ class AiChatController {
                             />
                             <span class="ai-palette-esc-badge">ESC</span>
                         </div>
-                        <div class="ai-palette-body" id="ai-palette-body">
-                            <!-- Injected dynamically -->
-                        </div>
+                        <div class="ai-palette-body" id="ai-palette-body"></div>
                         <div class="ai-palette-footer">
                             <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
                             <span><kbd>Enter</kbd> execute</span>
@@ -166,22 +194,36 @@ class AiChatController {
         const backdrop = document.getElementById('ai-chat-backdrop');
         const closeBtn = document.getElementById('ai-drawer-close-btn');
         const clearBtn = document.getElementById('ai-drawer-clear-btn');
+        const expandBtn = document.getElementById('ai-drawer-expand-btn');
         const paletteBtn = document.getElementById('ai-drawer-palette-btn');
         const paletteTrigger = document.getElementById('ai-palette-trigger-btn');
         const scopeToggleBtn = document.getElementById('ai-scope-toggle-btn');
+        const wizardCancelBannerBtn = document.getElementById('ai-wizard-cancel-banner-btn');
         const form = document.getElementById('ai-input-form');
         const input = document.getElementById('ai-chat-input');
         const paletteBackdrop = document.getElementById('ai-palette-backdrop');
         const paletteSearch = document.getElementById('ai-palette-search');
+        const chainerRunBtn = document.getElementById('ai-chainer-run-btn');
 
         fab?.addEventListener('click', () => this.toggleDrawer());
         backdrop?.addEventListener('click', () => this.closeDrawer());
         closeBtn?.addEventListener('click', () => this.closeDrawer());
         clearBtn?.addEventListener('click', () => this.resetConversation());
+        expandBtn?.addEventListener('click', () => this.toggleExpand());
         paletteBtn?.addEventListener('click', () => this.openCommandPalette());
         paletteTrigger?.addEventListener('click', () => this.openCommandPalette());
         scopeToggleBtn?.addEventListener('click', () => this.toggleScope());
-        
+        wizardCancelBannerBtn?.addEventListener('click', () => this.handleQuery('cancel'));
+
+        chainerRunBtn?.addEventListener('click', () => {
+            if (this.chainedFilters.size > 0) {
+                const cmd = Array.from(this.chainedFilters).map(s => '/' + s).join(' | ');
+                this.chainedFilters.clear();
+                this.renderChainerBar();
+                this.handleQuery(cmd);
+            }
+        });
+
         paletteBackdrop?.addEventListener('click', (e) => {
             if (e.target === paletteBackdrop) this.closeCommandPalette();
         });
@@ -252,7 +294,7 @@ class AiChatController {
             }
         });
 
-        // Header buttons hook
+        // Header and mobile button triggers
         const headerAiBtn = document.getElementById('header-ai-btn');
         headerAiBtn?.addEventListener('click', () => this.toggleDrawer());
 
@@ -302,6 +344,19 @@ class AiChatController {
         backdrop?.classList.remove('active');
     }
 
+    toggleExpand() {
+        this.isExpanded = !this.isExpanded;
+        const drawer = document.getElementById('ai-chat-drawer');
+        const expandBtn = document.getElementById('ai-drawer-expand-btn');
+        if (drawer) {
+            drawer.classList.toggle('expanded', this.isExpanded);
+        }
+        if (expandBtn) {
+            expandBtn.innerHTML = this.isExpanded ? '<i class="fas fa-compress-alt"></i>' : '<i class="fas fa-expand-alt"></i>';
+            expandBtn.title = this.isExpanded ? 'Restore Size' : 'Expand Width';
+        }
+    }
+
     isPaletteOpen() {
         return document.getElementById('ai-palette-backdrop')?.classList.contains('active');
     }
@@ -326,6 +381,7 @@ class AiChatController {
     toggleScope() {
         this.isScopedToView = !this.isScopedToView;
         this.updateScopeBanner();
+        this.renderTopPills();
         
         const count = this.isScopedToView ? this.viewContext.filteredCount : this.viewContext.totalCount;
         const scopeName = this.isScopedToView ? 'Current View Scope' : 'Global Scope';
@@ -354,6 +410,7 @@ class AiChatController {
         this.viewContext = context;
         this.updateBadgeCounts();
         this.updateScopeBanner();
+        this.renderTopPills();
     }
 
     getFilterDescription() {
@@ -413,9 +470,10 @@ class AiChatController {
         const banner = document.getElementById('ai-scope-banner');
         const icon = document.getElementById('ai-scope-icon');
         const badgeLabel = document.getElementById('ai-scope-badge-label');
-        const desc = document.getElementById('ai-scope-desc');
+        const titleEl = document.getElementById('ai-scope-title');
+        const subtitleEl = document.getElementById('ai-scope-subtitle');
         const toggleBtn = document.getElementById('ai-scope-toggle-btn');
-        if (!banner || !desc) return;
+        if (!banner || !subtitleEl) return;
 
         const count = this.isScopedToView ? this.viewContext.filteredCount : this.viewContext.totalCount;
         const filterDesc = this.getFilterDescription();
@@ -424,7 +482,8 @@ class AiChatController {
             banner.classList.remove('global');
             if (icon) icon.className = 'fas fa-bullseye ai-scope-icon';
             if (badgeLabel) badgeLabel.textContent = 'VIEW SCOPE';
-            desc.textContent = `${filterDesc} • ${count} task${count === 1 ? '' : 's'}`;
+            if (titleEl) titleEl.textContent = filterDesc;
+            subtitleEl.textContent = `${count} visible task${count === 1 ? '' : 's'}`;
             if (toggleBtn) {
                 toggleBtn.innerHTML = '<i class="fas fa-globe"></i> Switch to Global';
                 toggleBtn.style.display = 'inline-flex';
@@ -433,7 +492,8 @@ class AiChatController {
             banner.classList.add('global');
             if (icon) icon.className = 'fas fa-globe ai-scope-icon';
             if (badgeLabel) badgeLabel.textContent = 'GLOBAL SCOPE';
-            desc.textContent = `All Tasks • ${count} tasks`;
+            if (titleEl) titleEl.textContent = 'All Tasks';
+            subtitleEl.textContent = `${this.viewContext.totalCount} tasks in workspace`;
             if (toggleBtn) {
                 toggleBtn.innerHTML = '<i class="fas fa-filter"></i> Switch to View';
                 toggleBtn.style.display = this.hasActiveFilters() ? 'inline-flex' : 'none';
@@ -445,46 +505,142 @@ class AiChatController {
         this.messages = [];
         this.wizardState = { step: 'none', draft: { title: '', due: null, priority: 'medium', space: '' } };
         this.confirmingBulkComplete = false;
+        this.updateWizardBanner();
 
         const hasFilters = this.hasActiveFilters();
         const filterDesc = this.getFilterDescription();
         const count = this.viewContext.filteredCount;
 
-        let welcomeText = `👋 **Hello! I'm your GTasks AI Assistant.**\n\n`;
+        let welcomeText = `👋 **Welcome to GTasks AI Assistant!**\n\n`;
         if (hasFilters) {
-            welcomeText += `🎯 **Active View Scope:** I am currently scoped to **${filterDesc}** (**${count}** tasks visible).\n\n`;
-            welcomeText += `You can ask questions about this view, run Claude CLI-style wizards, chain commands, or tap the quick pills below:`;
+            welcomeText += `I am currently focused on your **active view**:\n` +
+                `🔍 **${filterDesc}** (${count} visible task${count === 1 ? '' : 's'})\n\n` +
+                `You can ask me questions about these tasks, or run quick actions:\n` +
+                `• *"Summarize these tasks"*\n` +
+                `• *"Which task is due first?"*\n` +
+                `• *"What is the most urgent task?"*\n` +
+                `• *"Mark all visible tasks as done"*\n\n` +
+                `💡 Tap the banner above to switch between **View Scope** and **All Tasks** anytime!`;
         } else {
-            welcomeText += `🌐 **Global Scope:** Ready to manage all your tasks, deadlines, priorities, and spaces.\n\n`;
-            welcomeText += `Type \`/help\` for commands, \`/wizard\` to add a task interactively, or ask a question in natural language:`;
+            welcomeText += `🌐 **Global Scope:** Ready to manage all your tasks, deadlines, priorities, and spaces.\n\n` +
+                `• Type \`/help\` for commands or tap **[/]** for palette\n` +
+                `• Type \`/wizard\` to add a task step-by-step\n` +
+                `• Combine filters using the Chainer bar below (e.g. \`today | high\`)`;
         }
 
         this.addAssistantMessage({
             text: welcomeText,
             chips: this.getDefaultQuickPills()
         });
+        this.renderTopPills();
     }
 
     getDefaultQuickPills() {
         if (this.isScopedToView && this.hasActiveFilters()) {
             return [
                 '📊 Summarize View',
-                '⚡ Most Urgent',
                 '⏰ Earliest Due',
-                '🪄 Add Task Wizard',
+                '⚡ Most Urgent',
                 '✅ Done All',
                 '🌐 Switch to Global',
+                '🪄 Add Task Wizard',
                 '📖 /help'
             ];
         } else {
             return [
                 '📊 Summary',
-                '⚡ High Priority',
                 '⏰ Due Today',
-                '🪄 Add Task Wizard',
+                '⚡ High Priority',
                 '⏳ Pending Tasks',
+                '🪄 Add Task Wizard',
                 '📖 /help'
             ];
+        }
+    }
+
+    renderTopPills() {
+        const container = document.getElementById('ai-top-pills-bar');
+        if (!container) return;
+
+        container.innerHTML = '';
+        const pills = this.getDefaultQuickPills();
+
+        pills.forEach(pill => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ai-action-chip';
+            btn.textContent = pill;
+            btn.addEventListener('click', () => {
+                this.handleQuery(pill);
+            });
+            container.appendChild(btn);
+        });
+    }
+
+    renderChainerBar() {
+        const chipsContainer = document.getElementById('ai-chainer-chips');
+        const runBtn = document.getElementById('ai-chainer-run-btn');
+        if (!chipsContainer || !runBtn) return;
+
+        chipsContainer.innerHTML = '';
+        const chainOptions = [
+            { key: 'today', label: '📅 today' },
+            { key: 'high', label: '⚡ high' },
+            { key: 'pending', label: '⏳ pending' },
+            { key: 'overdue', label: '⚠️ overdue' }
+        ];
+
+        chainOptions.forEach(opt => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = `ai-filter-chip ${this.chainedFilters.has(opt.key) ? 'selected' : ''}`;
+            chip.textContent = opt.label;
+            chip.addEventListener('click', () => {
+                if (this.chainedFilters.has(opt.key)) {
+                    this.chainedFilters.delete(opt.key);
+                } else {
+                    this.chainedFilters.add(opt.key);
+                }
+                this.renderChainerBar();
+            });
+            chipsContainer.appendChild(chip);
+        });
+
+        if (this.chainedFilters.size >= 1) {
+            runBtn.style.display = 'inline-flex';
+            runBtn.innerHTML = `<i class="fas fa-play"></i> Run: ${Array.from(this.chainedFilters).join(' | ')}`;
+        } else {
+            runBtn.style.display = 'none';
+        }
+    }
+
+    updateWizardBanner() {
+        const banner = document.getElementById('ai-wizard-active-banner');
+        const infoText = document.getElementById('ai-wizard-info-text');
+        const subtitle = document.getElementById('ai-drawer-subtitle');
+        if (!banner || !infoText) return;
+
+        if (this.wizardState.step === 'none') {
+            banner.style.display = 'none';
+            if (subtitle) {
+                subtitle.classList.remove('wizard-active');
+                subtitle.textContent = 'Claude Wizard • View Context-Aware';
+            }
+        } else {
+            banner.style.display = 'flex';
+            const stepNames = {
+                title: 'Step 1/4: Task Title',
+                due: 'Step 2/4: Due Date',
+                priority: 'Step 3/4: Priority Level',
+                space: 'Step 4/4: Target Space',
+                confirm: 'Review & Confirmation'
+            };
+            const currentStepName = stepNames[this.wizardState.step] || this.wizardState.step;
+            infoText.textContent = `Claude Wizard • ${currentStepName}`;
+            if (subtitle) {
+                subtitle.classList.add('wizard-active');
+                subtitle.textContent = `🪄 Wizard Active (${currentStepName})`;
+            }
         }
     }
 
@@ -510,7 +666,6 @@ class AiChatController {
             timestamp: new Date()
         });
         this.renderMessages();
-        this.renderQuickPills(chips);
     }
 
     renderMessages() {
@@ -526,10 +681,13 @@ class AiChatController {
             avatar.className = `ai-message-avatar ${msg.sender}`;
             avatar.innerHTML = msg.sender === 'user' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-sparkles"></i>';
 
+            const bubbleCol = document.createElement('div');
+            bubbleCol.className = 'ai-message-bubble-col';
+
             const bubble = document.createElement('div');
             bubble.className = `ai-message-bubble ${msg.sender} ${msg.isError ? 'error' : ''}`;
 
-            // Markdown rendering
+            // Markdown parsing
             const textEl = document.createElement('div');
             textEl.className = 'ai-markdown-content';
             if (window.marked && typeof window.marked.parse === 'function') {
@@ -539,23 +697,44 @@ class AiChatController {
             }
             bubble.appendChild(textEl);
 
-            // Task Cards if any
+            // Suggestion chips inside bubble if present
+            if (msg.chips && msg.chips.length > 0) {
+                const chipsEl = document.createElement('div');
+                chipsEl.className = 'ai-msg-chips';
+                msg.chips.forEach(chip => {
+                    const chipBtn = document.createElement('button');
+                    chipBtn.type = 'button';
+                    const cLower = chip.toLowerCase();
+                    const isCancel = cLower.includes('cancel') || cLower.includes('exit');
+                    const isSkip = cLower.includes('skip') || cLower.includes('none');
+                    chipBtn.className = `ai-msg-chip ${isCancel ? 'cancel' : ''} ${isSkip ? 'skip' : ''}`;
+                    chipBtn.textContent = chip;
+                    chipBtn.addEventListener('click', () => {
+                        this.handleQuery(chip);
+                    });
+                    chipsEl.appendChild(chipBtn);
+                });
+                bubble.appendChild(chipsEl);
+            }
+
+            // Task Cards if any (_buildChatTaskCard replica)
             if (msg.taskItems && msg.taskItems.length > 0) {
                 const tasksContainer = document.createElement('div');
-                tasksContainer.className = 'ai-task-card-list';
+                tasksContainer.className = 'ai-chat-task-list';
                 msg.taskItems.forEach(t => {
                     tasksContainer.appendChild(this.createAiTaskCard(t));
                 });
                 bubble.appendChild(tasksContainer);
             }
 
-            // Wizard Card if any
+            // Wizard Draft Review Card if any
             if (msg.wizardCard) {
                 bubble.appendChild(this.createWizardCard(msg.wizardCard));
             }
 
+            bubbleCol.appendChild(bubble);
             row.appendChild(avatar);
-            row.appendChild(bubble);
+            row.appendChild(bubbleCol);
             container.appendChild(row);
         });
 
@@ -564,39 +743,207 @@ class AiChatController {
 
     createAiTaskCard(task) {
         const card = document.createElement('div');
-        card.className = `ai-task-item ${task.status === 'completed' ? 'completed' : ''}`;
-
         const isCompleted = task.status === 'completed';
         const prio = (task.calculated_priority || task.priority || 'medium').toLowerCase();
-        const due = task.due ? task.due.substring(0, 10) : null;
-        const spaces = task.spaces ? Object.keys(task.spaces).join(', ') : (task.space || '');
+        const dueStr = task.due ? task.due.substring(0, 10) : null;
+        const todayStr = new Date().toISOString().substring(0, 10);
+        
+        const isOverdue = !isCompleted && dueStr && dueStr < todayStr;
+        const isToday = !isCompleted && dueStr && dueStr === todayStr;
+
+        card.className = `ai-chat-task-card ${isOverdue ? 'is-overdue' : ''} ${isToday ? 'is-today' : ''}`;
+
+        // Due Badge
+        let dueBadgeHtml = '';
+        if (dueStr) {
+            if (isOverdue) {
+                dueBadgeHtml = `<span class="ai-card-badge ai-badge-due-overdue"><i class="fas fa-clock"></i> Overdue (${dueStr})</span>`;
+            } else if (isToday) {
+                dueBadgeHtml = `<span class="ai-card-badge ai-badge-due-today"><i class="fas fa-calendar-day"></i> Today</span>`;
+            } else {
+                dueBadgeHtml = `<span class="ai-card-badge ai-badge-due-normal"><i class="far fa-calendar-alt"></i> ${dueStr}</span>`;
+            }
+        }
+
+        // Priority Badge
+        let prioBadgeHtml = '';
+        if (prio !== 'normal' && prio !== 'none') {
+            prioBadgeHtml = `<span class="ai-card-badge ai-badge-priority-${prio}">${prio.toUpperCase()}</span>`;
+        }
+
+        // Space & Subspaces Badge
+        let spaceBadgeHtml = '';
+        let spacesText = '';
+        if (task.spaces && typeof task.spaces === 'object') {
+            const parts = [];
+            Object.entries(task.spaces).forEach(([sp, subs]) => {
+                if (Array.isArray(subs) && subs.length > 0) {
+                    parts.push(`${sp} › ${subs.join(', ')}`);
+                } else {
+                    parts.push(sp);
+                }
+            });
+            spacesText = parts.join(' | ');
+        } else if (task.space) {
+            spacesText = task.space;
+        }
+
+        if (spacesText) {
+            spaceBadgeHtml = `<span class="ai-card-badge ai-badge-space"><i class="fas fa-layer-group"></i> ${this.escapeHtml(spacesText)}</span>`;
+        }
+
+        // Tag Badges
+        let tagsHtml = '';
+        const tags = task.tags || [];
+        if (Array.isArray(tags) && tags.length > 0) {
+            tagsHtml = tags.slice(0, 3).map(tag => `<span class="ai-card-badge ai-badge-tag">#${this.escapeHtml(tag)}</span>`).join('');
+        }
 
         card.innerHTML = `
-            <div class="ai-task-item-header">
-                <button class="ai-task-check-btn ${isCompleted ? 'checked' : ''}" title="${isCompleted ? 'Completed' : 'Mark Complete'}">
-                    <i class="fas ${isCompleted ? 'fa-check' : 'fa-circle'}"></i>
+            <div class="ai-task-checkbox-wrap">
+                <button class="ai-task-checkbox ${isCompleted ? 'checked' : ''}" title="${isCompleted ? 'Mark Pending' : 'Mark Completed'}">
+                    <i class="fas fa-check"></i>
                 </button>
-                <div class="ai-task-item-title ${isCompleted ? 'done' : ''}">${this.escapeHtml(task.title || 'Untitled')}</div>
             </div>
-            <div class="ai-task-item-meta">
-                ${spaces ? `<span class="ai-task-tag space"><i class="fas fa-layer-group"></i> ${this.escapeHtml(spaces)}</span>` : ''}
-                <span class="ai-task-tag priority ${prio}">${prio.toUpperCase()}</span>
-                ${due ? `<span class="ai-task-tag due"><i class="far fa-calendar-alt"></i> ${due}</span>` : ''}
+            <div class="ai-chat-task-content">
+                <div class="ai-chat-task-title ${isCompleted ? 'completed' : ''}">${this.escapeHtml(task.title || 'Untitled')}</div>
+                <div class="ai-chat-task-meta">
+                    ${dueBadgeHtml}
+                    ${prioBadgeHtml}
+                    ${spaceBadgeHtml}
+                    ${tagsHtml}
+                </div>
+            </div>
+            <div class="ai-chat-task-actions">
+                <button class="ai-task-icon-btn ai-view-btn" title="Quick View"><i class="far fa-eye"></i></button>
+                <button class="ai-task-icon-btn ai-edit-btn" title="Edit in Form"><i class="far fa-edit"></i></button>
+                <button class="ai-task-icon-btn danger ai-del-btn" title="Delete Task"><i class="far fa-trash-alt"></i></button>
             </div>
         `;
 
-        const checkBtn = card.querySelector('.ai-task-check-btn');
-        checkBtn?.addEventListener('click', async () => {
-            if (!isCompleted) {
-                await this.completeTask(task.id);
-                checkBtn.classList.add('checked');
-                checkBtn.innerHTML = '<i class="fas fa-check"></i>';
-                card.classList.add('completed');
-                card.querySelector('.ai-task-item-title')?.classList.add('done');
+        const checkBtn = card.querySelector('.ai-task-checkbox');
+        const titleEl = card.querySelector('.ai-chat-task-title');
+        const viewBtn = card.querySelector('.ai-view-btn');
+        const editBtn = card.querySelector('.ai-edit-btn');
+        const delBtn = card.querySelector('.ai-del-btn');
+
+        // Checkbox completion toggle
+        checkBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleTaskComplete(task, checkBtn, titleEl, card);
+        });
+
+        // Quick View button
+        viewBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (typeof window.openQuickView === 'function') {
+                window.openQuickView(task.id);
+            }
+        });
+
+        // Edit button
+        editBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (typeof window.openEditModal === 'function') {
+                window.openEditModal(task.id);
+            }
+        });
+
+        // Delete button
+        delBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.deleteTask(task.id, task.title || 'Untitled');
+        });
+
+        // Clicking card body opens quick view
+        card.addEventListener('click', (e) => {
+            if (!e.target.closest('button')) {
+                if (typeof window.openQuickView === 'function') {
+                    window.openQuickView(task.id);
+                }
             }
         });
 
         return card;
+    }
+
+    async toggleTaskComplete(task, checkBtn, titleEl, card) {
+        const isCurrentlyCompleted = task.status === 'completed';
+
+        if (!isCurrentlyCompleted) {
+            // Mark Completed
+            try {
+                if (typeof window.completeTask === 'function') {
+                    await window.completeTask(task.id);
+                } else {
+                    await fetch(`${this.getBasePath()}/api/tasks/${task.id}/complete`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({})
+                    });
+                    if (typeof window.refreshData === 'function') {
+                        window.refreshData();
+                    }
+                }
+
+                task.status = 'completed';
+                checkBtn?.classList.add('checked');
+                titleEl?.classList.add('completed');
+                card?.classList.remove('is-overdue', 'is-today');
+            } catch (err) {
+                console.error('Error completing task:', err);
+            }
+        } else {
+            // Uncomplete / Reopen
+            try {
+                await fetch(`${this.getBasePath()}/api/tasks/${task.id}/uncomplete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                task.status = 'needsAction';
+                checkBtn?.classList.remove('checked');
+                titleEl?.classList.remove('completed');
+                if (typeof window.refreshData === 'function') {
+                    window.refreshData();
+                }
+            } catch (err) {
+                console.error('Error reopening task:', err);
+            }
+        }
+    }
+
+    async deleteTask(taskId, taskTitle) {
+        if (!confirm(`Are you sure you want to delete task "${taskTitle}"?`)) {
+            return;
+        }
+
+        try {
+            const res = await fetch(`${this.getBasePath()}/api/tasks/${taskId}/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            const data = await res.json();
+            if (data.success || res.ok) {
+                if (typeof window.refreshData === 'function') {
+                    window.refreshData();
+                }
+                this.addAssistantMessage({
+                    text: `🗑️ **Task Deleted:** "${taskTitle}" has been removed.`,
+                    chips: this.getDefaultQuickPills()
+                });
+            } else {
+                throw new Error(data.message || data.error || 'Failed to delete task');
+            }
+        } catch (err) {
+            console.error('Error deleting task:', err);
+            this.addAssistantMessage({
+                text: `⚠️ **Failed to delete task:** ${err.message}`,
+                isError: true,
+                chips: this.getDefaultQuickPills()
+            });
+        }
     }
 
     createWizardCard(data) {
@@ -613,15 +960,15 @@ class AiChatController {
             </div>
             <div class="ai-wizard-row">
                 <span class="ai-wizard-label">Due Date</span>
-                <span class="ai-wizard-val">${data.due ? `<span class="ai-task-tag due">${data.due}</span>` : '<span class="text-muted">None</span>'}</span>
+                <span class="ai-wizard-val">${data.due ? `<span class="ai-card-badge ai-badge-due-normal">${data.due}</span>` : '<span class="text-muted">None</span>'}</span>
             </div>
             <div class="ai-wizard-row">
                 <span class="ai-wizard-label">Priority</span>
-                <span class="ai-wizard-val"><span class="ai-task-tag priority ${(data.priority || 'medium').toLowerCase()}">${(data.priority || 'medium').toUpperCase()}</span></span>
+                <span class="ai-wizard-val"><span class="ai-card-badge ai-badge-priority-${(data.priority || 'medium').toLowerCase()}">${(data.priority || 'medium').toUpperCase()}</span></span>
             </div>
             <div class="ai-wizard-row">
                 <span class="ai-wizard-label">Space</span>
-                <span class="ai-wizard-val">${data.space ? `<span class="ai-task-tag space">${this.escapeHtml(data.space)}</span>` : '<span class="text-muted">None</span>'}</span>
+                <span class="ai-wizard-val">${data.space ? `<span class="ai-card-badge ai-badge-space">${this.escapeHtml(data.space)}</span>` : '<span class="text-muted">None</span>'}</span>
             </div>
             <div class="ai-wizard-actions">
                 <button class="ai-btn-primary" id="wizard-confirm-btn"><i class="fas fa-check"></i> Create Task</button>
@@ -638,25 +985,6 @@ class AiChatController {
         });
 
         return card;
-    }
-
-    renderQuickPills(chips) {
-        const container = document.getElementById('ai-quick-pills');
-        if (!container) return;
-
-        container.innerHTML = '';
-        const list = chips && chips.length > 0 ? chips : this.getDefaultQuickPills();
-
-        list.forEach(chip => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'ai-pill-btn';
-            btn.textContent = chip;
-            btn.addEventListener('click', () => {
-                this.handleQuery(chip);
-            });
-            container.appendChild(btn);
-        });
     }
 
     scrollToBottom() {
@@ -691,7 +1019,7 @@ class AiChatController {
         if (!query) return;
 
         this.addUserMessage(query);
-        const qLower = query.toLowerCase().replace(/^[📊⚡⏰🪄✅🌐📖]\s*/, '').trim();
+        const qLower = query.toLowerCase().replace(/^[📊⚡⏰🪄✅🌐📖⏳📅⚠️➕]\s*/, '').trim();
 
         // 1. Bulk complete confirmation
         if (this.confirmingBulkComplete) {
@@ -720,7 +1048,7 @@ class AiChatController {
         }
 
         // 4. Scope Toggling
-        if (qLower === '/scope' || qLower === 'toggle scope' || qLower === 'switch scope' || qLower === 'switch to global' || qLower === 'switch to view') {
+        if (qLower === '/scope' || qLower === 'toggle scope' || qLower === 'switch scope' || qLower === 'switch to global' || qLower === 'switch to view' || qLower === 'switch to all') {
             this.toggleScope();
             return;
         }
@@ -765,7 +1093,7 @@ class AiChatController {
             return;
         }
 
-        // 9. Scoped Queries (/these, /summary, /urgent, /earliest)
+        // 9. Scoped Queries (/these, /summary, /urgent, /earliest, /today, /overdue, etc.)
         if (this.isScopedSlashCommand(qLower)) {
             await this.handleScopedSlashCommand(qLower);
             return;
@@ -844,7 +1172,7 @@ class AiChatController {
     isScopedSlashCommand(q) {
         return (
             q === '/these' || q === 'tasks in view' || q === 'show these' || q === 'show tasks' ||
-            q === '/summary' || q === '/stats' || q === 'summary' || q === 'stats' || q === 'summarize view' ||
+            q === '/summary' || q === '/stats' || q === 'summary' || q === 'stats' || q === 'summarize view' || q === 'view summary' ||
             q === '/urgent' || q === '/mosturgent' || q === 'most urgent' || q === 'urgent' ||
             q === '/earliest' || q === '/earliestdue' || q === 'earliest due' || q === 'earliest' ||
             q === '/today' || q === 'due today' || q === '/overdue' || q === 'overdue' ||
@@ -876,7 +1204,7 @@ class AiChatController {
         }
 
         // /summary
-        if (cmd === '/summary' || cmd === '/stats' || cmd === 'summary' || cmd === 'stats' || cmd === 'summarize view') {
+        if (cmd === '/summary' || cmd === '/stats' || cmd === 'summary' || cmd === 'stats' || cmd === 'summarize view' || cmd === 'view summary') {
             const overdue = pending.filter(t => t.due && t.due.substring(0, 10) < todayStr).length;
             const dueToday = pending.filter(t => t.due && t.due.substring(0, 10) === todayStr).length;
             const highPrio = pending.filter(t => {
@@ -1039,7 +1367,6 @@ class AiChatController {
 
     // Claude CLI-style interactive task creation wizard
     startWizard() {
-        // Auto-inherit active scoped space if present
         let defaultSpace = '';
         if (this.viewContext.filters?.space) {
             defaultSpace = this.viewContext.filters.space;
@@ -1057,8 +1384,10 @@ class AiChatController {
             }
         };
 
+        this.updateWizardBanner();
+
         this.addAssistantMessage({
-            text: `🪄 **Task Creation Wizard (Step 1/4)**\n\nWhat is the **title** of the task? *(Type your title below or 'cancel' to exit)*`,
+            text: `🪄 **Task Creation Wizard (Step 1/4)**\n\nWhat is the **title** of the task? *(Type title below or tap 'Cancel')*`,
             chips: ['Cancel']
         });
     }
@@ -1069,8 +1398,9 @@ class AiChatController {
 
         if (vLower === 'cancel' || vLower === 'exit' || vLower === 'quit') {
             this.wizardState = { step: 'none', draft: {} };
+            this.updateWizardBanner();
             this.addAssistantMessage({
-                text: '🚫 **Task creation cancelled.**',
+                text: '🚫 **Task creation wizard cancelled.**',
                 chips: this.getDefaultQuickPills()
             });
             return;
@@ -1087,9 +1417,10 @@ class AiChatController {
             }
             this.wizardState.draft.title = val;
             this.wizardState.step = 'due';
+            this.updateWizardBanner();
 
             this.addAssistantMessage({
-                text: `📅 **Task Creation Wizard (Step 2/4)**\n\nTitle set to: **${val}**.\nWhen is this task **due**? Tap an option or type a date (YYYY-MM-DD):`,
+                text: `📅 **Task Creation Wizard (Step 2/4)**\n\nTitle set to: **${val}**.\nWhen is this task **due**? Tap a chip or type a date (YYYY-MM-DD):`,
                 chips: ['Today', 'Tomorrow', 'Next Week', 'Skip (No Due Date)', 'Cancel']
             });
             return;
@@ -1113,7 +1444,6 @@ class AiChatController {
                 nw.setDate(nw.getDate() + 7);
                 dueVal = nw.toISOString().substring(0, 10);
             } else {
-                // Check if user entered a date
                 const dateMatch = val.match(/\d{4}-\d{2}-\d{2}/);
                 if (dateMatch) {
                     dueVal = dateMatch[0];
@@ -1124,10 +1454,11 @@ class AiChatController {
 
             this.wizardState.draft.due = dueVal;
             this.wizardState.step = 'priority';
+            this.updateWizardBanner();
 
             this.addAssistantMessage({
                 text: `⚡ **Task Creation Wizard (Step 3/4)**\n\nDue date set to: **${dueVal || 'None'}**.\nWhat is the **priority** level?`,
-                chips: ['High', 'Medium', 'Low', 'None (Medium)', 'Cancel']
+                chips: ['High', 'Medium', 'Low', 'Cancel']
             });
             return;
         }
@@ -1141,8 +1472,8 @@ class AiChatController {
 
             this.wizardState.draft.priority = prio;
             this.wizardState.step = 'space';
+            this.updateWizardBanner();
 
-            // Gather available spaces from viewContext or window
             const availableSpaces = this.getAvailableSpaces();
             const spaceChips = availableSpaces.slice(0, 4);
             if (this.wizardState.draft.space && !spaceChips.includes(this.wizardState.draft.space)) {
@@ -1165,6 +1496,7 @@ class AiChatController {
                 this.wizardState.draft.space = val;
             }
             this.wizardState.step = 'confirm';
+            this.updateWizardBanner();
 
             this.addAssistantMessage({
                 text: `✨ **Review Your New Task Draft:**\nPlease confirm to save this task to your workspace:`,
@@ -1180,6 +1512,7 @@ class AiChatController {
                 await this.createTaskFromDraft();
             } else {
                 this.wizardState = { step: 'none', draft: {} };
+                this.updateWizardBanner();
                 this.addAssistantMessage({
                     text: '🚫 **Task creation cancelled.**',
                     chips: this.getDefaultQuickPills()
@@ -1200,6 +1533,7 @@ class AiChatController {
     async createTaskFromDraft() {
         const draft = this.wizardState.draft;
         this.wizardState = { step: 'none', draft: {} };
+        this.updateWizardBanner();
 
         try {
             const payload = {
@@ -1218,7 +1552,6 @@ class AiChatController {
 
             const data = await response.json();
             if (data.success || response.ok) {
-                // Refresh dashboard data
                 if (typeof window.refreshData === 'function') {
                     window.refreshData();
                 }
@@ -1243,22 +1576,6 @@ class AiChatController {
         }
     }
 
-    async completeTask(taskId) {
-        try {
-            const res = await fetch(`${this.getBasePath()}/api/tasks/${taskId}/complete`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            });
-            if (res.ok) {
-                if (typeof window.refreshData === 'function') {
-                    window.refreshData();
-                }
-            }
-        } catch (e) {
-            console.error('Error completing task:', e);
-        }
-    }
-
     async executeBulkComplete() {
         const targetTasks = this.getTargetTaskList().filter(t => t.status !== 'completed');
         let completedCount = 0;
@@ -1267,7 +1584,8 @@ class AiChatController {
             try {
                 const res = await fetch(`${this.getBasePath()}/api/tasks/${t.id}/complete`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
                 });
                 if (res.ok) completedCount++;
             } catch (err) {
@@ -1289,7 +1607,6 @@ class AiChatController {
         this.setProcessing(true);
 
         try {
-            // Build view context for LLM grounding
             const sampleTasks = this.getTargetTaskList().slice(0, 10).map(t => ({
                 id: t.id,
                 display_id: t.display_id || t.id,
@@ -1340,7 +1657,6 @@ class AiChatController {
     handleLocalFallback(query) {
         const qLower = query.toLowerCase();
 
-        // Check for common commands
         if (qLower.includes('search') || qLower.includes('find')) {
             const term = qLower.replace(/^(?:search|find)\s*/, '').trim();
             const matches = this.getTargetTaskList().filter(t => (t.title || '').toLowerCase().includes(term));
@@ -1359,7 +1675,6 @@ class AiChatController {
             return;
         }
 
-        // Default response
         this.addAssistantMessage({
             text: `🤖 I heard: **"${query}"**.\n\n` +
                 `You can use:\n` +
@@ -1407,7 +1722,7 @@ class AiChatController {
             { category: '🔍 Filter Shortcuts', cmd: '/overdue', desc: 'Filter overdue pending tasks', icon: 'fa-exclamation-circle' },
             { category: '🔍 Filter Shortcuts', cmd: '/pending', desc: 'Filter all pending tasks', icon: 'fa-hourglass-half' },
             { category: '🔍 Filter Shortcuts', cmd: '/high', desc: 'Filter high or critical priority tasks', icon: 'fa-fire' },
-            { category: '🔍 Filter Shortcuts', cmd: '/today && /high', desc: 'Example of chained command execution', icon: 'fa-link' },
+            { category: '🔍 Filter Shortcuts', cmd: '/today | /high', desc: 'Example of chained command execution', icon: 'fa-link' },
 
             // Assistant
             { category: '⚙️ Assistant Commands', cmd: '/help', desc: 'Show this interactive command palette and guide', icon: 'fa-question-circle' },
@@ -1423,7 +1738,6 @@ class AiChatController {
             return;
         }
 
-        // Group by category
         const groups = {};
         matched.forEach(c => {
             if (!groups[c.category]) groups[c.category] = [];
@@ -1468,20 +1782,22 @@ class AiChatController {
 // Instantiate globally on DOM load
 let aiChatInstance = null;
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
+function setupAiChat() {
+    if (!aiChatInstance) {
         aiChatInstance = new AiChatController();
-        window.AiChatController = aiChatInstance;
-        window.toggleAiChatDrawer = () => aiChatInstance.toggleDrawer();
-        window.openAiChatDrawer = () => aiChatInstance.openDrawer();
-        window.closeAiChatDrawer = () => aiChatInstance.closeDrawer();
-    });
+        if (typeof window !== 'undefined') {
+            window.AiChatController = aiChatInstance;
+            window.toggleAiChatDrawer = () => aiChatInstance.toggleDrawer();
+            window.openAiChatDrawer = () => aiChatInstance.openDrawer();
+            window.closeAiChatDrawer = () => aiChatInstance.closeDrawer();
+        }
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupAiChat);
 } else {
-    aiChatInstance = new AiChatController();
-    window.AiChatController = aiChatInstance;
-    window.toggleAiChatDrawer = () => aiChatInstance.toggleDrawer();
-    window.openAiChatDrawer = () => aiChatInstance.openDrawer();
-    window.closeAiChatDrawer = () => aiChatInstance.closeDrawer();
+    setupAiChat();
 }
 
 export default AiChatController;
