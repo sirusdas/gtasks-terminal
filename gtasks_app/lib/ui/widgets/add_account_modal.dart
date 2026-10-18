@@ -21,6 +21,9 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
   final TextEditingController _authCodeController = TextEditingController();
 
   bool _loading = false;
+  bool _syncing = false;
+  bool _syncCompleted = false;
+  String _statusMessage = 'Connecting to Google...';
   String? _authUrl;
   String? _error;
   String? _lastGeneratedRedirectUri;
@@ -179,7 +182,16 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           // Automatically complete auth in app
           if (mounted) {
             _authCodeController.text = code;
-            await _exchangeCodeAndSave(code, 'http://localhost:$localPort');
+            setState(() {
+              _loading = true;
+              _error = null;
+              _statusMessage = 'Google authorized! Exchanging tokens...';
+            });
+            // Brief delay to allow OS network socket to settle after browser redirection
+            await Future.delayed(const Duration(milliseconds: 400));
+            if (mounted) {
+              await _exchangeCodeAndSave(code, 'http://localhost:$localPort');
+            }
           }
           break;
         } else {
@@ -208,12 +220,18 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
   Future<void> _exchangeCodeAndSave(String code, String redirectUri) async {
     setState(() {
       _loading = true;
+      _syncing = false;
+      _syncCompleted = false;
+      _statusMessage = 'Connecting to Google OAuth...';
       _error = null;
     });
 
     try {
       final taskProvider = context.read<TaskProvider>();
       final settings = context.read<SettingsProvider>();
+
+      final accName = _accountNameController.text.trim().isEmpty ? 'Personal' : _accountNameController.text.trim();
+      final accId = accName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
 
       if (taskProvider.isStandalone) {
         // Exchange code for tokens directly with Google OAuth2 token endpoint
@@ -224,7 +242,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         // Try with current redirectUri and candidate fallbacks
         final candidates = [
           redirectUri,
-          if (_lastGeneratedRedirectUri != null) _lastGeneratedRedirectUri!,
+          if (_lastGeneratedRedirectUri != null && _lastGeneratedRedirectUri != redirectUri) _lastGeneratedRedirectUri!,
           'http://localhost:48275',
           'http://127.0.0.1:48275',
           'http://localhost',
@@ -232,24 +250,41 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         ];
 
         for (final candidateUri in candidates) {
-          try {
-            response = await http.post(
-              tokenUri,
-              headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-              body: {
-                'code': code,
-                'client_id': _defaultGoogleClientId,
-                'client_secret': _defaultGoogleClientSecret,
-                'redirect_uri': candidateUri,
-                'grant_type': 'authorization_code',
-              },
-            );
+          // Retry up to 3 times per candidate to handle transient DNS or socket reconnection glitches
+          for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+              response = await http.post(
+                tokenUri,
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: {
+                  'code': code,
+                  'client_id': _defaultGoogleClientId,
+                  'client_secret': _defaultGoogleClientSecret,
+                  'redirect_uri': candidateUri,
+                  'grant_type': 'authorization_code',
+                },
+              ).timeout(const Duration(seconds: 12));
 
-            if (response.statusCode == 200) {
+              if (response.statusCode == 200) {
+                break;
+              }
+              // If status is 400 (e.g. invalid redirect_uri or code), don't keep retrying this candidate
               break;
+            } catch (e) {
+              lastEx = e;
+              if (attempt < 2) {
+                if (mounted) {
+                  setState(() {
+                    _statusMessage = 'Connecting to Google (${attempt + 2}/3)...';
+                  });
+                }
+                await Future.delayed(Duration(milliseconds: 700 * (attempt + 1)));
+              }
             }
-          } catch (e) {
-            lastEx = e;
+          }
+
+          if (response != null && response.statusCode == 200) {
+            break;
           }
         }
 
@@ -257,9 +292,6 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           final data = jsonDecode(response.body);
           final accessToken = data['access_token'] as String;
           final refreshToken = data['refresh_token'] as String?;
-
-          final accName = _accountNameController.text.trim().isEmpty ? 'Personal' : _accountNameController.text.trim();
-          final accId = accName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
 
           await settings.saveAccount(
             id: accId,
@@ -277,26 +309,48 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           await taskProvider.loadInitialData();
           await taskProvider.setAccount(accId);
 
-          // Trigger immediate initial task pull from Google Tasks
-          taskProvider.syncGoogleTasks(account: accId);
+          if (mounted) {
+            setState(() {
+              _loading = false;
+              _syncing = true;
+              _statusMessage = 'Syncing all tasks with Google Tasks...';
+            });
+          }
+
+          // Trigger full sync to import 100% of tasks across all tasklists
+          final syncSuccess = await taskProvider.syncAllGoogleTasks(account: accId);
+
+          if (!mounted) return;
+
+          setState(() {
+            _syncing = false;
+            _syncCompleted = true;
+          });
+
+          await Future.delayed(const Duration(milliseconds: 850));
 
           if (!mounted) return;
           Navigator.pop(context, true);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Account "$accName" connected and syncing tasks!'),
-              backgroundColor: Colors.green,
+              content: Text(
+                syncSuccess
+                    ? 'Account "$accName" connected & all tasks synced!'
+                    : 'Account "$accName" connected (sync finished with warnings).',
+              ),
+              backgroundColor: syncSuccess ? Colors.green : Colors.orange,
             ),
           );
           return;
         } else if (response != null) {
           final errResp = response;
           setState(() {
+            _loading = false;
             _error = 'Failed to exchange authorization code: ${errResp.statusCode}\n${errResp.body}';
           });
           return;
         } else {
-          // If network direct request failed (e.g. DNS / socket issue on device), try exchanging via PC server proxy
+          // If direct Google request failed (e.g. DNS or socket issue on device), try exchanging via PC server proxy
           final fallbackUrls = [
             'http://127.0.0.1:48275',
             'http://localhost:48275',
@@ -308,14 +362,12 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
               final oldUrl = taskProvider.apiClient.baseUrl;
               taskProvider.apiClient.baseUrl = serverUrl;
               final success = await taskProvider.apiClient.submitAuthCode(
-                _accountNameController.text.trim(),
+                accName,
                 code,
                 redirectUri: redirectUri,
               );
               if (success) {
                 await settings.setBaseUrl(serverUrl);
-                final accName = _accountNameController.text.trim().isEmpty ? 'Personal' : _accountNameController.text.trim();
-                final accId = accName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
                 await settings.saveAccount(id: accId, name: accName);
 
                 try {
@@ -335,13 +387,36 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
                 await taskProvider.loadInitialData();
                 await taskProvider.setAccount(accId);
 
-                // Trigger sync for this account
-                taskProvider.syncGoogleTasks(account: accId);
+                if (mounted) {
+                  setState(() {
+                    _loading = false;
+                    _syncing = true;
+                    _statusMessage = 'Syncing all tasks via server...';
+                  });
+                }
+
+                // Trigger full sync for this account
+                final syncSuccess = await taskProvider.syncAllGoogleTasks(account: accId);
+
+                if (!mounted) return;
+                setState(() {
+                  _syncing = false;
+                  _syncCompleted = true;
+                });
+
+                await Future.delayed(const Duration(milliseconds: 850));
 
                 if (!mounted) return;
                 Navigator.pop(context, true);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Account "$accName" connected and syncing via server!')),
+                  SnackBar(
+                    content: Text(
+                      syncSuccess
+                          ? 'Account "$accName" connected & tasks synced!'
+                          : 'Account "$accName" connected via server.',
+                    ),
+                    backgroundColor: syncSuccess ? Colors.green : Colors.orange,
+                  ),
                 );
                 return;
               }
@@ -350,6 +425,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           }
 
           setState(() {
+            _loading = false;
             _error = 'Network error connecting to Google: $lastEx\nPlease ensure internet is active on phone.';
           });
           return;
@@ -358,14 +434,12 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
 
       // PC Server flow
       final success = await taskProvider.apiClient.submitAuthCode(
-        _accountNameController.text.trim(),
+        accName,
         code,
         redirectUri: redirectUri,
       );
 
       if (success) {
-        final accName = _accountNameController.text.trim().isEmpty ? 'Personal' : _accountNameController.text.trim();
-        final accId = accName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
         await settings.saveAccount(id: accId, name: accName);
 
         try {
@@ -385,21 +459,52 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         await taskProvider.loadInitialData();
         await taskProvider.setAccount(accId);
 
-        // Trigger sync for newly added account on server
-        taskProvider.syncGoogleTasks(account: accId);
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _syncing = true;
+            _statusMessage = 'Syncing all tasks via server...';
+          });
+        }
+
+        // Trigger full sync for newly added account on server
+        final syncSuccess = await taskProvider.syncAllGoogleTasks(account: accId);
+
+        if (!mounted) return;
+        setState(() {
+          _syncing = false;
+          _syncCompleted = true;
+        });
+
+        await Future.delayed(const Duration(milliseconds: 850));
 
         if (!mounted) return;
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Account "$accName" connected and syncing tasks!')),
+          SnackBar(
+            content: Text(
+              syncSuccess
+                  ? 'Account "$accName" connected and tasks fully synced!'
+                  : 'Account "$accName" connected on server.',
+            ),
+            backgroundColor: syncSuccess ? Colors.green : Colors.orange,
+          ),
         );
       } else {
-        setState(() => _error = 'Authorization failed. Please verify the code.');
+        setState(() {
+          _loading = false;
+          _error = 'Authorization failed. Please verify the code.';
+        });
       }
     } catch (e) {
-      setState(() => _error = 'Auth error: $e');
+      setState(() {
+        _loading = false;
+        _error = 'Auth error: $e';
+      });
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && !_syncing && !_syncCompleted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -445,59 +550,139 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Connect a Google Account without touching terminals or token files.',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _accountNameController,
-              decoration: const InputDecoration(
-                labelText: 'Account Nickname',
-                hintText: 'e.g. Work, School, Personal',
-                border: OutlineInputBorder(),
-                isDense: true,
+            if (_syncing) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 52,
+                      height: 52,
+                      child: CircularProgressIndicator(strokeWidth: 3.5),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Syncing Tasks with Google...',
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Downloading and reconciling all tasks for "${_accountNameController.text.trim().isEmpty ? 'Personal' : _accountNameController.text.trim()}"...',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Please keep the app open while initial sync completes.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.primary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
-            const Text('Connection Method:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(
-                  value: 0,
-                  icon: Icon(Icons.open_in_browser, size: 16),
-                  label: Text('Direct Web'),
+            ] else if (_syncCompleted) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 48),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'All Tasks Synchronized!',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Account is ready with all lists and tasks loaded.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                    ),
+                  ],
                 ),
-                ButtonSegment(
-                  value: 1,
-                  icon: Icon(Icons.vpn_key, size: 16),
-                  label: Text('Paste Code'),
-                ),
-              ],
-              selected: {_selectedMethod},
-              onSelectionChanged: (set) => setState(() => _selectedMethod = set.first),
-            ),
-            const SizedBox(height: 14),
-            if (_error != null)
-              Container(
-                padding: const EdgeInsets.all(8),
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
-                child: SelectableText(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
               ),
-            if (_loading)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(12),
-                  child: CircularProgressIndicator(),
+            ] else if (_loading) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: CircularProgressIndicator(strokeWidth: 3),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      _statusMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                  ],
                 ),
-              )
-            else ...[
+              ),
+            ] else ...[
+              const Text(
+                'Connect a Google Account without touching terminals or token files.',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _accountNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Account Nickname',
+                  hintText: 'e.g. Work, School, Personal',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text('Connection Method:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(
+                    value: 0,
+                    icon: Icon(Icons.open_in_browser, size: 16),
+                    label: Text('Direct Web'),
+                  ),
+                  ButtonSegment(
+                    value: 1,
+                    icon: Icon(Icons.vpn_key, size: 16),
+                    label: Text('Paste Code'),
+                  ),
+                ],
+                selected: {_selectedMethod},
+                onSelectionChanged: (set) => setState(() => _selectedMethod = set.first),
+              ),
+              const SizedBox(height: 14),
+              if (_error != null)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                  ),
+                  child: SelectableText(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                ),
               ElevatedButton.icon(
                 icon: const Icon(Icons.login),
                 label: Text('Sign in with Google (${_selectedMethod == 0 ? "Browser" : "Auth Code"})'),
@@ -546,10 +731,14 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
+        if (!_syncing && !_syncCompleted)
+          TextButton(
+            onPressed: () {
+              _stopLocalAuthServer();
+              Navigator.pop(context);
+            },
+            child: const Text('Cancel'),
+          ),
       ],
     );
   }
