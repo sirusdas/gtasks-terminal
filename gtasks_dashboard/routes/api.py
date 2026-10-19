@@ -1266,6 +1266,295 @@ def api_auth_google_submit_code():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+DEFAULT_MICROSOFT_CLIENT_ID = '04b07795-8ddb-461a-bbee-02f9e1bf7b46'
+
+
+@api.route('/auth/microsoft/start', methods=['GET', 'POST'])
+def api_auth_microsoft_start():
+    """
+    Generate Microsoft OAuth authorization URL for connecting a Microsoft To Do account.
+    """
+    import urllib.parse
+
+    data = request.get_json(silent=True) or {}
+    account_name = request.args.get('account_name') or data.get('account_name') or 'Outlook'
+    client_id = request.args.get('client_id') or data.get('client_id') or DEFAULT_MICROSOFT_CLIENT_ID
+
+    redirect_uri = request.args.get('redirect_uri') or data.get('redirect_uri')
+    if not redirect_uri or redirect_uri in ('auto', 'default'):
+        base_host = request.host_url.rstrip('/')
+        redirect_uri = f"{base_host}/api/auth/microsoft/callback"
+
+    scopes = [
+        'Tasks.ReadWrite',
+        'offline_access',
+        'User.Read'
+    ]
+
+    auth_params = {
+        'client_id': client_id,
+        'response_type': 'code',
+        'redirect_uri': 'https://login.microsoftonline.com/common/oauth2/nativeclient' if redirect_uri == 'oob' else redirect_uri,
+        'response_mode': 'query',
+        'scope': ' '.join(scopes),
+        'state': account_name
+    }
+
+    auth_url = f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?{urllib.parse.urlencode(auth_params)}"
+
+    return jsonify({
+        'success': True,
+        'auth_url': auth_url,
+        'account_name': account_name,
+        'redirect_uri': redirect_uri,
+        'client_id': client_id,
+        'provider': 'microsoft'
+    })
+
+
+@api.route('/auth/microsoft/callback', methods=['GET', 'POST'])
+def api_auth_microsoft_callback():
+    """
+    Callback endpoint that Microsoft redirects to after approval.
+    """
+    from flask import Response
+    import requests
+    from pathlib import Path
+    import json
+    import sqlite3
+
+    code = request.args.get('code')
+    account_name = request.args.get('state') or 'Outlook'
+    error = request.args.get('error')
+
+    if error:
+        return Response(f"""<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Auth Cancelled</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;background:#1e1e2e;color:#fff;">
+  <h2 style="color:#ef4444;">Microsoft Authorization Cancelled</h2>
+  <p>{error}</p>
+  <p><a href="/" style="color:#3b82f6;">Return to Dashboard</a></p>
+</body>
+</html>""", mimetype='text/html')
+
+    if not code:
+        return Response("Missing authorization code from Microsoft.", status=400)
+
+    base_host = request.host_url.rstrip('/')
+    redirect_uri = f"{base_host}/api/auth/microsoft/callback"
+    client_id = DEFAULT_MICROSOFT_CLIENT_ID
+
+    try:
+        token_res = requests.post('https://login.microsoftonline.com/common/oauth2/v2.0/token', data={
+            'code': code,
+            'client_id': client_id,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code',
+            'scope': 'Tasks.ReadWrite offline_access User.Read'
+        }, timeout=15)
+
+        token_json = token_res.json()
+        if 'error' in token_json:
+            return Response(f"Token exchange error: {token_json.get('error_description', token_json['error'])}", status=400)
+
+        email = ''
+        try:
+            profile_res = requests.get('https://graph.microsoft.com/v1.0/me', headers={
+                'Authorization': f"Bearer {token_json.get('access_token')}"
+            }, timeout=8)
+            if profile_res.status_code == 200:
+                p_data = profile_res.json()
+                email = p_data.get('mail') or p_data.get('userPrincipalName') or ''
+        except Exception:
+            pass
+
+        account_id = account_name.lower().replace(' ', '_')
+        acc_dir = Path.home() / '.gtasks' / (account_id if account_id != 'default' else '')
+        acc_dir.mkdir(parents=True, exist_ok=True)
+
+        token_save_path = acc_dir / 'token.json'
+        token_data_to_save = {
+            'token': token_json.get('access_token'),
+            'refresh_token': token_json.get('refresh_token'),
+            'token_uri': 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+            'client_id': client_id,
+            'provider': 'microsoft',
+            'email': email,
+            'scopes': ['Tasks.ReadWrite', 'User.Read']
+        }
+        with open(token_save_path, 'w') as f:
+            json.dump(token_data_to_save, f, indent=2)
+
+        db_path = acc_dir / 'tasks.db'
+        if not db_path.exists():
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    notes TEXT,
+                    priority TEXT DEFAULT 'medium',
+                    status TEXT DEFAULT 'pending',
+                    due TEXT,
+                    tags TEXT,
+                    created_at TEXT,
+                    modified_at TEXT,
+                    completed_at TEXT,
+                    list_title TEXT
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS task_lists (
+                    task_id TEXT,
+                    list_name TEXT,
+                    PRIMARY KEY (task_id, list_name)
+                )
+            ''')
+            conn.commit()
+            conn.close()
+
+        refresh_dashboard_cache()
+
+        return Response(f"""<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Sign-in Complete</title></head>
+<body style="font-family:sans-serif;background:#0f172a;color:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;box-sizing:border-box;">
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:32px;max-width:400px;text-align:center;">
+    <div style="font-size:48px;margin-bottom:16px;">🎉</div>
+    <h2 style="margin:0 0 8px 0;color:#0078d4;">Microsoft Account Connected!</h2>
+    <p style="color:#94a3b8;font-size:14px;line-height:1.5;">Microsoft To Do account '{account_name}' ({email}) has been provisioned.</p>
+    <a href="/" style="display:inline-block;margin-top:16px;padding:10px 20px;background:#0078d4;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold;">Go to Dashboard</a>
+  </div>
+</body>
+</html>""", mimetype='text/html')
+
+    except Exception as e:
+        return Response(f"Failed to complete Microsoft authentication: {e}", status=500)
+
+
+@api.route('/auth/microsoft/submit-code', methods=['POST'])
+def api_auth_microsoft_submit_code():
+    """
+    Exchange authorization code for Microsoft tokens.
+    """
+    import requests
+    from pathlib import Path
+    import json
+    import sqlite3
+
+    data = request.get_json() or {}
+    code = data.get('code', '').strip()
+    account_name = data.get('account_name', 'Outlook').strip()
+    client_id = data.get('client_id') or DEFAULT_MICROSOFT_CLIENT_ID
+    redirect_uri = data.get('redirect_uri')
+    base_host = request.host_url.rstrip('/')
+    if not redirect_uri or redirect_uri in ('auto', 'default'):
+        redirect_uri = f"{base_host}/api/auth/microsoft/callback"
+
+    if not code:
+        return jsonify({'success': False, 'error': 'Authorization code is required'}), 400
+
+    candidate_uris = [
+        'https://login.microsoftonline.com/common/oauth2/nativeclient' if redirect_uri == 'oob' else redirect_uri,
+        'http://localhost:48275',
+        'http://127.0.0.1:48275',
+        'http://localhost',
+        f"{base_host}/api/auth/microsoft/callback",
+        'https://login.microsoftonline.com/common/oauth2/nativeclient',
+    ]
+
+    token_json = {}
+    for cand_uri in candidate_uris:
+        try:
+            token_res = requests.post('https://login.microsoftonline.com/common/oauth2/v2.0/token', data={
+                'code': code,
+                'client_id': client_id,
+                'redirect_uri': cand_uri,
+                'grant_type': 'authorization_code',
+                'scope': 'Tasks.ReadWrite offline_access User.Read'
+            }, timeout=12)
+            res_json = token_res.json()
+            if 'access_token' in res_json:
+                token_json = res_json
+                break
+        except Exception:
+            continue
+
+    if not token_json or 'access_token' not in token_json:
+        return jsonify({'success': False, 'error': token_json.get('error_description', 'Token exchange failed')}), 400
+
+    email = ''
+    try:
+        profile_res = requests.get('https://graph.microsoft.com/v1.0/me', headers={
+            'Authorization': f"Bearer {token_json.get('access_token')}"
+        }, timeout=8)
+        if profile_res.status_code == 200:
+            p_data = profile_res.json()
+            email = p_data.get('mail') or p_data.get('userPrincipalName') or ''
+    except Exception:
+        pass
+
+    account_id = account_name.lower().replace(' ', '_')
+    acc_dir = Path.home() / '.gtasks' / (account_id if account_id != 'default' else '')
+    acc_dir.mkdir(parents=True, exist_ok=True)
+
+    token_save_path = acc_dir / 'token.json'
+    token_data_to_save = {
+        'token': token_json.get('access_token'),
+        'refresh_token': token_json.get('refresh_token'),
+        'token_uri': 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+        'client_id': client_id,
+        'provider': 'microsoft',
+        'email': email,
+        'scopes': ['Tasks.ReadWrite', 'User.Read']
+    }
+    with open(token_save_path, 'w') as f:
+        json.dump(token_data_to_save, f, indent=2)
+
+    db_path = acc_dir / 'tasks.db'
+    if not db_path.exists():
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS tasks (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                notes TEXT,
+                priority TEXT DEFAULT 'medium',
+                status TEXT DEFAULT 'pending',
+                due TEXT,
+                tags TEXT,
+                created_at TEXT,
+                modified_at TEXT,
+                completed_at TEXT,
+                list_title TEXT
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS task_lists (
+                task_id TEXT,
+                list_name TEXT,
+                PRIMARY KEY (task_id, list_name)
+            )
+        ''')
+        conn.commit()
+        conn.close()
+
+    refresh_dashboard_cache()
+
+    return jsonify({
+        'success': True,
+        'account_id': account_id,
+        'email': email,
+        'provider': 'microsoft',
+        'message': f"Microsoft To Do account '{account_name}' connected successfully!"
+    })
+
+
 def _sync_initial_pull(account_name: str):
     """Background helper to pull initial tasks for new account matching CLI advanced-sync"""
     try:

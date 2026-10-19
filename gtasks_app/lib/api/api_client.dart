@@ -99,6 +99,36 @@ class ApiClient {
     return response.statusCode == 200;
   }
 
+  Future<Map<String, dynamic>> startMicrosoftAuth(String accountName, {String redirectUri = 'http://localhost:48275/api/auth/microsoft/callback'}) async {
+    final uri = Uri.parse('$baseUrl/api/auth/microsoft/start');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'account_name': accountName,
+        'redirect_uri': redirectUri,
+      }),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to initiate Microsoft OAuth: ${response.body}');
+  }
+
+  Future<bool> submitMicrosoftAuthCode(String accountName, String code, {String redirectUri = 'http://localhost:48275/api/auth/microsoft/callback'}) async {
+    final uri = Uri.parse('$baseUrl/api/auth/microsoft/submit-code');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'account_name': accountName,
+        'code': code,
+        'redirect_uri': redirectUri,
+      }),
+    );
+    return response.statusCode == 200;
+  }
+
   Future<bool> completeTask(String taskId, {String? account}) async {
     final uri = Uri.parse('$baseUrl/api/tasks/$taskId/complete');
     final response = await http.post(

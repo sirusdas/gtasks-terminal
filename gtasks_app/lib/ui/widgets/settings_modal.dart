@@ -445,15 +445,40 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
               ),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: isCurrent ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest,
-                  foregroundColor: isCurrent ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
-                  child: Text(acc.name.isNotEmpty ? acc.name[0].toUpperCase() : 'G'),
+                  backgroundColor: isCurrent
+                      ? (acc.isMicrosoft ? const Color(0xFF0078D4) : theme.colorScheme.primary)
+                      : (acc.isMicrosoft ? const Color(0xFF0078D4).withValues(alpha: 0.15) : theme.colorScheme.surfaceContainerHighest),
+                  foregroundColor: isCurrent
+                      ? Colors.white
+                      : (acc.isMicrosoft ? const Color(0xFF0078D4) : theme.colorScheme.onSurface),
+                  child: Icon(
+                    acc.isMicrosoft ? Icons.task_alt : Icons.g_mobiledata,
+                    size: 20,
+                  ),
                 ),
                 title: Row(
                   children: [
                     Text(acc.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: acc.isMicrosoft
+                            ? const Color(0xFF0078D4).withValues(alpha: 0.15)
+                            : Colors.teal.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        acc.isMicrosoft ? 'Microsoft To Do' : 'Google Tasks',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: acc.isMicrosoft ? const Color(0xFF0078D4) : Colors.teal,
+                        ),
+                      ),
+                    ),
                     if (isCurrent) ...[
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
@@ -468,7 +493,12 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
                     ],
                   ],
                 ),
-                subtitle: Text('ID: ${acc.id}', style: const TextStyle(fontSize: 11)),
+                subtitle: Text(
+                  acc.email != null && acc.email!.isNotEmpty
+                      ? '${acc.email} • ID: ${acc.id}'
+                      : 'ID: ${acc.id}',
+                  style: const TextStyle(fontSize: 11),
+                ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

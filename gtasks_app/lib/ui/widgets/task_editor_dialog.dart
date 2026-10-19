@@ -250,7 +250,20 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                 ...availableAccounts.map(
                   (acc) => DropdownMenuItem(
                     value: acc.id,
-                    child: Text(acc.name, overflow: TextOverflow.ellipsis),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          acc.isMicrosoft ? Icons.task_alt : Icons.account_circle,
+                          size: 14,
+                          color: acc.isMicrosoft ? const Color(0xFF0078D4) : Colors.teal,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(acc.name, overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],

@@ -305,13 +305,15 @@ class _TasksScreenState extends State<TasksScreen> {
                                 final isSelected = !isAllSelected && chosenAccounts.contains(acc.id);
                                 return FilterChip(
                                   avatar: Icon(
-                                    Icons.account_circle_rounded,
+                                    acc.isMicrosoft ? Icons.task_alt : Icons.account_circle_rounded,
                                     size: 16,
-                                    color: isSelected ? theme.colorScheme.onPrimary : Colors.teal,
+                                    color: isSelected
+                                        ? theme.colorScheme.onPrimary
+                                        : (acc.isMicrosoft ? const Color(0xFF0078D4) : Colors.teal),
                                   ),
                                   label: Text(acc.name),
                                   selected: isSelected,
-                                  selectedColor: Colors.teal,
+                                  selectedColor: acc.isMicrosoft ? const Color(0xFF0078D4) : Colors.teal,
                                   checkmarkColor: Colors.white,
                                   labelStyle: TextStyle(
                                     color: isSelected ? Colors.white : null,
@@ -610,8 +612,33 @@ class _TasksScreenState extends State<TasksScreen> {
                     ...provider.accounts.map((acc) {
                       final isSelected = !isAllSelected && chosenAccounts.contains(acc.id);
                       return ListTile(
-                        leading: const Icon(Icons.account_circle_rounded, color: Colors.teal),
-                        title: Text(acc.name),
+                        leading: Icon(
+                          acc.isMicrosoft ? Icons.task_alt : Icons.account_circle_rounded,
+                          color: acc.isMicrosoft ? const Color(0xFF0078D4) : Colors.teal,
+                        ),
+                        title: Row(
+                          children: [
+                            Text(acc.name),
+                            if (acc.isMicrosoft) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0078D4).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'Microsoft',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0078D4),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                         subtitle: Text(acc.email ?? acc.id),
                         trailing: Checkbox(
                           value: isSelected,

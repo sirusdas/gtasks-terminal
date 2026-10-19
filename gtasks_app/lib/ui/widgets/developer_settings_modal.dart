@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/microsoft_todo_direct_client.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../services/notification_service.dart';
@@ -13,6 +14,7 @@ class DeveloperSettingsModal extends StatefulWidget {
 
 class _DeveloperSettingsModalState extends State<DeveloperSettingsModal> {
   late TextEditingController _urlController;
+  late TextEditingController _msClientIdController;
   bool _testingConnection = false;
   String? _testResult;
 
@@ -21,11 +23,13 @@ class _DeveloperSettingsModalState extends State<DeveloperSettingsModal> {
     super.initState();
     final settings = context.read<SettingsProvider>();
     _urlController = TextEditingController(text: settings.baseUrl);
+    _msClientIdController = TextEditingController(text: settings.microsoftClientId ?? '');
   }
 
   @override
   void dispose() {
     _urlController.dispose();
+    _msClientIdController.dispose();
     super.dispose();
   }
 
@@ -196,6 +200,29 @@ class _DeveloperSettingsModalState extends State<DeveloperSettingsModal> {
                   );
                 }
               },
+            ),
+            const SizedBox(height: 14),
+            const Text('Microsoft Azure Client ID (Optional):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _msClientIdController,
+              decoration: InputDecoration(
+                hintText: 'Default: ${MicrosoftTodoDirectClient.defaultMicrosoftClientId}',
+                helperText: 'Leave empty to use standard multi-tenant Microsoft Client ID',
+                border: const OutlineInputBorder(),
+                isDense: true,
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.check),
+                  tooltip: 'Save Microsoft Client ID',
+                  onPressed: () {
+                    final text = _msClientIdController.text.trim();
+                    settings.setMicrosoftClientId(text.isEmpty ? null : text);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Microsoft Client ID saved')),
+                    );
+                  },
+                ),
+              ),
             ),
             const SizedBox(height: 16),
             if (_testingConnection)

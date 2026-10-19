@@ -44,6 +44,7 @@ class Account:
     email: str
     account_type: str
     is_active: bool
+    provider: str = 'google'
     task_count: int = 0
     completed_count: int = 0
     completion_rate: float = 0.0
@@ -56,6 +57,7 @@ class Account:
             email=data.get('email', ''),
             account_type=data.get('type', data.get('account_type', 'General')),
             is_active=data.get('isActive', data.get('is_active', True)),
+            provider=data.get('provider', 'google'),
             task_count=data.get('taskCount', data.get('task_count', 0)),
             completed_count=data.get('completedCount', data.get('completed_count', 0)),
             completion_rate=data.get('completionRate', data.get('completion_rate', 0.0))
@@ -68,6 +70,7 @@ class Account:
             'email': self.email,
             'type': self.account_type,
             'isActive': self.is_active,
+            'provider': self.provider,
             'taskCount': self.task_count,
             'completedCount': self.completed_count,
             'completionRate': self.completion_rate

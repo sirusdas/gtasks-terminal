@@ -5,25 +5,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
+import '../../api/microsoft_todo_direct_client.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/settings_provider.dart';
 
+typedef AddAccountModal = AddGoogleAccountModal;
+
 class AddGoogleAccountModal extends StatefulWidget {
-  const AddGoogleAccountModal({super.key});
+  final String initialProvider; // 'google' or 'microsoft'
+  const AddGoogleAccountModal({super.key, this.initialProvider = 'google'});
 
   @override
   State<AddGoogleAccountModal> createState() => _AddGoogleAccountModalState();
 }
 
 class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
-  final TextEditingController _accountNameController =
-      TextEditingController(text: 'Work');
+  late final TextEditingController _accountNameController;
   final TextEditingController _authCodeController = TextEditingController();
 
+  late String _selectedProvider; // 'google' or 'microsoft'
   bool _loading = false;
   bool _syncing = false;
   bool _syncCompleted = false;
-  String _statusMessage = 'Connecting to Google...';
+  String _statusMessage = 'Connecting...';
   String? _authUrl;
   String? _error;
   String? _lastGeneratedRedirectUri;
@@ -42,6 +46,15 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _selectedProvider = widget.initialProvider;
+    _accountNameController = TextEditingController(
+      text: _selectedProvider == 'microsoft' ? 'Outlook' : 'Work',
+    );
+  }
+
+  @override
   void dispose() {
     _accountNameController.dispose();
     _authCodeController.dispose();
@@ -53,6 +66,18 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
     _localAuthServer?.close(force: true);
     _localAuthServer = null;
   }
+
+  void _launchOAuth(bool useOob) {
+    if (_selectedProvider == 'microsoft') {
+      _launchMicrosoftOAuth(useOob);
+    } else {
+      _launchGoogleOAuth(useOob);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Google OAuth Flow
+  // ---------------------------------------------------------------------------
 
   Future<void> _launchGoogleOAuth(bool useOob) async {
     setState(() {
@@ -87,7 +112,6 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           };
           targetAuthUrl = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', queryParams).toString();
         } else {
-          // Bind loopback HTTP server on Android device (port 48275 to match loopback redirect)
           _stopLocalAuthServer();
           
           int localPort = 48275;
@@ -112,8 +136,6 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           };
 
           targetAuthUrl = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', queryParams).toString();
-
-          // Listen for Google's redirect in background
           _listenForOAuthCallback(localPort);
         }
       } else {
@@ -179,7 +201,6 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
 
           _stopLocalAuthServer();
 
-          // Automatically complete auth in app
           if (mounted) {
             _authCodeController.text = code;
             setState(() {
@@ -187,7 +208,6 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
               _error = null;
               _statusMessage = 'Google authorized! Exchanging tokens...';
             });
-            // Brief delay to allow OS network socket to settle after browser redirection
             await Future.delayed(const Duration(milliseconds: 400));
             if (mounted) {
               await _exchangeCodeAndSave(code, 'http://localhost:$localPort');
@@ -212,9 +232,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           break;
         }
       }
-    } catch (_) {
-      // Server closed or completed
-    }
+    } catch (_) {}
   }
 
   Future<void> _exchangeCodeAndSave(String code, String redirectUri) async {
@@ -234,12 +252,10 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
       final accId = accName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
 
       if (taskProvider.isStandalone) {
-        // Exchange code for tokens directly with Google OAuth2 token endpoint
         final tokenUri = Uri.parse('https://oauth2.googleapis.com/token');
         http.Response? response;
         dynamic lastEx;
 
-        // Try with current redirectUri and candidate fallbacks
         final candidates = [
           redirectUri,
           if (_lastGeneratedRedirectUri != null && _lastGeneratedRedirectUri != redirectUri) _lastGeneratedRedirectUri!,
@@ -250,7 +266,6 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         ];
 
         for (final candidateUri in candidates) {
-          // Retry up to 3 times per candidate to handle transient DNS or socket reconnection glitches
           for (int attempt = 0; attempt < 3; attempt++) {
             try {
               response = await http.post(
@@ -268,7 +283,6 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
               if (response.statusCode == 200) {
                 break;
               }
-              // If status is 400 (e.g. invalid redirect_uri or code), don't keep retrying this candidate
               break;
             } catch (e) {
               lastEx = e;
@@ -296,6 +310,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           await settings.saveAccount(
             id: accId,
             name: accName,
+            provider: 'google',
             accessToken: accessToken,
             refreshToken: refreshToken,
           );
@@ -304,6 +319,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             newUrl: settings.baseUrl,
             isStandalone: true,
             googleAccessToken: accessToken,
+            googleRefreshToken: refreshToken,
             standaloneAccounts: settings.storedAccounts,
           );
           await taskProvider.loadInitialData();
@@ -317,7 +333,6 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             });
           }
 
-          // Trigger full sync to import 100% of tasks across all tasklists
           final syncSuccess = await taskProvider.syncAllGoogleTasks(account: accId);
 
           if (!mounted) return;
@@ -335,87 +350,38 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             SnackBar(
               content: Text(
                 syncSuccess
-                    ? 'Account "$accName" connected & all tasks synced!'
-                    : 'Account "$accName" connected (sync finished with warnings).',
+                    ? 'Account "$accName" connected and tasks fully synced!'
+                    : 'Account "$accName" connected with local token.',
               ),
               backgroundColor: syncSuccess ? Colors.green : Colors.orange,
             ),
           );
           return;
-        } else if (response != null) {
-          final errResp = response;
-          setState(() {
-            _loading = false;
-            _error = 'Failed to exchange authorization code: ${errResp.statusCode}\n${errResp.body}';
-          });
-          return;
         } else {
-          // If direct Google request failed (e.g. DNS or socket issue on device), try exchanging via PC server proxy
-          final fallbackUrls = [
+          // Fallback to PC server token exchange bridge
+          final serverCandidateUrls = [
+            settings.baseUrl,
             'http://127.0.0.1:48275',
             'http://localhost:48275',
-            settings.baseUrl,
+            'http://10.0.2.2:48275',
           ];
 
-          for (final serverUrl in fallbackUrls) {
+          for (final srvUrl in serverCandidateUrls) {
             try {
               final oldUrl = taskProvider.apiClient.baseUrl;
-              taskProvider.apiClient.baseUrl = serverUrl;
-              final success = await taskProvider.apiClient.submitAuthCode(
-                accName,
-                code,
-                redirectUri: redirectUri,
-              );
-              if (success) {
-                await settings.setBaseUrl(serverUrl);
-                await settings.saveAccount(id: accId, name: accName);
-
-                try {
-                  final serverAccs = await taskProvider.apiClient.fetchAccounts();
-                  for (final sa in serverAccs) {
-                    await settings.saveAccount(id: sa.id, name: sa.name);
-                  }
-                } catch (_) {}
-
-                taskProvider.updateConfig(
-                  newUrl: serverUrl,
-                  isStandalone: settings.isStandalone,
-                  standaloneAccounts: settings.storedAccounts,
-                );
-
-                if (!mounted) return;
+              taskProvider.apiClient.baseUrl = srvUrl;
+              final ok = await taskProvider.apiClient.submitAuthCode(accName, code, redirectUri: redirectUri);
+              if (ok) {
+                await settings.saveAccount(id: accId, name: accName, provider: 'google');
                 await taskProvider.loadInitialData();
                 await taskProvider.setAccount(accId);
-
-                if (mounted) {
-                  setState(() {
-                    _loading = false;
-                    _syncing = true;
-                    _statusMessage = 'Syncing all tasks via server...';
-                  });
-                }
-
-                // Trigger full sync for this account
-                final syncSuccess = await taskProvider.syncAllGoogleTasks(account: accId);
-
-                if (!mounted) return;
-                setState(() {
-                  _syncing = false;
-                  _syncCompleted = true;
-                });
-
-                await Future.delayed(const Duration(milliseconds: 850));
 
                 if (!mounted) return;
                 Navigator.pop(context, true);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(
-                      syncSuccess
-                          ? 'Account "$accName" connected & tasks synced!'
-                          : 'Account "$accName" connected via server.',
-                    ),
-                    backgroundColor: syncSuccess ? Colors.green : Colors.orange,
+                    content: Text('Account "$accName" connected via server bridge!'),
+                    backgroundColor: Colors.green,
                   ),
                 );
                 return;
@@ -440,12 +406,12 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
       );
 
       if (success) {
-        await settings.saveAccount(id: accId, name: accName);
+        await settings.saveAccount(id: accId, name: accName, provider: 'google');
 
         try {
           final serverAccs = await taskProvider.apiClient.fetchAccounts();
           for (final sa in serverAccs) {
-            await settings.saveAccount(id: sa.id, name: sa.name);
+            await settings.saveAccount(id: sa.id, name: sa.name, provider: sa.provider);
           }
         } catch (_) {}
 
@@ -467,7 +433,6 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           });
         }
 
-        // Trigger full sync for newly added account on server
         final syncSuccess = await taskProvider.syncAllGoogleTasks(account: accId);
 
         if (!mounted) return;
@@ -508,6 +473,378 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Microsoft To Do OAuth Flow
+  // ---------------------------------------------------------------------------
+
+  Future<void> _launchMicrosoftOAuth(bool useOob) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final taskProvider = context.read<TaskProvider>();
+      final settings = context.read<SettingsProvider>();
+
+      String targetAuthUrl;
+
+      if (taskProvider.isStandalone) {
+        final scopes = [
+          'Tasks.ReadWrite',
+          'offline_access',
+          'User.Read',
+        ].join(' ');
+
+        final clientId = settings.microsoftClientId ?? MicrosoftTodoDirectClient.defaultMicrosoftClientId;
+
+        if (useOob) {
+          const redirectUri = 'https://login.microsoftonline.com/common/oauth2/nativeclient';
+          _lastGeneratedRedirectUri = redirectUri;
+          final queryParams = {
+            'client_id': clientId,
+            'response_type': 'code',
+            'redirect_uri': redirectUri,
+            'response_mode': 'query',
+            'scope': scopes,
+            'state': _accountNameController.text.trim(),
+          };
+          targetAuthUrl = Uri.https('login.microsoftonline.com', '/common/oauth2/v2.0/authorize', queryParams).toString();
+        } else {
+          _stopLocalAuthServer();
+          
+          int localPort = 48275;
+          try {
+            _localAuthServer = await HttpServer.bind(InternetAddress.loopbackIPv4, localPort);
+          } catch (_) {
+            _localAuthServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+            localPort = _localAuthServer!.port;
+          }
+
+          final redirectUri = 'http://localhost:$localPort';
+          _lastGeneratedRedirectUri = redirectUri;
+
+          final queryParams = {
+            'client_id': clientId,
+            'response_type': 'code',
+            'redirect_uri': redirectUri,
+            'response_mode': 'query',
+            'scope': scopes,
+            'state': _accountNameController.text.trim(),
+          };
+
+          targetAuthUrl = Uri.https('login.microsoftonline.com', '/common/oauth2/v2.0/authorize', queryParams).toString();
+          _listenForMicrosoftOAuthCallback(localPort);
+        }
+      } else {
+        // PC server flow
+        final baseUrl = settings.baseUrl.replaceAll(RegExp(r'/+$'), '');
+        final redirect = useOob ? 'oob' : '$baseUrl/api/auth/microsoft/callback';
+        _lastGeneratedRedirectUri = redirect;
+
+        final res = await taskProvider.apiClient.startMicrosoftAuth(
+          _accountNameController.text.trim(),
+          redirectUri: redirect,
+        );
+        targetAuthUrl = res['auth_url'] as String;
+      }
+
+      setState(() {
+        _authUrl = targetAuthUrl;
+      });
+
+      final parsedUri = Uri.parse(targetAuthUrl);
+      final launched = await launchUrl(
+        parsedUri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        setState(() {
+          _error = 'Could not open browser automatically. Please tap the button below to copy the link.';
+        });
+      }
+    } catch (e) {
+      setState(() => _error = 'Error launching Microsoft Sign-in: $e');
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  void _listenForMicrosoftOAuthCallback(int localPort) async {
+    final server = _localAuthServer;
+    if (server == null) return;
+
+    try {
+      await for (HttpRequest request in server) {
+        final code = request.uri.queryParameters['code'];
+        final error = request.uri.queryParameters['error'];
+
+        request.response.headers.contentType = ContentType.html;
+        if (code != null) {
+          request.response.write('''
+            <!DOCTYPE html>
+            <html>
+            <head><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Sign-in Complete</title></head>
+            <body style="font-family:sans-serif;background:#0f172a;color:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;box-sizing:border-box;">
+              <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:32px;max-width:400px;text-align:center;">
+                <div style="font-size:48px;margin-bottom:16px;">🎉</div>
+                <h2 style="margin:0 0 8px 0;color:#0078d4;">Account Connected!</h2>
+                <p style="color:#94a3b8;font-size:14px;line-height:1.5;">Microsoft To Do authorization succeeded. You can return to the GTasks app now.</p>
+              </div>
+            </body>
+            </html>
+          ''');
+          await request.response.close();
+
+          _stopLocalAuthServer();
+
+          if (mounted) {
+            _authCodeController.text = code;
+            setState(() {
+              _loading = true;
+              _error = null;
+              _statusMessage = 'Microsoft authorized! Exchanging tokens...';
+            });
+            await Future.delayed(const Duration(milliseconds: 400));
+            if (mounted) {
+              await _exchangeMicrosoftCodeAndSave(code, 'http://localhost:$localPort');
+            }
+          }
+          break;
+        } else {
+          request.response.write('''
+            <!DOCTYPE html>
+            <html>
+            <body style="font-family:sans-serif;text-align:center;padding:40px;background:#0f172a;color:#f8fafc;">
+              <h2 style="color:#ef4444;">Authorization Cancelled</h2>
+              <p style="color:#94a3b8;">${error ?? 'Unknown error'}</p>
+            </body>
+            </html>
+          ''');
+          await request.response.close();
+          if (mounted) {
+            setState(() => _error = 'Authorization was cancelled: $error');
+          }
+          _stopLocalAuthServer();
+          break;
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _exchangeMicrosoftCodeAndSave(String code, String redirectUri) async {
+    setState(() {
+      _loading = true;
+      _syncing = false;
+      _syncCompleted = false;
+      _statusMessage = 'Connecting to Microsoft OAuth...';
+      _error = null;
+    });
+
+    try {
+      final taskProvider = context.read<TaskProvider>();
+      final settings = context.read<SettingsProvider>();
+
+      final accName = _accountNameController.text.trim().isEmpty ? 'Outlook' : _accountNameController.text.trim();
+      final accId = accName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
+      final clientId = settings.microsoftClientId ?? MicrosoftTodoDirectClient.defaultMicrosoftClientId;
+
+      if (taskProvider.isStandalone) {
+        final tokenUri = Uri.parse('https://login.microsoftonline.com/common/oauth2/v2.0/token');
+        http.Response? response;
+        dynamic lastEx;
+
+        final candidates = [
+          redirectUri,
+          if (_lastGeneratedRedirectUri != null && _lastGeneratedRedirectUri != redirectUri) _lastGeneratedRedirectUri!,
+          'http://localhost:48275',
+          'http://127.0.0.1:48275',
+          'https://login.microsoftonline.com/common/oauth2/nativeclient',
+        ];
+
+        for (final candidateUri in candidates) {
+          for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+              response = await http.post(
+                tokenUri,
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: {
+                  'client_id': clientId,
+                  'grant_type': 'authorization_code',
+                  'code': code,
+                  'redirect_uri': candidateUri,
+                  'scope': 'Tasks.ReadWrite offline_access User.Read',
+                },
+              ).timeout(const Duration(seconds: 12));
+
+              if (response.statusCode == 200) {
+                break;
+              }
+              break;
+            } catch (e) {
+              lastEx = e;
+              if (attempt < 2) {
+                if (mounted) {
+                  setState(() {
+                    _statusMessage = 'Connecting to Microsoft (${attempt + 2}/3)...';
+                  });
+                }
+                await Future.delayed(Duration(milliseconds: 700 * (attempt + 1)));
+              }
+            }
+          }
+          if (response != null && response.statusCode == 200) break;
+        }
+
+        if (response != null && response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final accessToken = data['access_token'] as String;
+          final refreshToken = data['refresh_token'] as String?;
+
+          // Fetch user profile from Microsoft Graph
+          String? email;
+          try {
+            final client = MicrosoftTodoDirectClient(accessToken: accessToken);
+            final profile = await client.fetchUserProfile();
+            if (profile != null) {
+              email = profile['email']?.toString();
+            }
+          } catch (_) {}
+
+          await settings.saveAccount(
+            id: accId,
+            name: accName,
+            email: email,
+            provider: 'microsoft',
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+          );
+
+          taskProvider.updateConfig(
+            newUrl: settings.baseUrl,
+            isStandalone: true,
+            standaloneAccounts: settings.storedAccounts,
+          );
+          await taskProvider.loadInitialData();
+          await taskProvider.setAccount(accId);
+
+          if (mounted) {
+            setState(() {
+              _loading = false;
+              _syncing = true;
+              _statusMessage = 'Syncing all tasks with Microsoft To Do...';
+            });
+          }
+
+          final syncSuccess = await taskProvider.syncTasks(syncAll: true, targetAccount: accId);
+
+          if (!mounted) return;
+
+          setState(() {
+            _syncing = false;
+            _syncCompleted = true;
+          });
+
+          await Future.delayed(const Duration(milliseconds: 850));
+
+          if (!mounted) return;
+          Navigator.pop(context, true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                syncSuccess
+                    ? 'Microsoft To Do account "$accName" connected and tasks synced!'
+                    : 'Microsoft To Do account "$accName" connected.',
+              ),
+              backgroundColor: syncSuccess ? Colors.green : Colors.orange,
+            ),
+          );
+          return;
+        } else {
+          final errBody = response?.body ?? '$lastEx';
+          setState(() {
+            _loading = false;
+            _error = 'Microsoft authorization exchange failed: $errBody';
+          });
+          return;
+        }
+      }
+
+      // PC Server flow
+      final success = await taskProvider.apiClient.submitMicrosoftAuthCode(
+        accName,
+        code,
+        redirectUri: redirectUri,
+      );
+
+      if (success) {
+        await settings.saveAccount(id: accId, name: accName, provider: 'microsoft');
+        try {
+          final serverAccs = await taskProvider.apiClient.fetchAccounts();
+          for (final sa in serverAccs) {
+            await settings.saveAccount(id: sa.id, name: sa.name, provider: sa.provider);
+          }
+        } catch (_) {}
+
+        taskProvider.updateConfig(
+          newUrl: settings.baseUrl,
+          isStandalone: settings.isStandalone,
+          standaloneAccounts: settings.storedAccounts,
+        );
+
+        if (!mounted) return;
+        await taskProvider.loadInitialData();
+        await taskProvider.setAccount(accId);
+
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _syncing = true;
+            _statusMessage = 'Syncing Microsoft To Do tasks via server...';
+          });
+        }
+
+        final syncSuccess = await taskProvider.syncTasks(syncAll: true, targetAccount: accId);
+
+        if (!mounted) return;
+        setState(() {
+          _syncing = false;
+          _syncCompleted = true;
+        });
+
+        await Future.delayed(const Duration(milliseconds: 850));
+
+        if (!mounted) return;
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              syncSuccess
+                  ? 'Microsoft To Do account "$accName" connected and tasks synced!'
+                  : 'Microsoft To Do account "$accName" connected on server.',
+            ),
+            backgroundColor: syncSuccess ? Colors.green : Colors.orange,
+          ),
+        );
+      } else {
+        setState(() {
+          _loading = false;
+          _error = 'Authorization failed. Please verify the code.';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _error = 'Auth error: $e';
+      });
+    } finally {
+      if (mounted && !_syncing && !_syncCompleted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
   Future<void> _submitAuthCode() async {
     String input = _authCodeController.text.trim();
     if (input.isEmpty) {
@@ -516,33 +853,44 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
     }
 
     String code = input;
-    String redirectUri = _lastGeneratedRedirectUri ?? (_selectedMethod == 1 ? 'urn:ietf:wg:oauth:2.0:oob' : 'http://localhost:48275');
+    String redirectUri = _lastGeneratedRedirectUri ??
+        (_selectedMethod == 1
+            ? (_selectedProvider == 'microsoft'
+                ? 'https://login.microsoftonline.com/common/oauth2/nativeclient'
+                : 'urn:ietf:wg:oauth:2.0:oob')
+            : 'http://localhost:48275');
 
-    // If user pasted full redirected URL (e.g. http://localhost:48275/?code=4/0A...&scope=...)
     if (input.startsWith('http://') || input.startsWith('https://')) {
       try {
         final parsed = Uri.parse(input);
         if (parsed.queryParameters.containsKey('code')) {
           code = parsed.queryParameters['code']!;
-          // Use the exact origin from the pasted URL as redirectUri
           redirectUri = '${parsed.scheme}://${parsed.host}${parsed.hasPort ? ':${parsed.port}' : ''}';
         }
       } catch (_) {}
     }
 
-    await _exchangeCodeAndSave(code, redirectUri);
+    if (_selectedProvider == 'microsoft') {
+      await _exchangeMicrosoftCodeAndSave(code, redirectUri);
+    } else {
+      await _exchangeCodeAndSave(code, redirectUri);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isMicrosoft = _selectedProvider == 'microsoft';
 
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.account_circle, color: Colors.blueAccent),
-          SizedBox(width: 8),
-          Text('Add Google Account'),
+          Icon(
+            isMicrosoft ? Icons.task_alt : Icons.account_circle,
+            color: isMicrosoft ? const Color(0xFF0078D4) : Colors.blueAccent,
+          ),
+          const SizedBox(width: 8),
+          Text(isMicrosoft ? 'Add Microsoft To Do' : 'Add Google Account'),
         ],
       ),
       content: SingleChildScrollView(
@@ -563,13 +911,13 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      'Syncing Tasks with Google...',
+                      isMicrosoft ? 'Syncing Tasks with Microsoft To Do...' : 'Syncing Tasks with Google...',
                       style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Downloading and reconciling all tasks for "${_accountNameController.text.trim().isEmpty ? 'Personal' : _accountNameController.text.trim()}"...',
+                      'Downloading and reconciling all tasks for "${_accountNameController.text.trim().isEmpty ? 'Account' : _accountNameController.text.trim()}"...',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
                     ),
@@ -638,17 +986,49 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
                 ),
               ),
             ] else ...[
-              const Text(
-                'Connect a Google Account without touching terminals or token files.',
-                style: TextStyle(fontSize: 13),
+              const Text('Provider:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: 'google',
+                    icon: Icon(Icons.g_mobiledata, size: 20),
+                    label: Text('Google Tasks'),
+                  ),
+                  ButtonSegment(
+                    value: 'microsoft',
+                    icon: Icon(Icons.task_alt, size: 16, color: Color(0xFF0078D4)),
+                    label: Text('Microsoft To Do'),
+                  ),
+                ],
+                selected: {_selectedProvider},
+                onSelectionChanged: (set) {
+                  setState(() {
+                    _selectedProvider = set.first;
+                    if (_selectedProvider == 'microsoft' && _accountNameController.text == 'Work') {
+                      _accountNameController.text = 'Outlook';
+                    } else if (_selectedProvider == 'google' && _accountNameController.text == 'Outlook') {
+                      _accountNameController.text = 'Work';
+                    }
+                    _error = null;
+                    _authUrl = null;
+                  });
+                },
               ),
               const SizedBox(height: 14),
+              Text(
+                isMicrosoft
+                    ? 'Connect Microsoft To Do (Office 365 / Outlook / Live accounts).'
+                    : 'Connect a Google Account without touching terminals or token files.',
+                style: const TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 12),
               TextField(
                 controller: _accountNameController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Account Nickname',
-                  hintText: 'e.g. Work, School, Personal',
-                  border: OutlineInputBorder(),
+                  hintText: isMicrosoft ? 'e.g. Outlook, Work, MS-Personal' : 'e.g. Work, School, Personal',
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
               ),
@@ -684,20 +1064,24 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
                   child: SelectableText(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
                 ),
               ElevatedButton.icon(
-                icon: const Icon(Icons.login),
-                label: Text('Sign in with Google (${_selectedMethod == 0 ? "Browser" : "Auth Code"})'),
+                icon: Icon(isMicrosoft ? Icons.task_alt : Icons.login),
+                label: Text(
+                  isMicrosoft
+                      ? 'Sign in with Microsoft (${_selectedMethod == 0 ? "Browser" : "Auth Code"})'
+                      : 'Sign in with Google (${_selectedMethod == 0 ? "Browser" : "Auth Code"})',
+                ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  backgroundColor: theme.colorScheme.primary,
-                  foregroundColor: theme.colorScheme.onPrimary,
+                  backgroundColor: isMicrosoft ? const Color(0xFF0078D4) : theme.colorScheme.primary,
+                  foregroundColor: Colors.white,
                 ),
-                onPressed: () => _launchGoogleOAuth(_selectedMethod == 1),
+                onPressed: () => _launchOAuth(_selectedMethod == 1),
               ),
               if (_authUrl != null) ...[
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.copy, size: 16),
-                  label: const Text('Copy Google Sign-in URL', style: TextStyle(fontSize: 12)),
+                  label: Text('Copy ${isMicrosoft ? "Microsoft" : "Google"} Sign-in URL', style: const TextStyle(fontSize: 12)),
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: _authUrl!));
                     ScaffoldMessenger.of(context).showSnackBar(

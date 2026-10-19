@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
 import '../api/google_tasks_direct_client.dart';
+import '../api/microsoft_todo_direct_client.dart';
 import '../models/task_item.dart';
 import '../models/account.dart';
 import '../models/task_tab.dart';
@@ -734,6 +735,8 @@ class TaskProvider with ChangeNotifier {
               .map((acc) => GTasksAccount(
                     id: acc['id']?.toString() ?? 'default',
                     name: acc['name']?.toString() ?? 'Personal',
+                    email: acc['email']?.toString(),
+                    provider: acc['provider']?.toString() ?? 'google',
                   ))
               .toList();
         } else if (_googleClient != null) {
@@ -875,6 +878,120 @@ class TaskProvider with ChangeNotifier {
           refreshToken = _googleClient!.refreshToken;
         }
 
+        if (acc.isMicrosoft) {
+          if (token == null || token.isEmpty) {
+            _errorMessage = 'No Microsoft token found for account "${acc.name}". Please add or reconnect the account in Settings.';
+            continue;
+          }
+
+          final msClient = MicrosoftTodoDirectClient(
+            accessToken: token,
+            refreshToken: refreshToken,
+            onTokenRefreshed: (newTok, newRefresh) {
+              if (_standaloneAccounts.containsKey(acc.id)) {
+                _standaloneAccounts[acc.id]!['access_token'] = newTok;
+                if (newRefresh != null) {
+                  _standaloneAccounts[acc.id]!['refresh_token'] = newRefresh;
+                }
+              }
+            },
+          );
+
+          // 1. Flush offline pending changes first
+          try {
+            final pendingRows = await localDb.getPendingSyncRows(account: acc.id);
+            for (final row in pendingRows) {
+              final syncStatus = row['sync_status']?.toString();
+              final taskId = row['id']?.toString() ?? '';
+              final taskListId = row['list_id']?.toString() ?? '';
+
+              if (syncStatus == 'pending_delete') {
+                try {
+                  if (taskListId.isNotEmpty) {
+                    await msClient.deleteTask(listId: taskListId, taskId: taskId);
+                  }
+                  await localDb.deleteTask(taskId);
+                } catch (_) {}
+              } else if (syncStatus == 'pending_insert') {
+                try {
+                  final t = localDb.fromDbRow(row);
+                  final combinedNotes = NotesParser.combineNotesAndMetadata(t.cleanNotes, t.tags, spaces: t.spaces);
+                  String effectiveListId = taskListId;
+                  if (effectiveListId.isEmpty) {
+                    final msLists = await msClient.fetchTaskLists();
+                    final match = msLists.firstWhere(
+                      (l) => l['title']?.toString().toLowerCase() == (t.listTitle ?? 'Tasks').toLowerCase(),
+                      orElse: () => msLists.isNotEmpty ? msLists.first : <String, dynamic>{},
+                    );
+                    if (match.isNotEmpty) {
+                      effectiveListId = match['id'].toString();
+                    } else {
+                      final createdList = await msClient.createTaskList(t.listTitle ?? 'Tasks');
+                      effectiveListId = createdList['id'].toString();
+                    }
+                  }
+
+                  final created = await msClient.createTask(
+                    listId: effectiveListId,
+                    title: t.title,
+                    notes: combinedNotes,
+                    due: t.due,
+                    listTitle: t.listTitle,
+                    account: acc.id,
+                    priority: t.calculatedPriority,
+                  );
+                  await localDb.deleteTask(taskId);
+                  await localDb.upsertTask(created, syncStatus: 'synced');
+                } catch (_) {}
+              } else if (syncStatus == 'pending_update') {
+                try {
+                  final t = localDb.fromDbRow(row);
+                  final combinedNotes = NotesParser.combineNotesAndMetadata(t.cleanNotes, t.tags, spaces: t.spaces);
+                  if (taskListId.isNotEmpty) {
+                    await msClient.updateTask(
+                      listId: taskListId,
+                      taskId: taskId,
+                      title: t.title,
+                      notes: combinedNotes,
+                      due: t.due,
+                      status: t.status,
+                      priority: t.calculatedPriority,
+                    );
+                  }
+                  await localDb.markTaskSynced(taskId);
+                } catch (_) {}
+              }
+            }
+          } catch (e) {
+            debugPrint('[TaskProvider] Microsoft pending sync flush notice: $e');
+          }
+
+          // 2. Fetch remote task lists
+          final lists = await msClient.fetchTaskLists();
+          List<TaskItem> accFetchedTasks = [];
+
+          final DateTime? updatedMin = syncAll
+              ? null
+              : DateTime.now().toUtc().subtract(const Duration(days: 10));
+
+          for (final list in lists) {
+            final listId = list['id'].toString();
+            final listTitle = list['title']?.toString() ?? 'Tasks';
+            final tasks = await msClient.fetchTasks(
+              listId: listId,
+              listTitle: listTitle,
+              account: acc.id,
+              updatedMin: updatedMin,
+            );
+            accFetchedTasks.addAll(tasks);
+          }
+
+          // 3. Upsert into local SQLite with Last-Write-Wins
+          await localDb.upsertTasks(accFetchedTasks);
+          anySynced = true;
+          continue;
+        }
+
         if (token == null || token.isEmpty) {
           _errorMessage = 'No Google token found for account "${acc.name}". Please add or reconnect the account in Settings.';
           continue;
@@ -979,6 +1096,14 @@ class TaskProvider with ChangeNotifier {
 
   Future<bool> syncAllGoogleTasks({String? account}) async {
     return syncGoogleTasks(account: account, syncAll: true);
+  }
+
+  Future<bool> syncTasks({String? account, bool syncAll = false, String? targetAccount}) {
+    return syncGoogleTasks(account: targetAccount ?? account, syncAll: syncAll);
+  }
+
+  Future<bool> syncAllTasks({String? account, String? targetAccount}) {
+    return syncGoogleTasks(account: targetAccount ?? account, syncAll: true);
   }
 
   Future<void> setAccount(String accountId) async {
@@ -1238,9 +1363,13 @@ class TaskProvider with ChangeNotifier {
 
     if (_isStandalone) {
       await localDb.markTaskCompleted(taskId);
-      // Trigger background sync to Google
+      // Trigger background sync to Google or Microsoft
       if (targetTask != null) {
-        _syncStandaloneTaskToGoogle(targetTask, isComplete: true);
+        if (isAccountMicrosoft(targetTask.account)) {
+          _syncStandaloneTaskToMicrosoft(targetTask, isComplete: true);
+        } else {
+          _syncStandaloneTaskToGoogle(targetTask, isComplete: true);
+        }
       }
       NotificationService().cancelReminder(taskId.hashCode);
       return true;
@@ -1293,8 +1422,12 @@ class TaskProvider with ChangeNotifier {
       );
       await localDb.upsertTask(newTask, syncStatus: 'pending_insert');
       await refreshTasks();
-      // Sync immediately to Google Tasks in background
-      _syncStandaloneTaskToGoogle(newTask, isCreate: true);
+      // Sync immediately to Google Tasks or Microsoft To Do in background
+      if (isAccountMicrosoft(effectiveAccount)) {
+        _syncStandaloneTaskToMicrosoft(newTask, isCreate: true);
+      } else {
+        _syncStandaloneTaskToGoogle(newTask, isCreate: true);
+      }
       NotificationService().scheduleTaskReminder(newTask);
       return true;
     }
@@ -1367,7 +1500,11 @@ class TaskProvider with ChangeNotifier {
         );
         await localDb.upsertTask(updated, syncStatus: 'pending_update');
         await refreshTasks();
-        _syncStandaloneTaskToGoogle(updated, isUpdate: true);
+        if (isAccountMicrosoft(effectiveAccount)) {
+          _syncStandaloneTaskToMicrosoft(updated, isUpdate: true);
+        } else {
+          _syncStandaloneTaskToGoogle(updated, isUpdate: true);
+        }
         NotificationService().scheduleTaskReminder(updated);
         return true;
       }
@@ -1407,7 +1544,11 @@ class TaskProvider with ChangeNotifier {
       _recomputeAllCaches();
       notifyListeners();
       if (existing != null) {
-        _syncStandaloneTaskToGoogle(existing, isDelete: true);
+        if (isAccountMicrosoft(existing.account)) {
+          _syncStandaloneTaskToMicrosoft(existing, isDelete: true);
+        } else {
+          _syncStandaloneTaskToGoogle(existing, isDelete: true);
+        }
       }
       return true;
     }
@@ -1726,4 +1867,129 @@ class TaskProvider with ChangeNotifier {
       debugPrint('[TaskProvider] Standalone immediate Google sync notice: $e');
     }
   }
+
+  bool isAccountMicrosoft(String? accountId) {
+    if (accountId == null || accountId.isEmpty || accountId == 'all') return false;
+    if (_standaloneAccounts.containsKey(accountId)) {
+      final p = _standaloneAccounts[accountId]?['provider']?.toString();
+      if (p != null) return p.toLowerCase() == 'microsoft';
+    }
+    return _accounts.any((a) => a.id == accountId && a.isMicrosoft);
+  }
+
+  Future<void> _syncStandaloneTaskToMicrosoft(
+    TaskItem task, {
+    bool isCreate = false,
+    bool isUpdate = false,
+    bool isComplete = false,
+    bool isDelete = false,
+  }) async {
+    try {
+      final accId = task.account.isNotEmpty ? task.account : 'default';
+      String? token;
+      String? refreshToken;
+      if (_standaloneAccounts.containsKey(accId)) {
+        token = _standaloneAccounts[accId]?['access_token']?.toString();
+        refreshToken = _standaloneAccounts[accId]?['refresh_token']?.toString();
+      }
+
+      if (token == null || token.isEmpty) return;
+
+      final client = MicrosoftTodoDirectClient(
+        accessToken: token,
+        refreshToken: refreshToken,
+        onTokenRefreshed: (newTok, newRefresh) {
+          if (_standaloneAccounts.containsKey(accId)) {
+            _standaloneAccounts[accId]!['access_token'] = newTok;
+            if (newRefresh != null) {
+              _standaloneAccounts[accId]!['refresh_token'] = newRefresh;
+            }
+          }
+        },
+      );
+
+      final lists = await client.fetchTaskLists();
+
+      Future<Map<String, dynamic>> findOrCreateList(String title) async {
+        final match = lists.firstWhere(
+          (l) => (l['title']?.toString().toLowerCase() == title.toLowerCase()),
+          orElse: () => <String, dynamic>{},
+        );
+        if (match.isNotEmpty) return match;
+        final createdList = await client.createTaskList(title);
+        lists.add(createdList);
+        return createdList;
+      }
+
+      final targetList = await findOrCreateList(task.listTitle ?? 'Tasks');
+      final listId = targetList['id']?.toString() ?? (lists.isNotEmpty ? lists.first['id'].toString() : '');
+      final combinedNotes = NotesParser.combineNotesAndMetadata(
+        task.cleanNotes,
+        task.tags,
+        spaces: task.spaces,
+      );
+
+      if (isCreate) {
+        final created = await client.createTask(
+          listId: listId,
+          title: task.title,
+          notes: combinedNotes,
+          due: task.due,
+          listTitle: task.listTitle,
+          account: accId,
+          priority: task.calculatedPriority,
+        );
+        // Replace temporary local ID with Microsoft's ID
+        await localDb.deleteTask(task.id);
+        await localDb.upsertTask(created, syncStatus: 'synced');
+        await refreshTasks();
+      } else if (isComplete) {
+        await client.updateTask(
+          listId: task.listId ?? listId,
+          taskId: task.id,
+          status: 'completed',
+        );
+        await localDb.markTaskSynced(task.id);
+      } else if (isUpdate) {
+        final oldListId = task.listId;
+        if (oldListId != null && oldListId != listId && listId.isNotEmpty) {
+          final created = await client.createTask(
+            listId: listId,
+            title: task.title,
+            notes: combinedNotes,
+            due: task.due,
+            listTitle: task.listTitle,
+            account: accId,
+            priority: task.calculatedPriority,
+          );
+          try {
+            await client.deleteTask(listId: oldListId, taskId: task.id);
+          } catch (_) {}
+          await localDb.deleteTask(task.id);
+          await localDb.upsertTask(created, syncStatus: 'synced');
+          await refreshTasks();
+        } else {
+          await client.updateTask(
+            listId: task.listId ?? listId,
+            taskId: task.id,
+            title: task.title,
+            notes: combinedNotes,
+            due: task.due,
+            status: task.status,
+            priority: task.calculatedPriority,
+          );
+          await localDb.markTaskSynced(task.id);
+        }
+      } else if (isDelete) {
+        final deleteListId = task.listId ?? listId;
+        if (deleteListId.isNotEmpty) {
+          await client.deleteTask(listId: deleteListId, taskId: task.id);
+        }
+        await localDb.deleteTask(task.id);
+      }
+    } catch (e) {
+      debugPrint('[TaskProvider] Standalone immediate Microsoft sync notice: $e');
+    }
+  }
 }
+

@@ -35,6 +35,7 @@ class SettingsProvider with ChangeNotifier {
   String? _geminiApiKey;
   String _aiProviderType = 'gemini';
   String _aiModelName = 'gemini-1.5-flash';
+  String? _microsoftClientId;
 
   String get baseUrl => _baseUrl;
   bool get isDevMode => _isDevMode;
@@ -44,6 +45,7 @@ class SettingsProvider with ChangeNotifier {
   bool get isOnboardingCompleted => _isOnboardingCompleted;
   String? get googleAccessToken => _googleAccessToken;
   String? get googleRefreshToken => _googleRefreshToken;
+  String? get microsoftClientId => _microsoftClientId;
   String get taskViewMode => _taskViewMode;
   String? get geminiApiKey => _geminiApiKey;
   String get aiProviderType => _aiProviderType;
@@ -55,6 +57,7 @@ class SettingsProvider with ChangeNotifier {
 
   static const String _keyAccounts = 'gtasks_accounts_list'; // JSON map of accounts
   static const String _keyDeletedAccounts = 'gtasks_deleted_accounts'; // List of account IDs deleted by user
+  static const String _keyMicrosoftClientId = 'gtasks_microsoft_client_id';
 
   Map<String, Map<String, dynamic>> _storedAccounts = {};
   Set<String> _deletedAccounts = {};
@@ -80,6 +83,7 @@ class SettingsProvider with ChangeNotifier {
     _geminiApiKey = prefs.getString(_keyGeminiApiKey);
     _aiProviderType = prefs.getString(_keyAiProviderType) ?? 'gemini';
     _aiModelName = prefs.getString(_keyAiModelName) ?? 'gemini-1.5-flash';
+    _microsoftClientId = prefs.getString(_keyMicrosoftClientId);
 
     final rawDeleted = prefs.getStringList(_keyDeletedAccounts);
     if (rawDeleted != null) {
@@ -99,6 +103,7 @@ class SettingsProvider with ChangeNotifier {
       _storedAccounts['default'] = {
         'id': 'default',
         'name': 'Personal (Google)',
+        'provider': 'google',
         'access_token': _googleAccessToken,
         'refresh_token': _googleRefreshToken,
       };
@@ -109,6 +114,8 @@ class SettingsProvider with ChangeNotifier {
   Future<void> saveAccount({
     required String id,
     required String name,
+    String? email,
+    String provider = 'google',
     String? accessToken,
     String? refreshToken,
   }) async {
@@ -116,17 +123,30 @@ class SettingsProvider with ChangeNotifier {
     _storedAccounts[id] = {
       'id': id,
       'name': name,
+      'provider': provider,
+      if (email != null) 'email': email,
       if (accessToken != null) 'access_token': accessToken,
       if (refreshToken != null) 'refresh_token': refreshToken,
     };
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAccounts, json.encode(_storedAccounts));
     await prefs.setStringList(_keyDeletedAccounts, _deletedAccounts.toList());
-    // If it's the first or active, update current tokens
-    if (accessToken != null && accessToken.isNotEmpty) {
+    // If it's a Google account and the first or active, update current tokens
+    if (provider == 'google' && accessToken != null && accessToken.isNotEmpty) {
       if (_googleAccessToken == null || id == 'default') {
         await setGoogleTokens(accessToken: accessToken, refreshToken: refreshToken);
       }
+    }
+    notifyListeners();
+  }
+
+  Future<void> setMicrosoftClientId(String? clientId) async {
+    _microsoftClientId = clientId;
+    final prefs = await SharedPreferences.getInstance();
+    if (clientId != null && clientId.isNotEmpty) {
+      await prefs.setString(_keyMicrosoftClientId, clientId);
+    } else {
+      await prefs.remove(_keyMicrosoftClientId);
     }
     notifyListeners();
   }
