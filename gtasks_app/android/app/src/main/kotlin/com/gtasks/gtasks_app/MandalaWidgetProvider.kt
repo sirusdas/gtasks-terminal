@@ -149,13 +149,13 @@ class MandalaWidgetProvider : AppWidgetProvider() {
 
         val geometry = try {
             MandalaWidgetRenderer.GeometryType.valueOf(geomStr ?: GEOMETRIES[0].name)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             GEOMETRIES[0]
         }
 
         val theme = try {
             MandalaWidgetRenderer.ThemeType.valueOf(themeStr ?: THEMES[0].name)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             THEMES[0]
         }
 
@@ -346,7 +346,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                                             }
                                         }
                                     }
-                                } catch (_: Exception) {}
+                                } catch (e: Exception) {}
                             }
                         }
                     }
@@ -610,7 +610,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                                                 tagCounts[t] = (tagCounts[t] ?: 0) + 1
                                             }
                                         }
-                                    } catch (_: Exception) {}
+                                    } catch (e: Exception) {}
                                 }
                             }
                         }

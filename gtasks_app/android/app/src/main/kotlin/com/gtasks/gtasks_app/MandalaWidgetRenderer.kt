@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PointF
 import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.RectF
@@ -375,8 +376,8 @@ object MandalaWidgetRenderer {
             val rectOuter = RectF(cx - r1, cy - r1, cx + r1, cy + r1)
             val rectInner = RectF(cx - r0, cy - r0, cx + r0, cy + r0)
 
-            sectorPath.arcTo(rectOuter, degStart, sweepDeg)
-            sectorPath.arcTo(rectInner, degStart + sweepDeg, -sweepDeg)
+            sectorPath.arcTo(rectOuter, degStart, sweepDeg, true)
+            sectorPath.arcTo(rectInner, degStart + sweepDeg, -sweepDeg, false)
             sectorPath.close()
 
             val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -682,8 +683,6 @@ object MandalaWidgetRenderer {
     }
 
     // --- HELPER MATH ---
-    private data class PointF(val x: Float, val y: Float)
-
     private fun polar(cx: Float, cy: Float, r: Float, a: Float): PointF {
         return PointF(
             cx + r * cos(a),
