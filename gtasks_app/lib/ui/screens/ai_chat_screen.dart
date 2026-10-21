@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../models/task_item.dart';
 import '../../models/task_view_context.dart';
 import '../../providers/task_provider.dart';
+import '../../mandala/mandala_screen.dart';
 import '../widgets/task_detail_modal.dart';
 import '../widgets/task_editor_dialog.dart';
 import '../widgets/command_palette_modal.dart';
@@ -80,6 +81,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   final List<String> _quickActionPills = [
     '/help',
     '➕ Add Task',
+    '💮 Mandala View',
     '📅 Due Today',
     '⚡ High Priority',
     '⏳ Pending',
@@ -503,6 +505,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
         trimmed == 'menu' ||
         trimmed == 'picks' ||
         trimmed == 'options' ||
+        trimmed == 'mandala' ||
+        trimmed == 'mandalas' ||
+        trimmed == 'mandala view' ||
+        trimmed == '💮 mandala view' ||
         trimmed == 'today' ||
         trimmed == 'pending' ||
         trimmed == 'overdue' ||
@@ -525,6 +531,31 @@ class _AiChatScreenState extends State<AiChatScreen> {
     if (cmd.startsWith('/')) cmd = cmd.substring(1).trim();
 
     final numVal = int.tryParse(cmd);
+
+    // Mandala View command
+    if (cmd == 'mandala' || cmd == 'mandalas' || cmd == 'mandala view' || cmd == '💮 mandala view') {
+      if (mounted) {
+        Future.microtask(() {
+          if (!mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MandalaScreen(
+                initialTasks: (_isScopedToView && _currentContext != null)
+                    ? _currentContext!.visibleTasks
+                    : provider.tasks,
+              ),
+            ),
+          );
+        });
+      }
+      return _LocalQueryResult(
+        text: '💮 **Opening Sacred Mandala Visualization**\n\n'
+            'Navigating to your task mandala! You can explore across Padma (Lotus), Chakra (Wheel), Bhupura (Gate), or Sri Yantra.\n\n'
+            '💡 *Tip: Tap on any petal/pillar sector to extract it as a standalone mandala, or tap a portal to drill down.*',
+        chips: ['📊 Summarize View', '⚡ High Priority', '➕ Add Task'],
+      );
+    }
 
     // View Scope commands
     if (cmd == 'these' || cmd == 'focus' || cmd == 'view summary' || cmd == 'summarize view') {

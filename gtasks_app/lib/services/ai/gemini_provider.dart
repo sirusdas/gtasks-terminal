@@ -37,7 +37,7 @@ class GeminiProvider implements AiProvider {
       'You are GTasks AI Assistant, an ultra-fast productivity coordinator. '
       'Today is $todayStr. Current viewing account: "$activeAccount", space: "$activeSpace".\n'
       'Rules:\n'
-      '1. You have direct tools to query, create, update, reschedule, and complete tasks.\n'
+      '1. You have direct tools to query, create, update, reschedule, complete tasks, and create/decompose custom focus mandalas.\n'
       '2. Always call `query_tasks` to check actual tasks rather than guessing.\n'
       '3. Tasks support Spaces and Sub-spaces (e.g. work › dev, personal › health).\n'
       '4. Return crisp, friendly markdown with emojis.',
@@ -109,6 +109,16 @@ class GeminiProvider implements AiProvider {
           Schema(SchemaType.object, properties: {
             'timeframe': Schema(SchemaType.string, description: 'today, week, month'),
           }),
+        ),
+        FunctionDeclaration(
+          'create_mandala',
+          'Create or decompose into a focused custom mandala with a center goal and peripheral petals/actions.',
+          Schema(SchemaType.object, properties: {
+            'title': Schema(SchemaType.string, description: 'Title of the mandala'),
+            'center_goal': Schema(SchemaType.string, description: 'Central goal/theme for the bindu'),
+            'geometry': Schema(SchemaType.string, description: 'padma (lotus), chakra (8-spoke wheel), bhupura (square gate), or sriyantra (triangles)'),
+            'items': Schema(SchemaType.array, items: Schema(SchemaType.string), description: 'List of focus tasks, petals, or sub-actions'),
+          }, requiredProperties: ['title', 'center_goal', 'items']),
         ),
       ]),
     ];

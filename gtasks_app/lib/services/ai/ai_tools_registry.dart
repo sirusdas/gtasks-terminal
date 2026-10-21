@@ -3,6 +3,8 @@ import '../../models/task_item.dart';
 import '../../storage/local_database.dart';
 import '../../providers/task_provider.dart';
 import '../../utils/notes_parser.dart';
+import '../../mandala/custom_mandala_service.dart';
+import '../../mandala/mandala_types.dart';
 
 class AiToolsRegistry {
   final TaskProvider? taskProvider;
@@ -17,6 +19,7 @@ class AiToolsRegistry {
     'batch_complete',
     'list_spaces',
     'get_productivity_report',
+    'create_mandala',
   ];
 
   List<String> get toolNames => supportedTools;
@@ -42,6 +45,8 @@ class AiToolsRegistry {
           return await _listSpaces();
         case 'get_productivity_report':
           return await _getProductivityReport(args);
+        case 'create_mandala':
+          return await _createMandala(args);
         default:
           return 'Unknown tool: $name';
       }
@@ -339,5 +344,61 @@ class AiToolsRegistry {
       return '${entry.key} › ${entry.value.join(',')}';
     }
     return entry.key;
+  }
+
+  Future<String> _createMandala(Map<String, dynamic> args) async {
+    final title = args['title']?.toString() ?? 'Focused Mandala';
+    final centerGoal = args['center_goal']?.toString() ?? title;
+    final geomStr = args['geometry']?.toString().toLowerCase() ?? 'padma';
+    final rawItems = args['items'];
+
+    GeometryId geom = GeometryId.padma;
+    if (geomStr == 'chakra') geom = GeometryId.chakra;
+    if (geomStr == 'bhupura') geom = GeometryId.bhupura;
+    if (geomStr == 'sriyantra') geom = GeometryId.sriyantra;
+
+    const String rootId = 'center_goal';
+    final List<MandalaNode> nodes = [
+      MandalaNode(
+        id: rootId,
+        label: centerGoal,
+        details: 'Central core objective for $centerGoal',
+        geometry: geom,
+      ),
+    ];
+
+    if (rawItems is List) {
+      for (int i = 0; i < rawItems.length; i++) {
+        final item = rawItems[i];
+        final String label = (item is Map)
+            ? (item['label'] ?? 'Step ${i + 1}').toString()
+            : item.toString();
+        final String? details = (item is Map) ? item['details']?.toString() : null;
+        final String? priority = (item is Map) ? item['priority']?.toString() : 'high';
+
+        nodes.add(
+          MandalaNode(
+            id: 'node_${DateTime.now().millisecondsSinceEpoch}_$i',
+            label: label,
+            details: details,
+            type: priority ?? 'high',
+            parent: rootId,
+            order: i,
+          ),
+        );
+      }
+    }
+
+    final custom = CustomMandala(
+      id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+      title: title,
+      centerGoal: centerGoal,
+      geometry: geom,
+      template: 'ai_decomposed',
+      nodes: nodes,
+    );
+
+    await CustomMandalaService.saveCustomMandala(custom);
+    return '✨ Created and saved custom mandala "$title" with ${nodes.length - 1} petals and geometry ${geom.name}.';
   }
 }
