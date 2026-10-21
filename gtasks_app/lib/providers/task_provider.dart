@@ -973,15 +973,19 @@ class TaskProvider with ChangeNotifier {
               : DateTime.now().toUtc().subtract(const Duration(days: 10));
 
           for (final list in lists) {
-            final listId = list['id'].toString();
-            final listTitle = list['title']?.toString() ?? 'Tasks';
-            final tasks = await msClient.fetchTasks(
-              listId: listId,
-              listTitle: listTitle,
-              account: acc.id,
-              updatedMin: updatedMin,
-            );
-            accFetchedTasks.addAll(tasks);
+            try {
+              final listId = list['id'].toString();
+              final listTitle = list['title']?.toString() ?? 'Tasks';
+              final tasks = await msClient.fetchTasks(
+                listId: listId,
+                listTitle: listTitle,
+                account: acc.id,
+                updatedMin: updatedMin,
+              );
+              accFetchedTasks.addAll(tasks);
+            } catch (e) {
+              debugPrint('[TaskProvider] Error fetching Microsoft list "${list['title']}": $e');
+            }
           }
 
           // 3. Upsert into local SQLite with Last-Write-Wins
@@ -1064,15 +1068,19 @@ class TaskProvider with ChangeNotifier {
             : DateTime.now().toUtc().subtract(const Duration(days: 10));
 
         for (final list in lists) {
-          final listId = list['id'].toString();
-          final listTitle = list['title']?.toString() ?? 'Default List';
-          final tasks = await client.fetchTasks(
-            listId: listId,
-            listTitle: listTitle,
-            account: acc.id,
-            updatedMin: updatedMin,
-          );
-          accFetchedTasks.addAll(tasks);
+          try {
+            final listId = list['id'].toString();
+            final listTitle = list['title']?.toString() ?? 'Default List';
+            final tasks = await client.fetchTasks(
+              listId: listId,
+              listTitle: listTitle,
+              account: acc.id,
+              updatedMin: updatedMin,
+            );
+            accFetchedTasks.addAll(tasks);
+          } catch (e) {
+            debugPrint('[TaskProvider] Error fetching Google list "${list['title']}": $e');
+          }
         }
 
         // 3. Upsert into local SQLite with Last-Write-Wins

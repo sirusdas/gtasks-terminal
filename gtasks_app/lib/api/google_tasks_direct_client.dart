@@ -51,7 +51,7 @@ class GoogleTasksDirectClient {
           'refresh_token': rToken,
           'grant_type': 'refresh_token',
         },
-      );
+      ).timeout(const Duration(seconds: 12));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -69,11 +69,11 @@ class GoogleTasksDirectClient {
   }
 
   Future<http.Response> _sendWithAuthRetry(Future<http.Response> Function() requestFn) async {
-    http.Response response = await requestFn();
+    http.Response response = await requestFn().timeout(const Duration(seconds: 12));
     if (response.statusCode == 401 && refreshToken != null && refreshToken!.isNotEmpty) {
       final refreshed = await refreshAccessToken();
       if (refreshed) {
-        response = await requestFn();
+        response = await requestFn().timeout(const Duration(seconds: 12));
       }
     }
     return response;

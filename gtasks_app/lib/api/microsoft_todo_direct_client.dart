@@ -48,7 +48,7 @@ class MicrosoftTodoDirectClient {
         Uri.parse('https://login.microsoftonline.com/common/oauth2/v2.0/token'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: body,
-      );
+      ).timeout(const Duration(seconds: 12));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -66,11 +66,11 @@ class MicrosoftTodoDirectClient {
   }
 
   Future<http.Response> _sendWithAuthRetry(Future<http.Response> Function() requestFn) async {
-    http.Response response = await requestFn();
+    http.Response response = await requestFn().timeout(const Duration(seconds: 12));
     if (response.statusCode == 401 && refreshToken != null && refreshToken!.isNotEmpty) {
       final refreshed = await refreshAccessToken();
       if (refreshed) {
-        response = await requestFn();
+        response = await requestFn().timeout(const Duration(seconds: 12));
       }
     }
     return response;

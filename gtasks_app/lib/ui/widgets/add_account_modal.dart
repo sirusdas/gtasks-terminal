@@ -354,7 +354,14 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             });
           }
 
-          final syncSuccess = await taskProvider.syncAllGoogleTasks(account: accId);
+          bool syncSuccess = false;
+          try {
+            syncSuccess = await taskProvider
+                .syncAllGoogleTasks(account: accId)
+                .timeout(const Duration(seconds: 12));
+          } catch (e) {
+            debugPrint('[AddAccountModal] Initial Google sync notice: $e');
+          }
 
           if (!mounted) return;
 
@@ -363,7 +370,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             _syncCompleted = true;
           });
 
-          await Future.delayed(const Duration(milliseconds: 850));
+          await Future.delayed(const Duration(milliseconds: 600));
 
           if (!mounted) return;
           Navigator.pop(context, true);
@@ -372,9 +379,9 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
               content: Text(
                 syncSuccess
                     ? 'Account "$accName" connected and tasks fully synced!'
-                    : 'Account "$accName" connected with local token.',
+                    : 'Account "$accName" connected! Sync continuing in background.',
               ),
-              backgroundColor: syncSuccess ? Colors.green : Colors.orange,
+              backgroundColor: syncSuccess ? Colors.green : Colors.blueAccent,
             ),
           );
           return;
@@ -757,7 +764,14 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             });
           }
 
-          final syncSuccess = await taskProvider.syncTasks(syncAll: true, targetAccount: accId);
+          bool syncSuccess = false;
+          try {
+            syncSuccess = await taskProvider
+                .syncTasks(syncAll: true, targetAccount: accId)
+                .timeout(const Duration(seconds: 12));
+          } catch (e) {
+            debugPrint('[AddAccountModal] Initial Microsoft sync notice: $e');
+          }
 
           if (!mounted) return;
 
@@ -766,7 +780,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             _syncCompleted = true;
           });
 
-          await Future.delayed(const Duration(milliseconds: 850));
+          await Future.delayed(const Duration(milliseconds: 600));
 
           if (!mounted) return;
           Navigator.pop(context, true);
@@ -775,9 +789,9 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
               content: Text(
                 syncSuccess
                     ? 'Microsoft To Do account "$accName" connected and tasks synced!'
-                    : 'Microsoft To Do account "$accName" connected.',
+                    : 'Microsoft To Do account "$accName" connected! Sync continuing in background.',
               ),
-              backgroundColor: syncSuccess ? Colors.green : Colors.orange,
+              backgroundColor: syncSuccess ? Colors.green : Colors.blueAccent,
             ),
           );
           return;
@@ -1135,6 +1149,20 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         ),
       ),
       actions: [
+        if (_syncing)
+          TextButton.icon(
+            icon: const Icon(Icons.arrow_forward, size: 16),
+            label: const Text('Continue in Background'),
+            onPressed: () {
+              Navigator.pop(context, true);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Account saved! Syncing tasks in background...'),
+                  backgroundColor: Colors.blueAccent,
+                ),
+              );
+            },
+          ),
         if (!_syncing && !_syncCompleted)
           TextButton(
             onPressed: () {
