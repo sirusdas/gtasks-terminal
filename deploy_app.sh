@@ -98,32 +98,34 @@ fi
 # Auto-discover wireless debugging if not connected
 if [ -z "${DEVICE}" ]; then
   echo "[i] No ADB device connected. Scanning for Wireless Debugging port..."
-  PORT=$(python3 -c "
+  PORTS=$(python3 -c "
 import socket
 from concurrent.futures import ThreadPoolExecutor
 
 def check_port(p):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(0.1)
+            s.settimeout(0.08)
             if s.connect_ex(('127.0.0.1', p)) == 0:
                 return p
     except:
         pass
     return None
 
-with ThreadPoolExecutor(max_workers=200) as ex:
-    for p in ex.map(check_port, range(30000, 50000)):
-        if p:
+with ThreadPoolExecutor(max_workers=300) as ex:
+    for p in ex.map(check_port, range(30000, 65535)):
+        if p and p != 48275:
             print(p)
-            break
 " 2>/dev/null || true)
 
-  if [ -n "${PORT}" ]; then
-    echo "[+] Found open port: ${PORT}. Attempting adb connect..."
-    adb connect "127.0.0.1:${PORT}" || true
-    DEVICE=$(adb devices | awk 'NR>1 && $2=="device" {print $1; exit}')
-  fi
+  for p in ${PORTS}; do
+    adb connect "127.0.0.1:${p}" >/dev/null 2>&1 || true
+    DEVICE=$(adb devices | awk -v port="${p}" '$1 ~ port && $2=="device" {print $1; exit}')
+    if [ -n "${DEVICE}" ]; then
+      echo "[+] Successfully connected to Wireless Debugging on 127.0.0.1:${p}"
+      break
+    fi
+  done
 fi
 
 if [ -z "${DEVICE}" ]; then
