@@ -98,31 +98,47 @@ fi
 # Auto-discover wireless debugging if not connected
 if [ -z "${DEVICE}" ]; then
   echo "[i] No ADB device connected. Scanning for Wireless Debugging port..."
-  PORTS=$(python3 -c "
+  # Clean up any offline devices first
+  adb devices | awk 'NR>1 && $2=="offline" {print $1}' | while read -r offdev; do
+    adb disconnect "$offdev" >/dev/null 2>&1 || true
+  done
+
+  TARGETS=$(python3 -c "
 import socket
 from concurrent.futures import ThreadPoolExecutor
 
-def check_port(p):
+ips = ['127.0.0.1']
+try:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.connect(('8.8.8.8', 80))
+        ips.append(s.getsockname()[0])
+except:
+    pass
+
+found = []
+def check_port(target):
+    ip, p = target
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(0.08)
-            if s.connect_ex(('127.0.0.1', p)) == 0:
-                return p
+            s.settimeout(0.04)
+            if s.connect_ex((ip, p)) == 0:
+                found.append(f'{ip}:{p}')
     except:
         pass
-    return None
 
-with ThreadPoolExecutor(max_workers=300) as ex:
-    for p in ex.map(check_port, range(30000, 65535)):
-        if p and p != 48275:
-            print(p)
+targets = [(ip, p) for ip in set(ips) for p in range(30000, 65535) if p != 48275]
+with ThreadPoolExecutor(max_workers=400) as ex:
+    ex.map(check_port, targets)
+
+for f in found:
+    print(f)
 " 2>/dev/null || true)
 
-  for p in ${PORTS}; do
-    adb connect "127.0.0.1:${p}" >/dev/null 2>&1 || true
-    DEVICE=$(adb devices | awk -v port="${p}" '$1 ~ port && $2=="device" {print $1; exit}')
+  for t in ${TARGETS}; do
+    adb connect "${t}" >/dev/null 2>&1 || true
+    DEVICE=$(adb devices | awk -v target="${t}" '$1==target && $2=="device" {print $1; exit}')
     if [ -n "${DEVICE}" ]; then
-      echo "[+] Successfully connected to Wireless Debugging on 127.0.0.1:${p}"
+      echo "[+] Successfully connected to Wireless Debugging on ${t}"
       break
     fi
   done
