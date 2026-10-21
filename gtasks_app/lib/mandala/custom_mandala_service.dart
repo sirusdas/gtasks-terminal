@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/task_item.dart';
 import '../services/widget_service.dart';
 import 'mandala_types.dart';
 
@@ -72,6 +73,120 @@ class CustomMandalaService {
     } catch (_) {
       return [];
     }
+  }
+
+  /// Break down / Extract a sub-tree of a complex mandala into its own independent mandala
+  static CustomMandala extractSubMandala({
+    required CustomMandala source,
+    required String rootNodeId,
+    String? newTitle,
+  }) {
+    final rootNode = source.nodes.firstWhere(
+      (n) => n.id == rootNodeId,
+      orElse: () => source.nodes.first,
+    );
+
+    // Recursively collect all descendant IDs
+    final Set<String> descendantIds = {rootNode.id};
+    bool added = true;
+    while (added) {
+      added = false;
+      for (final n in source.nodes) {
+        if (n.parent != null &&
+            descendantIds.contains(n.parent) &&
+            !descendantIds.contains(n.id)) {
+          descendantIds.add(n.id);
+          added = true;
+        }
+      }
+    }
+
+    const String newRootId = 'center_goal';
+    final List<MandalaNode> newNodes = [];
+
+    // Set extracted node as new center goal
+    newNodes.add(
+      MandalaNode(
+        id: newRootId,
+        label: rootNode.label,
+        details: rootNode.details ?? 'Extracted focus from "${source.title}"',
+        geometry: rootNode.geometry ?? source.geometry,
+      ),
+    );
+
+    // Re-parent direct children to the new center goal, preserve deeper hierarchy
+    for (final n in source.nodes) {
+      if (n.id == rootNode.id) continue;
+      if (!descendantIds.contains(n.id)) continue;
+
+      final newParent = (n.parent == rootNode.id) ? newRootId : n.parent;
+      newNodes.add(
+        MandalaNode(
+          id: n.id,
+          label: n.label,
+          short: n.short,
+          details: n.details,
+          type: n.type,
+          parent: newParent,
+          order: n.order,
+          display: n.display,
+          geometry: n.geometry,
+          data: n.data,
+        ),
+      );
+    }
+
+    return CustomMandala(
+      id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+      title: newTitle ?? '${rootNode.label} Mandala',
+      centerGoal: rootNode.label,
+      geometry: source.geometry,
+      template: 'custom',
+      nodes: newNodes,
+    );
+  }
+
+  /// Break down tasks from a specific space, list, or tag into a focused standalone mandala
+  static CustomMandala extractFromTasks({
+    required String title,
+    required String centerGoal,
+    required List<TaskItem> tasks,
+    GeometryId geometry = GeometryId.padma,
+  }) {
+    const String rootId = 'center_goal';
+    final List<MandalaNode> nodes = [];
+
+    nodes.add(
+      MandalaNode(
+        id: rootId,
+        label: centerGoal,
+        details: '${tasks.length} tasks extracted into focused mandala',
+        geometry: geometry,
+      ),
+    );
+
+    for (int i = 0; i < tasks.length; i++) {
+      final t = tasks[i];
+      nodes.add(
+        MandalaNode(
+          id: t.id,
+          label: t.title,
+          details: t.description,
+          type: t.calculatedPriority,
+          parent: rootId,
+          order: i,
+        ),
+      );
+    }
+
+    return CustomMandala(
+      id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+      title: title,
+      centerGoal: centerGoal,
+      geometry: geometry,
+      template: 'extracted',
+      nodes: nodes,
+    );
   }
 
   // --- Pre-built Templates ---

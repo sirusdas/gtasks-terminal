@@ -382,6 +382,14 @@ class _MandalaScreenState extends State<MandalaScreen> {
                         },
                       ),
                       OutlinedButton.icon(
+                        icon: const Icon(Icons.call_split, size: 18),
+                        label: const Text('Extract as Standalone'),
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          await _extractNodeAsNewMandala(cell);
+                        },
+                      ),
+                      OutlinedButton.icon(
                         icon: const Icon(Icons.link, size: 18),
                         label: const Text('Link GTask'),
                         onPressed: () {
@@ -402,6 +410,15 @@ class _MandalaScreenState extends State<MandalaScreen> {
                         onPressed: () async {
                           Navigator.pop(ctx);
                           await _deleteCustomNode(cell.nodeId!);
+                        },
+                      ),
+                    ] else if (cell.kind != CellKind.bindu) ...[
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.call_split, size: 18),
+                        label: const Text('Extract Pillar as Mandala'),
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          await _extractPillarFromTasks(cell);
                         },
                       ),
                     ],
@@ -627,6 +644,72 @@ class _MandalaScreenState extends State<MandalaScreen> {
       _selectedCellId = null;
       _rebuildEngine(targetMandalaId: _currentMandalaId);
     });
+  }
+
+  Future<void> _extractNodeAsNewMandala(Cell cell) async {
+    if (_activeCustomMandala == null || cell.nodeId == null) return;
+    final extracted = CustomMandalaService.extractSubMandala(
+      source: _activeCustomMandala!,
+      rootNodeId: cell.nodeId!,
+    );
+    await CustomMandalaService.saveCustomMandala(extracted);
+    final updatedList = await CustomMandalaService.loadCustomMandalas();
+    if (!mounted) return;
+    setState(() {
+      _customMandalas = updatedList;
+      _activeCustomMandala = extracted;
+      _currentMandalaId = extracted.id;
+      _selectedCellId = null;
+      _rebuildEngine();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '✨ Extracted "${extracted.title}" as independent mandala!',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _extractPillarFromTasks(Cell cell) async {
+    final tasks = widget.initialTasks ?? context.read<TaskProvider>().tasks;
+    final rawLabel = cell.label?.full ?? cell.id;
+    final pillarName = rawLabel.replaceAll(RegExp(r'\s*\(\d+\)$'), '').trim();
+
+    List<TaskItem> matchingTasks = tasks.where((t) {
+      if (t.spaces.containsKey(pillarName)) return true;
+      if (t.listTitle == pillarName) return true;
+      if (t.allTags.contains(pillarName.replaceFirst('#', ''))) return true;
+      return false;
+    }).toList();
+
+    if (matchingTasks.isEmpty) {
+      matchingTasks = tasks.take(8).toList();
+    }
+
+    final extracted = CustomMandalaService.extractFromTasks(
+      title: '$pillarName Mandala',
+      centerGoal: pillarName,
+      tasks: matchingTasks,
+      geometry: _forcedGeometry ?? GeometryId.padma,
+    );
+    await CustomMandalaService.saveCustomMandala(extracted);
+    final updatedList = await CustomMandalaService.loadCustomMandalas();
+    if (!mounted) return;
+    setState(() {
+      _customMandalas = updatedList;
+      _activeCustomMandala = extracted;
+      _currentMandalaId = extracted.id;
+      _selectedCellId = null;
+      _rebuildEngine();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✨ Created new focused mandala for "$pillarName"!'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Color _getPriorityColor(String? type) {
