@@ -38,7 +38,30 @@ jobs:
 
       - name: Build Debug APK
         working-directory: gtasks_app
-        run: flutter build apk --debug --verbose
+        run: |
+          set +e
+          flutter build apk --debug --verbose > ../build.log 2>&1
+          BUILD_EXIT=$?
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo "BUILD_FAILED=true" >> $GITHUB_ENV
+            grep -E -C 3 "e: |FAILURE:|ERROR:|Exception:|error: " ../build.log | tail -n 150 > ../error_summary.txt
+            if [ ! -s ../error_summary.txt ]; then
+              tail -n 150 ../build.log > ../error_summary.txt
+            fi
+            cat ../error_summary.txt
+            exit $BUILD_EXIT
+          fi
+
+      - name: Report Build Error on Release
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly-build
+          name: "GTasks App Build Error"
+          body_path: error_summary.txt
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
