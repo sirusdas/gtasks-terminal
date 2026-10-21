@@ -14,6 +14,10 @@ import kotlin.math.max
 import kotlin.math.min
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 class MandalaWidgetProvider : AppWidgetProvider() {
 
@@ -46,6 +50,13 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             MandalaWidgetRenderer.ThemeType.SAPPHIRE,
             MandalaWidgetRenderer.ThemeType.OBSIDIAN
         )
+
+        fun cleanSegment(str: String): String {
+            return str
+                .replace(Regex("""^[⬅️⤵️⚡🔥📌☕📋🏷️#🚨📅🌅📆📥✓🎯📦✨☸🌱\s]+"""), "")
+                .replace(Regex("""\s*\(\d+\)$"""), "")
+                .trim()
+        }
 
         fun updateAllMandalaWidgets(context: Context) {
             try {
@@ -87,6 +98,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                     val nextIdx = (MODES.indexOf(currentMode) + 1) % MODES.size
                     prefs.edit()
                         .putString("mode_$appWidgetId", MODES[nextIdx])
+                        .remove("drill_path_$appWidgetId")
                         .remove("drill_parent_$appWidgetId") // reset drill state when switching modes
                         .putInt("focus_$appWidgetId", -1) // reset focused slice
                         .apply()
@@ -96,12 +108,19 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             ACTION_DRILL_DOWN -> {
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     val modeStr = prefs.getString("mode_$appWidgetId", "spaces") ?: "spaces"
+                    val drillPath = prefs.getString("drill_path_$appWidgetId", null) ?: prefs.getString("drill_parent_$appWidgetId", null)
                     val focusIndex = prefs.getInt("focus_$appWidgetId", -1)
-                    val data = loadMandalaData(context, modeStr)
+                    val data = if (!drillPath.isNullOrEmpty()) {
+                        loadDrilledData(context, modeStr, drillPath)
+                    } else {
+                        loadMandalaData(context, modeStr)
+                    }
                     if (focusIndex in data.slices.indices) {
                         val target = data.slices[focusIndex]
+                        val nextPath = if (drillPath.isNullOrEmpty()) target.label else "$drillPath||${target.label}"
                         prefs.edit()
-                            .putString("drill_parent_$appWidgetId", target.label)
+                            .putString("drill_path_$appWidgetId", nextPath)
+                            .remove("drill_parent_$appWidgetId")
                             .putInt("focus_$appWidgetId", -1)
                             .apply()
                         updateWidgetById(context, appWidgetId)
@@ -110,42 +129,60 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             }
             ACTION_DRILL_UP -> {
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    prefs.edit()
-                        .remove("drill_parent_$appWidgetId")
-                        .putInt("focus_$appWidgetId", -1)
-                        .apply()
-                    updateWidgetById(context, appWidgetId)
+                    val drillPath = prefs.getString("drill_path_$appWidgetId", null) ?: prefs.getString("drill_parent_$appWidgetId", null)
+                    if (!drillPath.isNullOrEmpty()) {
+                        val segments = drillPath.split("||").filter { it.isNotBlank() }.toMutableList()
+                        if (segments.size > 1) {
+                            segments.removeAt(segments.size - 1)
+                            prefs.edit()
+                                .putString("drill_path_$appWidgetId", segments.joinToString("||"))
+                                .remove("drill_parent_$appWidgetId")
+                                .putInt("focus_$appWidgetId", -1)
+                                .apply()
+                        } else {
+                            prefs.edit()
+                                .remove("drill_path_$appWidgetId")
+                                .remove("drill_parent_$appWidgetId")
+                                .putInt("focus_$appWidgetId", -1)
+                                .apply()
+                        }
+                        updateWidgetById(context, appWidgetId)
+                    }
                 }
             }
             ACTION_CANVAS_CLICK -> {
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    val drillParent = prefs.getString("drill_parent_$appWidgetId", null)
-                    if (!drillParent.isNullOrEmpty()) {
-                        // Already inside sub-mandala -> canvas tap zooms back out!
-                        prefs.edit()
-                            .remove("drill_parent_$appWidgetId")
-                            .putInt("focus_$appWidgetId", -1)
-                            .apply()
-                        updateWidgetById(context, appWidgetId)
+                    val drillPath = prefs.getString("drill_path_$appWidgetId", null) ?: prefs.getString("drill_parent_$appWidgetId", null)
+                    val modeStr = prefs.getString("mode_$appWidgetId", "spaces") ?: "spaces"
+                    val focusIndex = prefs.getInt("focus_$appWidgetId", -1)
+                    val data = if (!drillPath.isNullOrEmpty()) {
+                        loadDrilledData(context, modeStr, drillPath)
                     } else {
-                        val focusIndex = prefs.getInt("focus_$appWidgetId", -1)
-                        val modeStr = prefs.getString("mode_$appWidgetId", "spaces") ?: "spaces"
-                        val data = loadMandalaData(context, modeStr)
-                        if (focusIndex in data.slices.indices) {
-                            // A slice is focused -> dive down into that sub-mandala!
-                            val target = data.slices[focusIndex]
+                        loadMandalaData(context, modeStr)
+                    }
+
+                    if (focusIndex in data.slices.indices) {
+                        val target = data.slices[focusIndex]
+                        val isPortal = target.count > 1 ||
+                                target.label.contains("Batch", ignoreCase = true) ||
+                                target.label.contains("Completed", ignoreCase = true) ||
+                                target.subLabels.isNotEmpty()
+                        if (isPortal) {
+                            val nextPath = if (drillPath.isNullOrEmpty()) target.label else "$drillPath||${target.label}"
                             prefs.edit()
-                                .putString("drill_parent_$appWidgetId", target.label)
+                                .putString("drill_path_$appWidgetId", nextPath)
+                                .remove("drill_parent_$appWidgetId")
                                 .putInt("focus_$appWidgetId", -1)
                                 .apply()
                             updateWidgetById(context, appWidgetId)
-                        } else if (data.slices.isNotEmpty()) {
-                            // Nothing focused yet -> select/focus the first sector!
-                            prefs.edit()
-                                .putInt("focus_$appWidgetId", 0)
-                                .apply()
+                        } else {
+                            val nextFocus = (focusIndex + 1) % data.slices.size
+                            prefs.edit().putInt("focus_$appWidgetId", nextFocus).apply()
                             updateWidgetById(context, appWidgetId)
                         }
+                    } else if (data.slices.isNotEmpty()) {
+                        prefs.edit().putInt("focus_$appWidgetId", 0).apply()
+                        updateWidgetById(context, appWidgetId)
                     }
                 }
             }
@@ -222,11 +259,12 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         }
 
         // Check if widget is drilled down into a sub-mandala
-        val drillParent = prefs.getString("drill_parent_$appWidgetId", null)
+        val drillPath = prefs.getString("drill_path_$appWidgetId", null) ?: prefs.getString("drill_parent_$appWidgetId", null)
+        val pathSegments = drillPath?.split("||")?.filter { it.isNotBlank() } ?: emptyList()
 
         // Fetch data
-        val data = if (!drillParent.isNullOrEmpty()) {
-            loadDrilledData(context, modeStr, drillParent)
+        val data = if (pathSegments.isNotEmpty()) {
+            loadDrilledData(context, modeStr, drillPath!!)
         } else {
             loadMandalaData(context, modeStr)
         }
@@ -251,8 +289,8 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         views.setImageViewBitmap(R.id.mandala_canvas_image, bitmap)
 
         // Update Mode text
-        val modeDisplay = if (!drillParent.isNullOrEmpty()) {
-            "⬅️ $drillParent"
+        val modeDisplay = if (pathSegments.isNotEmpty()) {
+            "⬅️ ${cleanSegment(pathSegments.last())}"
         } else {
             when (modeStr) {
                 "spaces" -> "☸ Spaces"
@@ -271,13 +309,24 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         val pillarText: String
         val pillPendingIntent: PendingIntent
 
-        if (!drillParent.isNullOrEmpty()) {
-            pillarText = if (focusedSlice != null) {
-                "⬅️ ${focusedSlice.label} • Tap to Zoom Out"
+        if (pathSegments.isNotEmpty()) {
+            if (focusedSlice != null) {
+                val isPortal = focusedSlice.count > 1 ||
+                        focusedSlice.label.contains("Batch", ignoreCase = true) ||
+                        focusedSlice.label.contains("Completed", ignoreCase = true) ||
+                        focusedSlice.subLabels.isNotEmpty()
+                if (isPortal) {
+                    val subCount = if (focusedSlice.subLabels.isNotEmpty()) " [${focusedSlice.subLabels.size} sub]" else ""
+                    pillarText = "⤵ Enter: ${focusedSlice.label} (${focusedSlice.count})$subCount • Tap Canvas"
+                    pillPendingIntent = createBroadcastPendingIntent(context, ACTION_DRILL_DOWN, appWidgetId, 11)
+                } else {
+                    pillarText = "📌 ${focusedSlice.label} • Open App ↗"
+                    pillPendingIntent = createBroadcastPendingIntent(context, ACTION_CANVAS_CLICK, appWidgetId, 12)
+                }
             } else {
-                "⬅️ $drillParent • Tap to Return Up"
+                pillarText = "Total: ${data.totalCount} in ${cleanSegment(pathSegments.last())} • Tap ⬅️ to Return"
+                pillPendingIntent = createBroadcastPendingIntent(context, ACTION_DRILL_UP, appWidgetId, 9)
             }
-            pillPendingIntent = createBroadcastPendingIntent(context, ACTION_DRILL_UP, appWidgetId, 9)
             views.setOnClickPendingIntent(
                 R.id.mandala_btn_mode,
                 createBroadcastPendingIntent(context, ACTION_DRILL_UP, appWidgetId, 10)
@@ -356,10 +405,10 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             putExtra("mandala_mode", modeStr)
             putExtra("mandala_geometry", geometry.name)
             putExtra("mandala_theme", theme.name)
-            val targetFocus = if (!drillParent.isNullOrEmpty()) {
-                drillParent
+            val targetFocus = if (pathSegments.isNotEmpty()) {
+                cleanSegment(pathSegments.last())
             } else if (focusedSlice != null) {
-                focusedSlice.label
+                cleanSegment(focusedSlice.label)
             } else {
                 null
             }
@@ -398,16 +447,40 @@ class MandalaWidgetProvider : AppWidgetProvider() {
     }
 
     // --- DATA LOADING LOGIC ---
-    private fun loadDrilledData(context: Context, mode: String, parentName: String): MandalaWidgetRenderer.MandalaRenderData {
+    private data class WidgetTask(
+        val id: String,
+        val title: String,
+        val priority: String,
+        val status: String,
+        val due: String?,
+        val listTitle: String?,
+        val spacesJson: String?,
+        val tagsJson: String?
+    )
+
+    private fun loadDrilledData(context: Context, mode: String, drillPath: String): MandalaWidgetRenderer.MandalaRenderData {
         val slices = mutableListOf<MandalaWidgetRenderer.MandalaSlice>()
         var total = 0
         var completed = 0
 
-        // Strip leading symbols and trailing counts: e.g. "Work (5)" -> "Work", "🔥 Critical" -> "Critical", "#Urgent" -> "Urgent"
-        val cleanParent = parentName
-            .replace(Regex("""^[⬅️⤵️⚡🔥📌☕📋🏷️#\s]+"""), "")
-            .replace(Regex("""\s*\(\d+\)$"""), "")
-            .trim()
+        val pathSegments = drillPath.split("||").map { it.trim() }.filter { it.isNotEmpty() }
+        if (pathSegments.isEmpty()) return loadMandalaData(context, mode)
+
+        val rootSegment = cleanSegment(pathSegments[0])
+
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.DAY_OF_YEAR, 7)
+        val nextWeekStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+
+        fun getPrioColor(prio: String): Int = when (prio.lowercase()) {
+            "critical" -> Color.parseColor("#EF4444")
+            "high" -> Color.parseColor("#F59E0B")
+            "low" -> Color.parseColor("#10B981")
+            else -> Color.parseColor("#3B82F6")
+        }
+
+        val allTasks = mutableListOf<WidgetTask>()
 
         try {
             val dbFile = context.getDatabasePath("gtasks_local.db")
@@ -416,88 +489,60 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                     when (mode) {
                         "priorities" -> {
                             val prioTarget = when {
-                                cleanParent.contains("critical", ignoreCase = true) -> "critical"
-                                cleanParent.contains("high", ignoreCase = true) -> "high"
-                                cleanParent.contains("med", ignoreCase = true) -> "medium"
-                                cleanParent.contains("low", ignoreCase = true) -> "low"
-                                else -> cleanParent.lowercase()
-                            }
-                            val pColor = when (prioTarget) {
-                                "critical" -> Color.parseColor("#EF4444")
-                                "high" -> Color.parseColor("#F59E0B")
-                                "medium" -> Color.parseColor("#3B82F6")
-                                else -> Color.parseColor("#10B981")
+                                rootSegment.contains("critical", ignoreCase = true) -> "critical"
+                                rootSegment.contains("high", ignoreCase = true) -> "high"
+                                rootSegment.contains("med", ignoreCase = true) -> "medium"
+                                rootSegment.contains("low", ignoreCase = true) -> "low"
+                                else -> rootSegment.lowercase()
                             }
                             val cursor = db.rawQuery(
-                                "SELECT title, status FROM tasks WHERE sync_status != 'pending_delete' AND lower(priority) = ? ORDER BY id DESC LIMIT 16",
+                                "SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete' AND lower(priority) = lower(?) ORDER BY id DESC",
                                 arrayOf(prioTarget)
                             )
                             cursor.use {
                                 while (it.moveToNext()) {
-                                    val title = it.getString(0) ?: "Task"
-                                    val status = it.getString(1) ?: "pending"
-                                    if (status == "completed") {
-                                        completed++
-                                    } else {
-                                        total++
-                                        slices.add(
-                                            MandalaWidgetRenderer.MandalaSlice(
-                                                id = "prio_${slices.size}",
-                                                label = title,
-                                                count = 1,
-                                                completedCount = 0,
-                                                color = pColor
-                                            )
-                                        )
-                                    }
+                                    allTasks.add(WidgetTask(
+                                        id = it.getString(0) ?: "",
+                                        title = it.getString(1) ?: "Task",
+                                        priority = it.getString(2) ?: "medium",
+                                        status = it.getString(3) ?: "pending",
+                                        due = it.getString(4),
+                                        listTitle = it.getString(5),
+                                        spacesJson = it.getString(6),
+                                        tagsJson = it.getString(7)
+                                    ))
                                 }
                             }
                         }
                         "lists" -> {
                             val cursor = db.rawQuery(
-                                "SELECT title, priority, status FROM tasks WHERE sync_status != 'pending_delete' AND lower(trim(list_title)) = lower(trim(?)) ORDER BY id DESC LIMIT 16",
-                                arrayOf(cleanParent)
+                                "SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete' AND lower(trim(list_title)) = lower(trim(?)) ORDER BY id DESC",
+                                arrayOf(rootSegment)
                             )
                             cursor.use {
                                 while (it.moveToNext()) {
-                                    val title = it.getString(0) ?: "Task"
-                                    val prio = it.getString(1) ?: "medium"
-                                    val status = it.getString(2) ?: "pending"
-                                    val pColor = when (prio.lowercase()) {
-                                        "critical" -> Color.parseColor("#EF4444")
-                                        "high" -> Color.parseColor("#F59E0B")
-                                        "low" -> Color.parseColor("#10B981")
-                                        else -> Color.parseColor("#3B82F6")
-                                    }
-                                    if (status == "completed") {
-                                        completed++
-                                    } else {
-                                        total++
-                                        slices.add(
-                                            MandalaWidgetRenderer.MandalaSlice(
-                                                id = "list_${slices.size}",
-                                                label = title,
-                                                count = 1,
-                                                completedCount = 0,
-                                                color = pColor
-                                            )
-                                        )
-                                    }
+                                    allTasks.add(WidgetTask(
+                                        id = it.getString(0) ?: "",
+                                        title = it.getString(1) ?: "Task",
+                                        priority = it.getString(2) ?: "medium",
+                                        status = it.getString(3) ?: "pending",
+                                        due = it.getString(4),
+                                        listTitle = it.getString(5),
+                                        spacesJson = it.getString(6),
+                                        tagsJson = it.getString(7)
+                                    ))
                                 }
                             }
                         }
                         "tags" -> {
-                            val cleanTag = cleanParent.replace("#", "").trim().lowercase()
+                            val cleanTag = rootSegment.replace("#", "").trim().lowercase()
                             val cursor = db.rawQuery(
-                                "SELECT title, tags, priority, status FROM tasks WHERE sync_status != 'pending_delete' ORDER BY id DESC",
+                                "SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete' ORDER BY id DESC",
                                 null
                             )
                             cursor.use {
                                 while (it.moveToNext()) {
-                                    val title = it.getString(0) ?: "Task"
-                                    val tagsJson = it.getString(1) ?: ""
-                                    val prio = it.getString(2) ?: "medium"
-                                    val status = it.getString(3) ?: "pending"
+                                    val tagsJson = it.getString(7) ?: ""
                                     var hasTag = false
                                     if (tagsJson.isNotBlank() && tagsJson != "[]") {
                                         try {
@@ -511,122 +556,195 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                                         } catch (e: Exception) {}
                                     }
                                     if (hasTag) {
-                                        if (status == "completed") {
-                                            completed++
-                                        } else {
-                                            total++
-                                            if (slices.size < 16) {
-                                                val pColor = when (prio.lowercase()) {
-                                                    "critical" -> Color.parseColor("#EF4444")
-                                                    "high" -> Color.parseColor("#F59E0B")
-                                                    "low" -> Color.parseColor("#10B981")
-                                                    else -> Color.parseColor("#3B82F6")
-                                                }
-                                                slices.add(
-                                                    MandalaWidgetRenderer.MandalaSlice(
-                                                        id = "tag_${slices.size}",
-                                                        label = title,
-                                                        count = 1,
-                                                        completedCount = 0,
-                                                        color = pColor
-                                                    )
-                                                )
-                                            }
-                                        }
+                                        allTasks.add(WidgetTask(
+                                            id = it.getString(0) ?: "",
+                                            title = it.getString(1) ?: "Task",
+                                            priority = it.getString(2) ?: "medium",
+                                            status = it.getString(3) ?: "pending",
+                                            due = it.getString(4),
+                                            listTitle = it.getString(5),
+                                            spacesJson = it.getString(6),
+                                            tagsJson = tagsJson
+                                        ))
                                     }
                                 }
                             }
                         }
                         else -> { // "spaces", "harada_9x9", "custom", etc.
                             val cursor = db.rawQuery(
-                                "SELECT title, spaces, status, priority FROM tasks WHERE sync_status != 'pending_delete' ORDER BY id DESC",
+                                "SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete' ORDER BY id DESC",
                                 null
                             )
-                            val subSpaceCounts = mutableMapOf<String, Int>()
-                            val directTasks = mutableListOf<Pair<String, String>>()
-
                             cursor.use {
                                 while (it.moveToNext()) {
-                                    val taskTitle = it.getString(0) ?: "Task"
-                                    val spacesJson = it.getString(1) ?: ""
-                                    val status = it.getString(2) ?: "pending"
-                                    val priority = it.getString(3) ?: "medium"
-                                    val isDone = (status == "completed")
-
-                                    var matchesParent = false
-                                    var subNameFound: String? = null
-
-                                    if (spacesJson.isNotBlank() && spacesJson != "{}") {
+                                    val spacesJson = it.getString(6) ?: ""
+                                    var matches = false
+                                    if (rootSegment.equals("General", ignoreCase = true) || rootSegment.equals("Inbox", ignoreCase = true)) {
+                                        if (spacesJson.isBlank() || spacesJson == "{}") matches = true
+                                    } else if (spacesJson.isNotBlank() && spacesJson != "{}") {
                                         try {
                                             val obj = JSONObject(spacesJson)
                                             val keys = obj.keys()
                                             while (keys.hasNext()) {
-                                                val k = keys.next()
-                                                if (k.trim().equals(cleanParent, ignoreCase = true)) {
-                                                    matchesParent = true
-                                                    val subs = obj.optJSONArray(k)
-                                                    if (subs != null && subs.length() > 0) {
-                                                        subNameFound = subs.getString(0).trim()
-                                                    }
+                                                if (keys.next().trim().equals(rootSegment, ignoreCase = true)) {
+                                                    matches = true
                                                     break
                                                 }
                                             }
                                         } catch (e: Exception) {}
                                     }
-
-                                    if (matchesParent) {
-                                        if (isDone) completed++ else total++
-                                        if (!isDone) {
-                                            if (subNameFound != null && subNameFound.isNotEmpty()) {
-                                                subSpaceCounts[subNameFound] = (subSpaceCounts[subNameFound] ?: 0) + 1
-                                            } else {
-                                                directTasks.add(Pair(taskTitle, priority))
-                                            }
-                                        }
+                                    if (matches) {
+                                        allTasks.add(WidgetTask(
+                                            id = it.getString(0) ?: "",
+                                            title = it.getString(1) ?: "Task",
+                                            priority = it.getString(2) ?: "medium",
+                                            status = it.getString(3) ?: "pending",
+                                            due = it.getString(4),
+                                            listTitle = it.getString(5),
+                                            spacesJson = spacesJson,
+                                            tagsJson = it.getString(7)
+                                        ))
                                     }
                                 }
-                            }
-
-                            // Add sub-spaces
-                            subSpaceCounts.entries.forEachIndexed { idx, e ->
-                                slices.add(
-                                    MandalaWidgetRenderer.MandalaSlice(
-                                        id = "sub_$idx",
-                                        label = e.key,
-                                        count = e.value,
-                                        completedCount = 0,
-                                        color = 0
-                                    )
-                                )
-                            }
-                            // Add direct tasks (up to 16 total)
-                            val remainingCapacity = maxOf(0, 16 - slices.size)
-                            directTasks.take(remainingCapacity).forEachIndexed { idx, pair ->
-                                val pColor = when (pair.second.lowercase()) {
-                                    "critical" -> Color.parseColor("#EF4444")
-                                    "high" -> Color.parseColor("#F59E0B")
-                                    "low" -> Color.parseColor("#10B981")
-                                    else -> Color.parseColor("#3B82F6")
-                                }
-                                slices.add(
-                                    MandalaWidgetRenderer.MandalaSlice(
-                                        id = "task_${slices.size}",
-                                        label = pair.first,
-                                        count = 1,
-                                        completedCount = 0,
-                                        color = pColor
-                                    )
-                                )
                             }
                         }
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading drilled data for $parentName", e)
+            Log.e(TAG, "Error loading drilled data for $drillPath", e)
         }
 
-        // Harada 9x9 fallback
+        val pendingTasks = allTasks.filter { it.status != "completed" }
+        val completedTasks = allTasks.filter { it.status == "completed" }
+        total = pendingTasks.size
+        completed = completedTasks.size
+
+        if (pathSegments.size == 1) {
+            // Level 1: In the root container (e.g. "My Tasks")
+            if (pendingTasks.size <= 12) {
+                pendingTasks.forEachIndexed { idx, t ->
+                    slices.add(MandalaWidgetRenderer.MandalaSlice(
+                        id = t.id.ifEmpty { "task_$idx" },
+                        label = t.title,
+                        count = 1,
+                        completedCount = 0,
+                        color = getPrioColor(t.priority)
+                    ))
+                }
+            } else {
+                // Decompose large list!
+                val isPrioMode = mode == "priorities"
+                val prioMap = pendingTasks.groupBy { it.priority.lowercase() }
+                val maxPrioShare = if (pendingTasks.isNotEmpty()) (prioMap.values.maxOfOrNull { it.size } ?: 0).toDouble() / pendingTasks.size else 0.0
+                val isPrioDiverse = !isPrioMode && prioMap.keys.size > 1 && maxPrioShare < 0.85
+
+                if (isPrioDiverse) {
+                    val crit = prioMap["critical"] ?: emptyList()
+                    val high = prioMap["high"] ?: emptyList()
+                    val med = prioMap["medium"] ?: emptyList()
+                    val low = prioMap["low"] ?: emptyList()
+                    if (crit.isNotEmpty()) slices.add(MandalaWidgetRenderer.MandalaSlice("p_crit", "🚨 Critical (${crit.size})", crit.size, 0, Color.parseColor("#EF4444"), crit.take(2).map { it.title }))
+                    if (high.isNotEmpty()) slices.add(MandalaWidgetRenderer.MandalaSlice("p_high", "🔥 High (${high.size})", high.size, 0, Color.parseColor("#F59E0B"), high.take(2).map { it.title }))
+                    if (med.isNotEmpty()) slices.add(MandalaWidgetRenderer.MandalaSlice("p_med", "⚡ Medium (${med.size})", med.size, 0, Color.parseColor("#3B82F6"), med.take(2).map { it.title }))
+                    if (low.isNotEmpty()) slices.add(MandalaWidgetRenderer.MandalaSlice("p_low", "🌱 Low (${low.size})", low.size, 0, Color.parseColor("#10B981"), low.take(2).map { it.title }))
+                } else {
+                    val overdue = pendingTasks.filter { !it.due.isNullOrEmpty() && it.due.take(10) < todayStr }
+                    val dueToday = pendingTasks.filter { !it.due.isNullOrEmpty() && it.due.take(10) == todayStr }
+                    val week = pendingTasks.filter { !it.due.isNullOrEmpty() && it.due.take(10) > todayStr && it.due.take(10) <= nextWeekStr }
+                    val upcoming = pendingTasks.filter { !it.due.isNullOrEmpty() && it.due.take(10) > nextWeekStr }
+                    val nodue = pendingTasks.filter { it.due.isNullOrEmpty() }
+
+                    if (overdue.isNotEmpty()) slices.add(MandalaWidgetRenderer.MandalaSlice("t_overdue", "🚨 Overdue (${overdue.size})", overdue.size, 0, Color.parseColor("#EF4444"), overdue.take(2).map { it.title }))
+                    if (dueToday.isNotEmpty()) slices.add(MandalaWidgetRenderer.MandalaSlice("t_today", "📅 Due Today (${dueToday.size})", dueToday.size, 0, Color.parseColor("#F59E0B"), dueToday.take(2).map { it.title }))
+                    if (week.isNotEmpty()) slices.add(MandalaWidgetRenderer.MandalaSlice("t_week", "🌅 This Week (${week.size})", week.size, 0, Color.parseColor("#3B82F6"), week.take(2).map { it.title }))
+                    if (upcoming.isNotEmpty()) slices.add(MandalaWidgetRenderer.MandalaSlice("t_upcoming", "📆 Upcoming (${upcoming.size})", upcoming.size, 0, Color.parseColor("#8B5CF6"), upcoming.take(2).map { it.title }))
+                    if (nodue.isNotEmpty()) slices.add(MandalaWidgetRenderer.MandalaSlice("t_nodue", "📥 Someday (${nodue.size})", nodue.size, 0, Color.parseColor("#10B981"), nodue.take(2).map { it.title }))
+                }
+            }
+
+            if (completedTasks.isNotEmpty()) {
+                slices.add(MandalaWidgetRenderer.MandalaSlice("t_done", "✓ Completed (${completedTasks.size})", completedTasks.size, completedTasks.size, Color.parseColor("#64748B"), completedTasks.take(2).map { it.title }))
+            }
+        } else {
+            // Level 2+: Inside a Portal / Chamber
+            val subRaw = pathSegments[1].lowercase()
+            val chamberTasks: List<WidgetTask> = when {
+                subRaw.contains("completed") || subRaw.contains("done") -> completedTasks
+                subRaw.contains("critical") -> pendingTasks.filter { it.priority.lowercase() == "critical" }
+                subRaw.contains("high") -> pendingTasks.filter { it.priority.lowercase() == "high" }
+                subRaw.contains("med") -> pendingTasks.filter { it.priority.lowercase() == "medium" }
+                subRaw.contains("low") -> pendingTasks.filter { it.priority.lowercase() == "low" }
+                subRaw.contains("overdue") -> pendingTasks.filter { !it.due.isNullOrEmpty() && it.due.take(10) < todayStr }
+                subRaw.contains("today") -> pendingTasks.filter { !it.due.isNullOrEmpty() && it.due.take(10) == todayStr }
+                subRaw.contains("week") -> pendingTasks.filter { !it.due.isNullOrEmpty() && it.due.take(10) > todayStr && it.due.take(10) <= nextWeekStr }
+                subRaw.contains("upcoming") || subRaw.contains("later") -> pendingTasks.filter { !it.due.isNullOrEmpty() && it.due.take(10) > nextWeekStr }
+                subRaw.contains("someday") || subRaw.contains("no due") || subRaw.contains("nodue") -> pendingTasks.filter { it.due.isNullOrEmpty() }
+                else -> pendingTasks
+            }
+
+            if (pathSegments.size == 2) {
+                if (chamberTasks.size <= 12) {
+                    chamberTasks.forEachIndexed { idx, t ->
+                        slices.add(MandalaWidgetRenderer.MandalaSlice(
+                            id = t.id.ifEmpty { "ctask_$idx" },
+                            label = t.title,
+                            count = 1,
+                            completedCount = if (t.status == "completed") 1 else 0,
+                            color = getPrioColor(t.priority)
+                        ))
+                    }
+                } else {
+                    // Harada 8-Task Action Batches!
+                    val batchSize = 8
+                    val batchColors = listOf(
+                        Color.parseColor("#EC4899"), // Rose
+                        Color.parseColor("#8B5CF6"), // Violet
+                        Color.parseColor("#3B82F6"), // Blue
+                        Color.parseColor("#06B6D4"), // Cyan
+                        Color.parseColor("#10B981"), // Emerald
+                        Color.parseColor("#F59E0B"), // Amber
+                        Color.parseColor("#F97316"), // Orange
+                        Color.parseColor("#E11D48")  // Ruby
+                    )
+                    val numBatches = (chamberTasks.size + batchSize - 1) / batchSize
+                    for (b in 0 until numBatches) {
+                        val start = b * batchSize
+                        val end = minOf(start + batchSize, chamberTasks.size)
+                        val bSlice = chamberTasks.subList(start, end)
+                        val bColor = batchColors[b % batchColors.size]
+                        slices.add(MandalaWidgetRenderer.MandalaSlice(
+                            id = "batch_$b",
+                            label = "🎯 Focus Batch ${b + 1} (${bSlice.size})",
+                            count = bSlice.size,
+                            completedCount = bSlice.count { it.status == "completed" },
+                            color = bColor,
+                            subLabels = bSlice.take(2).map { it.title }
+                        ))
+                    }
+                }
+            } else {
+                // Level 3+: Specific Action Batch selected
+                val batchStr = pathSegments[2]
+                val match = Regex("""Batch\s*(\d+)""", RegexOption.IGNORE_CASE).find(batchStr)
+                val bIndex = if (match != null) (match.groupValues[1].toIntOrNull() ?: 1) - 1 else 0
+                val start = bIndex * 8
+                val end = minOf(start + 8, chamberTasks.size)
+                val batchTasks = if (start in chamberTasks.indices) chamberTasks.subList(start, end) else emptyList()
+
+                batchTasks.forEachIndexed { idx, t ->
+                    slices.add(MandalaWidgetRenderer.MandalaSlice(
+                        id = t.id.ifEmpty { "btask_$idx" },
+                        label = t.title,
+                        count = 1,
+                        completedCount = if (t.status == "completed") 1 else 0,
+                        color = getPrioColor(t.priority)
+                    ))
+                }
+            }
+        }
+
+        // Harada 9x9 custom fallback if still empty
         if (slices.isEmpty() && (mode == "harada_9x9" || mode == "custom")) {
             try {
                 val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
@@ -640,7 +758,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                             var parentId: String? = null
                             for (n in 0 until nodes.length()) {
                                 val node = nodes.getJSONObject(n)
-                                if (node.optString("label", "").equals(cleanParent, ignoreCase = true)) {
+                                if (node.optString("label", "").equals(rootSegment, ignoreCase = true)) {
                                     parentId = node.optString("id", "")
                                     break
                                 }
@@ -671,50 +789,12 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading drilled Harada data", e)
             }
-
-            // Default classic 8 Harada action milestones if user has not yet customized this pillar
-            if (slices.isEmpty()) {
-                val defaultMilestones = when {
-                    cleanParent.contains("Mental", ignoreCase = true) || cleanParent.contains("Mind", ignoreCase = true) ->
-                        listOf("Positive Self-Talk", "Meditation 10m", "Vision Journal", "Focus Ritual", "Stress Control", "Evening Reflection", "Gratitude 3x", "Unshakable Will")
-                    cleanParent.contains("Health", ignoreCase = true) || cleanParent.contains("Physical", ignoreCase = true) ->
-                        listOf("8h Sleep", "Hydration 2.5L", "Nutrition Balance", "Cardio 20m", "Strength Training", "Stretching Routine", "Posture Check", "Vitality Rest")
-                    cleanParent.contains("Competence", ignoreCase = true) || cleanParent.contains("Skill", ignoreCase = true) ->
-                        listOf("Deep Work 90m", "Skill Practice", "Tool Mastery", "Code Review", "Architecture Study", "Fast Execution", "Quality Standard", "Knowledge Map")
-                    cleanParent.contains("Speed", ignoreCase = true) || cleanParent.contains("Execution", ignoreCase = true) ->
-                        listOf("Daily Top 3", "Timeboxing", "Zero Distractions", "Immediate Action", "Task Batching", "Progress Tracking", "Quick Decisions", "Sprint Review")
-                    cleanParent.contains("Finance", ignoreCase = true) || cleanParent.contains("Wealth", ignoreCase = true) ->
-                        listOf("Expense Tracking", "Budget Discipline", "Income Stream", "Investment Review", "Savings Target", "Asset Building", "Emergency Fund", "Financial Study")
-                    cleanParent.contains("Relations", ignoreCase = true) || cleanParent.contains("Network", ignoreCase = true) ->
-                        listOf("Active Listening", "Family Quality Time", "Express Gratitude", "Mentor Check-in", "Peer Collab", "Empathetic Help", "Network Nurturing", "Authentic Bond")
-                    cleanParent.contains("Learning", ignoreCase = true) || cleanParent.contains("Study", ignoreCase = true) ->
-                        listOf("Read 20 Pages", "Take Smart Notes", "Synthesize Ideas", "Teach Someone", "Listen to Podcast", "Course Progress", "Vocabulary Growth", "Apply Learning")
-                    cleanParent.contains("Discipline", ignoreCase = true) || cleanParent.contains("Habit", ignoreCase = true) ->
-                        listOf("Early Awakening", "Clean Workspace", "Checklist Zero", "No Procrastination", "Consistent Habit", "Evening Review", "Prep for Tomorrow", "Self Reflection")
-                    else -> emptyList()
-                }
-                if (defaultMilestones.isNotEmpty()) {
-                    defaultMilestones.forEachIndexed { idx, actionName ->
-                        slices.add(
-                            MandalaWidgetRenderer.MandalaSlice(
-                                id = "harada_act_$idx",
-                                label = actionName,
-                                count = 1,
-                                completedCount = 0,
-                                color = 0
-                            )
-                        )
-                    }
-                    total = slices.size
-                }
-            }
         }
 
-        // NOTE: If slices is empty, leave it empty! The renderer gracefully displays the Cosmic Empty State without repeated dummy nodes.
-
+        val displayCenter = cleanSegment(pathSegments.last())
         return MandalaWidgetRenderer.MandalaRenderData(
-            title = "$cleanParent Sub-Mandala",
-            centerGoal = cleanParent,
+            title = "$displayCenter Sub-Mandala",
+            centerGoal = displayCenter,
             totalCount = total,
             completedCount = completed,
             slices = slices

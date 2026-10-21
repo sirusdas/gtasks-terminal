@@ -201,12 +201,17 @@ class _Job {
 }
 
 TreeNode _makeGroup(TreeNode parent, List<TreeNode> slice, int index) {
-  final String first = slice[0].node.label;
-  final String last = slice.last.node.label;
-  final String label = slice.length == 1 ? first : '$first – $last';
+  final String label = slice.length == 1
+      ? slice[0].node.label
+      : '🎯 Focus Batch ${index + 1} (${slice.length})';
   final g = TreeNode(
     id: '${parent.id}#g$index',
-    node: MandalaNode(id: '${parent.id}#g$index', label: label),
+    node: MandalaNode(
+      id: '${parent.id}#g$index',
+      label: label,
+      short: 'Batch ${index + 1}',
+      display: NodeDisplay.portal,
+    ),
     virtual: true,
     parent: parent,
     children: slice,

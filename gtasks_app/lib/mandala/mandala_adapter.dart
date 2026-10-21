@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import '../models/task_item.dart';
 import 'mandala_types.dart';
 
@@ -78,88 +79,133 @@ class MandalaAdapter {
       ),
     );
 
+    final Map<String, List<TaskItem>> spaceDirectTasks = {};
+    final Map<String, List<TaskItem>> subspaceTasks = {};
     final Set<String> registeredSpaceIds = {};
     final Set<String> registeredSubspaceIds = {};
     final Map<String, int> spaceCounts = {};
     final Map<String, int> subspaceCounts = {};
 
-    // Count first
+    // Count and group tasks
     for (final task in tasks) {
       if (task.spaces.isEmpty) {
         spaceCounts['General'] = (spaceCounts['General'] ?? 0) + 1;
+        spaceDirectTasks.putIfAbsent('space_general', () => []).add(task);
       } else {
         task.spaces.forEach((s, subs) {
           spaceCounts[s] = (spaceCounts[s] ?? 0) + 1;
+          final String spaceId = 'space_${s.toLowerCase()}';
           if (subs.isEmpty) {
             subspaceCounts['$s/Main'] = (subspaceCounts['$s/Main'] ?? 0) + 1;
+            spaceDirectTasks.putIfAbsent(spaceId, () => []).add(task);
           } else {
             for (final sub in subs) {
               subspaceCounts['$s/$sub'] = (subspaceCounts['$s/$sub'] ?? 0) + 1;
+              final String subId = '${spaceId}_sub_${sub.toLowerCase()}';
+              subspaceTasks.putIfAbsent(subId, () => []).add(task);
             }
           }
         });
       }
     }
 
-    for (final task in tasks) {
-      if (task.spaces.isEmpty) {
-        const String spaceId = 'space_general';
-        if (!registeredSpaceIds.contains(spaceId)) {
-          registeredSpaceIds.add(spaceId);
-          nodes.add(
-            MandalaNode(
-              id: spaceId,
-              label: 'General / Inbox (${spaceCounts['General'] ?? 0})',
-              parent: rootId,
-              short: 'Inbox',
-              display: forcePortals ? NodeDisplay.portal : NodeDisplay.auto,
-            ),
+    if (spaceDirectTasks.containsKey('space_general')) {
+      const String spaceId = 'space_general';
+      final gTasks = spaceDirectTasks[spaceId]!;
+      registeredSpaceIds.add(spaceId);
+      nodes.add(
+        MandalaNode(
+          id: spaceId,
+          label: 'General / Inbox (${gTasks.length})',
+          parent: rootId,
+          short: 'Inbox',
+          display: forcePortals ? NodeDisplay.portal : NodeDisplay.auto,
+        ),
+      );
+      if (gTasks.length <= 12) {
+        for (final task in gTasks) {
+          nodes.add(_taskNode(task, parentId: spaceId));
+        }
+      } else {
+        _decomposeTasksIntoSubMandala(
+          tasks: gTasks,
+          parentId: spaceId,
+          nodes: nodes,
+          forcePortals: forcePortals,
+        );
+      }
+    }
+
+    spaceCounts.forEach((spaceName, count) {
+      if (spaceName == 'General') return;
+      final String spaceId = 'space_${spaceName.toLowerCase()}';
+      if (!registeredSpaceIds.contains(spaceId)) {
+        registeredSpaceIds.add(spaceId);
+        nodes.add(
+          MandalaNode(
+            id: spaceId,
+            label: '$spaceName ($count)',
+            parent: rootId,
+            short: spaceName,
+            display: forcePortals ? NodeDisplay.portal : NodeDisplay.auto,
+          ),
+        );
+      }
+
+      final direct = spaceDirectTasks[spaceId];
+      if (direct != null && direct.isNotEmpty) {
+        if (direct.length <= 12) {
+          for (final task in direct) {
+            nodes.add(_taskNode(task, parentId: spaceId));
+          }
+        } else {
+          _decomposeTasksIntoSubMandala(
+            tasks: direct,
+            parentId: spaceId,
+            nodes: nodes,
+            forcePortals: forcePortals,
           );
         }
-        nodes.add(_taskNode(task, parentId: spaceId));
-      } else {
-        task.spaces.forEach((spaceName, subList) {
-          final String spaceId = 'space_${spaceName.toLowerCase()}';
-          if (!registeredSpaceIds.contains(spaceId)) {
-            registeredSpaceIds.add(spaceId);
-            final int count = spaceCounts[spaceName] ?? 0;
-            nodes.add(
-              MandalaNode(
-                id: spaceId,
-                label: '$spaceName ($count)',
-                parent: rootId,
-                short: spaceName,
-                display: forcePortals ? NodeDisplay.portal : NodeDisplay.auto,
-              ),
-            );
-          }
-
-          if (subList.isEmpty) {
-            nodes.add(_taskNode(task, parentId: spaceId));
-          } else {
-            for (final subName in subList) {
-              final String subId = '${spaceId}_sub_${subName.toLowerCase()}';
-              if (!registeredSubspaceIds.contains(subId)) {
-                registeredSubspaceIds.add(subId);
-                final int subCount = subspaceCounts['$spaceName/$subName'] ?? 0;
-                nodes.add(
-                  MandalaNode(
-                    id: subId,
-                    label: '$subName ($subCount)',
-                    parent: spaceId,
-                    short: subName,
-                    display: forcePortals
-                        ? NodeDisplay.portal
-                        : NodeDisplay.auto,
-                  ),
-                );
-              }
-              nodes.add(_taskNode(task, parentId: subId));
-            }
-          }
-        });
       }
-    }
+    });
+
+    subspaceCounts.forEach((fullSub, count) {
+      final parts = fullSub.split('/');
+      final sName = parts[0];
+      final subName = parts[1];
+      if (subName == 'Main') return;
+      final String spaceId = 'space_${sName.toLowerCase()}';
+      final String subId = '${spaceId}_sub_${subName.toLowerCase()}';
+      if (!registeredSubspaceIds.contains(subId)) {
+        registeredSubspaceIds.add(subId);
+        nodes.add(
+          MandalaNode(
+            id: subId,
+            label: '$subName ($count)',
+            parent: spaceId,
+            short: subName,
+            display: forcePortals
+                ? NodeDisplay.portal
+                : NodeDisplay.auto,
+          ),
+        );
+      }
+      final sTasks = subspaceTasks[subId];
+      if (sTasks != null && sTasks.isNotEmpty) {
+        if (sTasks.length <= 12) {
+          for (final task in sTasks) {
+            nodes.add(_taskNode(task, parentId: subId));
+          }
+        } else {
+          _decomposeTasksIntoSubMandala(
+            tasks: sTasks,
+            parentId: subId,
+            nodes: nodes,
+            forcePortals: forcePortals,
+          );
+        }
+      }
+    });
 
     return MandalaDoc(
       title: title ?? 'Spaces Mandala',
@@ -214,8 +260,17 @@ class MandalaAdapter {
         ),
       );
 
-      for (final task in listTasks) {
-        nodes.add(_taskNode(task, parentId: listId));
+      if (listTasks.length <= 12) {
+        for (final task in listTasks) {
+          nodes.add(_taskNode(task, parentId: listId));
+        }
+      } else {
+        _decomposeTasksIntoSubMandala(
+          tasks: listTasks,
+          parentId: listId,
+          nodes: nodes,
+          forcePortals: forcePortals,
+        );
       }
     });
 
@@ -283,8 +338,17 @@ class MandalaAdapter {
         ),
       );
 
-      for (final task in entry.value) {
-        nodes.add(_taskNode(task, parentId: tagId));
+      if (entry.value.length <= 12) {
+        for (final task in entry.value) {
+          nodes.add(_taskNode(task, parentId: tagId));
+        }
+      } else {
+        _decomposeTasksIntoSubMandala(
+          tasks: entry.value,
+          parentId: tagId,
+          nodes: nodes,
+          forcePortals: forcePortals,
+        );
       }
     }
 
@@ -300,8 +364,17 @@ class MandalaAdapter {
         ),
       );
 
-      for (final task in untagged) {
-        nodes.add(_taskNode(task, parentId: untaggedId));
+      if (untagged.length <= 12) {
+        for (final task in untagged) {
+          nodes.add(_taskNode(task, parentId: untaggedId));
+        }
+      } else {
+        _decomposeTasksIntoSubMandala(
+          tasks: untagged,
+          parentId: untaggedId,
+          nodes: nodes,
+          forcePortals: forcePortals,
+        );
       }
     }
 
@@ -376,8 +449,17 @@ class MandalaAdapter {
         ),
       );
 
-      for (final task in pTasks) {
-        nodes.add(_taskNode(task, parentId: prioId));
+      if (pTasks.length <= 12) {
+        for (final task in pTasks) {
+          nodes.add(_taskNode(task, parentId: prioId));
+        }
+      } else {
+        _decomposeTasksIntoSubMandala(
+          tasks: pTasks,
+          parentId: prioId,
+          nodes: nodes,
+          forcePortals: forcePortals,
+        );
       }
     });
 
@@ -465,6 +547,199 @@ class MandalaAdapter {
         maxCellsPerMandala: 73,
       ),
     );
+  }
+
+  static void _decomposeTasksIntoSubMandala({
+    required List<TaskItem> tasks,
+    required String parentId,
+    required List<MandalaNode> nodes,
+    required bool forcePortals,
+  }) {
+    final pendingTasks = tasks.where((t) => !t.isCompleted).toList();
+    final completedTasks = tasks.where((t) => t.isCompleted).toList();
+    final bool isAlreadyPriority = parentId.startsWith('prio_');
+
+    // 1. Analyze Priority Distribution
+    final Map<String, List<TaskItem>> prioBuckets = {
+      'critical': [],
+      'high': [],
+      'medium': [],
+      'low': [],
+    };
+    for (final t in pendingTasks) {
+      final p = t.calculatedPriority.toLowerCase();
+      if (prioBuckets.containsKey(p)) {
+        prioBuckets[p]!.add(t);
+      } else {
+        prioBuckets['medium']!.add(t);
+      }
+    }
+
+    final activePrios =
+        prioBuckets.entries.where((e) => e.value.isNotEmpty).toList();
+    final int maxPrioCount = activePrios.isEmpty
+        ? 0
+        : activePrios.map((e) => e.value.length).reduce(math.max);
+    final bool isPriorityDiverse = !isAlreadyPriority &&
+        activePrios.length > 1 &&
+        pendingTasks.isNotEmpty &&
+        (maxPrioCount / pendingTasks.length) < 0.85;
+
+    if (isPriorityDiverse) {
+      // Group by Priority
+      final Map<String, String> prioLabels = {
+        'critical': '🚨 Critical',
+        'high': '🔥 High',
+        'medium': '⚡ Medium',
+        'low': '🌱 Low',
+      };
+      for (final entry in activePrios) {
+        final pKey = entry.key;
+        final pTasks = entry.value;
+        final portalId = '${parentId}_prio_$pKey';
+        nodes.add(
+          MandalaNode(
+            id: portalId,
+            label: '${prioLabels[pKey]} (${pTasks.length})',
+            parent: parentId,
+            type: pKey,
+            short: pKey[0].toUpperCase(),
+            display: NodeDisplay.portal,
+          ),
+        );
+        _batchTasksIfLarge(
+          tasks: pTasks,
+          parentId: portalId,
+          nodes: nodes,
+          forcePortals: forcePortals,
+        );
+      }
+    } else {
+      // Group by Temporal Horizons (Overdue, Due Today, This Week, Upcoming, Someday)
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final nextWeek = today.add(const Duration(days: 7));
+
+      final List<TaskItem> overdue = [];
+      final List<TaskItem> dueToday = [];
+      final List<TaskItem> thisWeek = [];
+      final List<TaskItem> upcoming = [];
+      final List<TaskItem> noDue = [];
+
+      for (final t in pendingTasks) {
+        if (t.due == null || t.due!.isEmpty) {
+          noDue.add(t);
+        } else {
+          final parsed = DateTime.tryParse(t.due!);
+          if (parsed == null) {
+            noDue.add(t);
+          } else {
+            final d = DateTime(parsed.year, parsed.month, parsed.day);
+            if (d.isBefore(today)) {
+              overdue.add(t);
+            } else if (d.isAtSameMomentAs(today)) {
+              dueToday.add(t);
+            } else if (d.isBefore(nextWeek) || d.isAtSameMomentAs(nextWeek)) {
+              thisWeek.add(t);
+            } else {
+              upcoming.add(t);
+            }
+          }
+        }
+      }
+
+      final timeBuckets = [
+        if (overdue.isNotEmpty)
+          ('overdue', '🚨 Overdue (${overdue.length})', overdue, 'critical'),
+        if (dueToday.isNotEmpty)
+          ('today', '📅 Due Today (${dueToday.length})', dueToday, 'high'),
+        if (thisWeek.isNotEmpty)
+          ('week', '🌅 This Week (${thisWeek.length})', thisWeek, 'medium'),
+        if (upcoming.isNotEmpty)
+          ('upcoming', '📆 Upcoming (${upcoming.length})', upcoming, 'low'),
+        if (noDue.isNotEmpty)
+          ('nodue', '📥 Someday (${noDue.length})', noDue, 'medium'),
+      ];
+
+      for (final item in timeBuckets) {
+        final key = item.$1;
+        final label = item.$2;
+        final bTasks = item.$3;
+        final typeStr = item.$4;
+        final portalId = '${parentId}_time_$key';
+        nodes.add(
+          MandalaNode(
+            id: portalId,
+            label: label,
+            parent: parentId,
+            type: typeStr,
+            short: key,
+            display: NodeDisplay.portal,
+          ),
+        );
+        _batchTasksIfLarge(
+          tasks: bTasks,
+          parentId: portalId,
+          nodes: nodes,
+          forcePortals: forcePortals,
+        );
+      }
+    }
+
+    // Completed Tasks Portal
+    if (completedTasks.isNotEmpty) {
+      final compId = '${parentId}_completed';
+      nodes.add(
+        MandalaNode(
+          id: compId,
+          label: '✓ Completed (${completedTasks.length})',
+          parent: parentId,
+          type: 'completed',
+          short: 'Done',
+          display: NodeDisplay.portal,
+        ),
+      );
+      _batchTasksIfLarge(
+        tasks: completedTasks,
+        parentId: compId,
+        nodes: nodes,
+        forcePortals: forcePortals,
+      );
+    }
+  }
+
+  static void _batchTasksIfLarge({
+    required List<TaskItem> tasks,
+    required String parentId,
+    required List<MandalaNode> nodes,
+    required bool forcePortals,
+  }) {
+    if (tasks.length <= 12) {
+      for (final task in tasks) {
+        nodes.add(_taskNode(task, parentId: parentId));
+      }
+    } else {
+      const int batchSize = 8;
+      final int numBatches = (tasks.length + batchSize - 1) ~/ batchSize;
+      for (int b = 0; b < numBatches; b++) {
+        final int start = b * batchSize;
+        final int end = math.min(start + batchSize, tasks.length);
+        final batchTasks = tasks.sublist(start, end);
+        final batchId = '${parentId}_batch_$b';
+        nodes.add(
+          MandalaNode(
+            id: batchId,
+            label: '🎯 Focus Batch ${b + 1} (${batchTasks.length})',
+            parent: parentId,
+            short: 'Batch ${b + 1}',
+            display: NodeDisplay.portal,
+          ),
+        );
+        for (final task in batchTasks) {
+          nodes.add(_taskNode(task, parentId: batchId));
+        }
+      }
+    }
   }
 
   static MandalaNode _taskNode(TaskItem task, {required String parentId}) {
