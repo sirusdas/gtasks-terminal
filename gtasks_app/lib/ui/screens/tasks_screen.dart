@@ -19,6 +19,7 @@ import '../../models/task_item.dart';
 import 'reports_screen.dart';
 import 'ai_chat_screen.dart';
 import '../widgets/task_detail_modal.dart';
+import '../../mandala/mandala_screen.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -932,6 +933,20 @@ class _TasksScreenState extends State<TasksScreen> {
                 );
               },
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.hub_outlined),
+            tooltip: 'Mandala Radial View',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MandalaScreen(
+                    initialTasks: provider.tasks,
+                  ),
+                ),
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.analytics_outlined),

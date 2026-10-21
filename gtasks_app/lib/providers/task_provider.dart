@@ -356,7 +356,7 @@ class TaskProvider with ChangeNotifier {
         ? tab.effectiveAccounts.first
         : 'all';
     if (!_isStandalone && targetAccount != 'all') {
-      apiClient.switchAccount(targetAccount).catchError((_) {});
+      apiClient.switchAccount(targetAccount).catchError((_) => false);
     }
   }
 
@@ -426,8 +426,8 @@ class TaskProvider with ChangeNotifier {
     );
     if (_activeTabIndex == index) {
       final targetAccount = isAll ? 'all' : account;
-      if (!_isStandalone && targetAccount != 'all' && targetAccount != null) {
-        apiClient.switchAccount(targetAccount).catchError((_) {});
+      if (!_isStandalone && targetAccount != 'all') {
+        apiClient.switchAccount(targetAccount).catchError((_) => false);
       }
       _applyTabFilters(_tabs[index]);
     }
@@ -782,8 +782,6 @@ class TaskProvider with ChangeNotifier {
         notifyListeners();
         return;
       }
-
-      final validAccountIds = _accounts.map((a) => a.id).toSet();
 
       if (_isStandalone) {
         List<TaskItem> allTasks = [];

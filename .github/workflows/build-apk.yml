@@ -5,6 +5,7 @@ on:
     branches:
       - feature/spaces-and-subspaces
       - feature/flutter-app
+      - feature/app-microsoft-todo
       - main
   workflow_dispatch:
 
@@ -47,7 +48,7 @@ jobs:
 
       - name: Publish Nightly Release with APK
         uses: softprops/action-gh-release@v2
-        if: github.ref == 'refs/heads/feature/spaces-and-subspaces'
+        if: github.ref == 'refs/heads/feature/spaces-and-subspaces' || github.ref == 'refs/heads/feature/app-microsoft-todo'
         with:
           tag_name: nightly-build
           name: "GTasks App Nightly Build"

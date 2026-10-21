@@ -5,6 +5,7 @@ import '../../providers/task_provider.dart';
 import '../../providers/settings_provider.dart';
 import 'settings_modal.dart';
 import '../screens/ai_chat_screen.dart';
+import '../../mandala/mandala_screen.dart';
 
 class TasksSidebarDrawer extends StatefulWidget {
   const TasksSidebarDrawer({super.key});
@@ -99,6 +100,23 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                       SnackBar(
                         content: Text('Opened "$title" in new tab'),
                         duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.hub_outlined, color: Colors.purpleAccent),
+                  title: const Text('Open in Mandala Focus', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Visualize this focus branch as a sacred mandala'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => MandalaScreen(
+                          title: title,
+                        ),
                       ),
                     );
                   },
@@ -363,6 +381,25 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                       title: 'All Tasks',
                       icon: Icons.inbox_outlined,
                     ),
+                  ),
+
+                  // Mandala View Entry
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.hub_outlined, color: Colors.purpleAccent),
+                    title: const Text('Mandala View', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Sacred radial task visualization', style: TextStyle(fontSize: 11)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => MandalaScreen(
+                            initialTasks: provider.tasks,
+                          ),
+                        ),
+                      );
+                    },
                   ),
 
                   ListTile(
