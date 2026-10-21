@@ -139,7 +139,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           _localAuthServer = await _bindLocalAuthServer();
           final localPort = _localAuthServer!.port;
 
-          final redirectUri = 'http://localhost:$localPort';
+          final redirectUri = 'http://127.0.0.1:$localPort';
           _lastGeneratedRedirectUri = redirectUri;
 
           final queryParams = {
@@ -200,6 +200,8 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         final error = request.uri.queryParameters['error'];
 
         request.response.headers.contentType = ContentType.html;
+        request.response.headers.set('Access-Control-Allow-Origin', '*');
+        request.response.headers.set('Access-Control-Allow-Private-Network', 'true');
         if (code != null) {
           request.response.write('''
             <!DOCTYPE html>
@@ -227,7 +229,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             });
             await Future.delayed(const Duration(milliseconds: 400));
             if (mounted) {
-              await _exchangeCodeAndSave(code, 'http://localhost:$localPort');
+              await _exchangeCodeAndSave(code, _lastGeneratedRedirectUri ?? 'http://127.0.0.1:$localPort');
             }
           }
           break;
@@ -275,9 +277,11 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
 
         final candidates = [
           redirectUri,
+          if (redirectUri.contains('127.0.0.1')) redirectUri.replaceAll('127.0.0.1', 'localhost'),
+          if (redirectUri.contains('localhost')) redirectUri.replaceAll('localhost', '127.0.0.1'),
           if (_lastGeneratedRedirectUri != null && _lastGeneratedRedirectUri != redirectUri) _lastGeneratedRedirectUri!,
-          'http://localhost:48275',
           'http://127.0.0.1:48275',
+          'http://localhost:48275',
           'http://localhost',
           'urn:ietf:wg:oauth:2.0:oob',
         ];
@@ -533,7 +537,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           _localAuthServer = await _bindLocalAuthServer();
           final localPort = _localAuthServer!.port;
 
-          final redirectUri = 'http://localhost:$localPort';
+          final redirectUri = 'http://127.0.0.1:$localPort';
           _lastGeneratedRedirectUri = redirectUri;
 
           final queryParams = {
@@ -593,6 +597,8 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         final error = request.uri.queryParameters['error'];
 
         request.response.headers.contentType = ContentType.html;
+        request.response.headers.set('Access-Control-Allow-Origin', '*');
+        request.response.headers.set('Access-Control-Allow-Private-Network', 'true');
         if (code != null) {
           request.response.write('''
             <!DOCTYPE html>
@@ -620,7 +626,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             });
             await Future.delayed(const Duration(milliseconds: 400));
             if (mounted) {
-              await _exchangeMicrosoftCodeAndSave(code, 'http://localhost:$localPort');
+              await _exchangeMicrosoftCodeAndSave(code, _lastGeneratedRedirectUri ?? 'http://127.0.0.1:$localPort');
             }
           }
           break;
@@ -669,9 +675,11 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
 
         final candidates = [
           redirectUri,
+          if (redirectUri.contains('127.0.0.1')) redirectUri.replaceAll('127.0.0.1', 'localhost'),
+          if (redirectUri.contains('localhost')) redirectUri.replaceAll('localhost', '127.0.0.1'),
           if (_lastGeneratedRedirectUri != null && _lastGeneratedRedirectUri != redirectUri) _lastGeneratedRedirectUri!,
-          'http://localhost:48275',
           'http://127.0.0.1:48275',
+          'http://localhost:48275',
           'https://login.microsoftonline.com/common/oauth2/nativeclient',
         ];
 
