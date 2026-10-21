@@ -67,6 +67,28 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
     _localAuthServer = null;
   }
 
+  Future<HttpServer> _bindLocalAuthServer() async {
+    // 1. Try port 0 with shared: true (ephemeral port allocation with SO_REUSEPORT)
+    try {
+      return await HttpServer.bind(InternetAddress.loopbackIPv4, 0, shared: true);
+    } catch (_) {}
+
+    // 2. Try anyIPv4 with shared: true
+    try {
+      return await HttpServer.bind(InternetAddress.anyIPv4, 0, shared: true);
+    } catch (_) {}
+
+    // 3. Fallback: try candidate ports in 18000..18050 with shared: true
+    for (int p = 18000; p < 18050; p++) {
+      try {
+        return await HttpServer.bind(InternetAddress.loopbackIPv4, p, shared: true);
+      } catch (_) {}
+    }
+
+    // 4. Last resort
+    return await HttpServer.bind('127.0.0.1', 0, shared: true);
+  }
+
   void _launchOAuth(bool useOob) {
     if (_selectedProvider == 'microsoft') {
       _launchMicrosoftOAuth(useOob);
@@ -114,13 +136,8 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         } else {
           _stopLocalAuthServer();
           
-          int localPort = 48275;
-          try {
-            _localAuthServer = await HttpServer.bind(InternetAddress.loopbackIPv4, localPort);
-          } catch (_) {
-            _localAuthServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-            localPort = _localAuthServer!.port;
-          }
+          _localAuthServer = await _bindLocalAuthServer();
+          final localPort = _localAuthServer!.port;
 
           final redirectUri = 'http://localhost:$localPort';
           _lastGeneratedRedirectUri = redirectUri;
@@ -513,13 +530,8 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
         } else {
           _stopLocalAuthServer();
           
-          int localPort = 48275;
-          try {
-            _localAuthServer = await HttpServer.bind(InternetAddress.loopbackIPv4, localPort);
-          } catch (_) {
-            _localAuthServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-            localPort = _localAuthServer!.port;
-          }
+          _localAuthServer = await _bindLocalAuthServer();
+          final localPort = _localAuthServer!.port;
 
           final redirectUri = 'http://localhost:$localPort';
           _lastGeneratedRedirectUri = redirectUri;
