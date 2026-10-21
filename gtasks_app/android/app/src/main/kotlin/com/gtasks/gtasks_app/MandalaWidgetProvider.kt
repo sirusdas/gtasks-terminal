@@ -10,6 +10,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.graphics.Color
 import android.util.Log
 import android.widget.RemoteViews
+import kotlin.math.max
+import kotlin.math.min
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -598,7 +600,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                                 )
                             }
                             // Add direct tasks (up to 16 total)
-                            val remainingCapacity = max(0, 16 - slices.size)
+                            val remainingCapacity = maxOf(0, 16 - slices.size)
                             directTasks.take(remainingCapacity).forEachIndexed { idx, pair ->
                                 val pColor = when (pair.second.lowercase()) {
                                     "critical" -> Color.parseColor("#EF4444")
