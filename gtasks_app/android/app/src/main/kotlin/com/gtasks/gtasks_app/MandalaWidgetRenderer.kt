@@ -257,7 +257,7 @@ object MandalaWidgetRenderer {
         val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = 1.5f
-            color = palette.binduStroke
+            this.color = palette.binduStroke
             alpha = 70
         }
         canvas.drawCircle(cx, cy, r1, ringPaint)
@@ -270,7 +270,7 @@ object MandalaWidgetRenderer {
             val aMid = (a0 + a1) / 2f
             val isFocused = (i == focusedIndex || (focusedIndex >= 0 && i % slices.size == focusedIndex))
 
-            val color = if (slice.color != 0) slice.color else palette.sliceColors[i % palette.sliceColors.size]
+            val sliceColor = if (slice.color != 0) slice.color else palette.sliceColors[i % palette.sliceColors.size]
 
             // Petal Path with Bezier curvature
             val petalPath = Path()
@@ -292,8 +292,8 @@ object MandalaWidgetRenderer {
                 style = Paint.Style.FILL
                 shader = LinearGradient(
                     p0.x, p0.y, tip.x, tip.y,
-                    color,
-                    adjustAlpha(color, if (isFocused) 0.85f else 0.40f),
+                    sliceColor,
+                    adjustAlpha(sliceColor, if (isFocused) 0.85f else 0.40f),
                     Shader.TileMode.CLAMP
                 )
             }
@@ -303,7 +303,7 @@ object MandalaWidgetRenderer {
             val spinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 strokeWidth = if (isFocused) 2.5f else 1.2f
-                color = if (isFocused) Color.WHITE else adjustAlpha(color, 0.7f)
+                this.color = if (isFocused) Color.WHITE else adjustAlpha(sliceColor, 0.7f)
             }
             val spineStart = polar(cx, cy, r0 * 1.05f, aMid)
             val spineEnd = polar(cx, cy, r1 * 0.85f, aMid)
@@ -313,7 +313,7 @@ object MandalaWidgetRenderer {
             val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 strokeWidth = if (isFocused) 3.5f else 1.8f
-                color = if (isFocused) Color.WHITE else adjustAlpha(palette.primary, 0.75f)
+                this.color = if (isFocused) Color.WHITE else adjustAlpha(palette.primary, 0.75f)
             }
             canvas.drawPath(petalPath, strokePaint)
 
@@ -343,7 +343,7 @@ object MandalaWidgetRenderer {
         val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = 3f
-            color = palette.primary
+            this.color = palette.primary
             alpha = 180
         }
         canvas.drawCircle(cx, cy, r1, rimPaint)
@@ -354,7 +354,7 @@ object MandalaWidgetRenderer {
         val studCount = n * 4
         val studPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = palette.accent
+            this.color = palette.accent
         }
         for (k in 0 until studCount) {
             val ang = (k * 2 * PI / studCount).toFloat()
@@ -368,7 +368,7 @@ object MandalaWidgetRenderer {
             val a1 = a0 + sweep
             val aMid = (a0 + a1) / 2f
             val isFocused = (i == focusedIndex || (focusedIndex >= 0 && i % slices.size == focusedIndex))
-            val color = if (slice.color != 0) slice.color else palette.sliceColors[i % palette.sliceColors.size]
+            val sliceColor = if (slice.color != 0) slice.color else palette.sliceColors[i % palette.sliceColors.size]
 
             val sectorPath = Path()
             val degStart = Math.toDegrees(a0.toDouble()).toFloat()
@@ -382,7 +382,7 @@ object MandalaWidgetRenderer {
 
             val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
-                color = adjustAlpha(color, if (isFocused) 0.70f else 0.32f)
+                this.color = adjustAlpha(sliceColor, if (isFocused) 0.70f else 0.32f)
             }
             canvas.drawPath(sectorPath, fillPaint)
 
@@ -390,7 +390,7 @@ object MandalaWidgetRenderer {
             val spokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 strokeWidth = if (isFocused) 3f else 1.5f
-                color = if (isFocused) Color.WHITE else adjustAlpha(palette.primary, 0.6f)
+                this.color = if (isFocused) Color.WHITE else adjustAlpha(palette.primary, 0.6f)
             }
             val spokeP0 = polar(cx, cy, r0, a0)
             val spokeP1 = polar(cx, cy, r1, a0)
@@ -400,7 +400,7 @@ object MandalaWidgetRenderer {
                 val focusStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     style = Paint.Style.STROKE
                     strokeWidth = 3f
-                    color = Color.WHITE
+                    this.color = Color.WHITE
                 }
                 canvas.drawPath(sectorPath, focusStroke)
             }
@@ -459,14 +459,14 @@ object MandalaWidgetRenderer {
 
         val wallFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = adjustAlpha(palette.accent, 0.15f)
+            this.color = adjustAlpha(palette.accent, 0.15f)
         }
         canvas.drawPath(bhupuraPath, wallFill)
 
         val wallStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = 2.5f
-            color = palette.primary
+            this.color = palette.primary
         }
         canvas.drawPath(bhupuraPath, wallStroke)
 
@@ -498,13 +498,13 @@ object MandalaWidgetRenderer {
         val triPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = 1.6f
-            color = palette.accent
+            this.color = palette.accent
             alpha = 180
         }
 
         val triFills = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = adjustAlpha(palette.primary, 0.08f)
+            this.color = adjustAlpha(palette.primary, 0.08f)
         }
 
         // 4 Upward Triangles
@@ -564,7 +564,7 @@ object MandalaWidgetRenderer {
         // Bindu disc
         val binduPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = palette.binduBg
+            this.color = palette.binduBg
         }
         canvas.drawCircle(cx, cy, r, binduPaint)
 
@@ -572,7 +572,7 @@ object MandalaWidgetRenderer {
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = 2.5f
-            color = palette.binduStroke
+            this.color = palette.binduStroke
         }
         canvas.drawCircle(cx, cy, r, borderPaint)
         canvas.drawCircle(cx, cy, r * 0.92f, borderPaint.apply { strokeWidth = 1f; alpha = 130 })
@@ -604,7 +604,7 @@ object MandalaWidgetRenderer {
         val metricPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textSize = r * 0.46f
             textAlign = Paint.Align.CENTER
-            color = palette.textPrimary
+            this.color = palette.textPrimary
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         canvas.drawText(metricText, cx, cy + r * 0.16f, metricPaint)
@@ -622,7 +622,7 @@ object MandalaWidgetRenderer {
         val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textSize = r * 0.22f
             textAlign = Paint.Align.CENTER
-            color = palette.textSecondary
+            this.color = palette.textSecondary
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         }
         canvas.drawText(subLabel, cx, cy + r * 0.48f, subPaint)
@@ -648,7 +648,7 @@ object MandalaWidgetRenderer {
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textSize = if (isFocused) 13f else 11.5f
             textAlign = Paint.Align.CENTER
-            color = if (isFocused) Color.WHITE else palette.textPrimary
+            this.color = if (isFocused) Color.WHITE else palette.textPrimary
             typeface = Typeface.create(Typeface.DEFAULT, if (isFocused) Typeface.BOLD else Typeface.NORMAL)
         }
 
@@ -666,7 +666,7 @@ object MandalaWidgetRenderer {
 
         val pillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = if (isFocused) palette.cardBg else Color.parseColor("#CC121319")
+            this.color = if (isFocused) palette.cardBg else Color.parseColor("#CC121319")
         }
         canvas.drawRoundRect(pillRect, 8f, 8f, pillPaint)
 
@@ -674,7 +674,7 @@ object MandalaWidgetRenderer {
             val pillStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 strokeWidth = 1.2f
-                color = palette.primary
+                this.color = palette.primary
             }
             canvas.drawRoundRect(pillRect, 8f, 8f, pillStroke)
         }
