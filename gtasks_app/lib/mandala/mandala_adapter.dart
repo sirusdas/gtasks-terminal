@@ -128,9 +128,7 @@ class MandalaAdapter {
                 id: spaceId,
                 label: '$spaceName ($count)',
                 parent: rootId,
-                short: spaceName.length > 5
-                    ? spaceName.substring(0, 4)
-                    : spaceName,
+                short: spaceName,
                 display: forcePortals ? NodeDisplay.portal : NodeDisplay.auto,
               ),
             );
@@ -149,9 +147,7 @@ class MandalaAdapter {
                     id: subId,
                     label: '$subName ($subCount)',
                     parent: spaceId,
-                    short: subName.length > 5
-                        ? subName.substring(0, 4)
-                        : subName,
+                    short: subName,
                     display: forcePortals
                         ? NodeDisplay.portal
                         : NodeDisplay.auto,
@@ -213,7 +209,7 @@ class MandalaAdapter {
           id: listId,
           label: '$listName (${listTasks.length})',
           parent: rootId,
-          short: listName.length > 5 ? listName.substring(0, 4) : listName,
+          short: listName,
           display: forcePortals ? NodeDisplay.portal : NodeDisplay.auto,
         ),
       );
@@ -282,7 +278,7 @@ class MandalaAdapter {
           id: tagId,
           label: '#$tag (${entry.value.length})',
           parent: rootId,
-          short: tag.length > 5 ? tag.substring(0, 4) : tag,
+          short: '#$tag',
           display: forcePortals ? NodeDisplay.portal : NodeDisplay.auto,
         ),
       );
@@ -444,7 +440,7 @@ class MandalaAdapter {
           id: pillarId,
           label: '${entry.key} (${entry.value.length})',
           parent: rootId,
-          short: entry.key.length > 5 ? entry.key.substring(0, 4) : entry.key,
+          short: entry.key,
           display: nestingMode == MandalaNestingMode.hierarchicalPortals
               ? NodeDisplay.portal
               : NodeDisplay.auto,

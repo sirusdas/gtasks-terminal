@@ -179,7 +179,8 @@ class MandalaPainter extends CustomPainter {
       final textPainter = TextPainter(
         text: textSpan,
         textDirection: TextDirection.ltr,
-        maxLines: 1,
+        textAlign: TextAlign.center,
+        maxLines: 3,
       );
       textPainter.layout();
 

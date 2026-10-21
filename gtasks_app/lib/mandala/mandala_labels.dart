@@ -32,29 +32,28 @@ String shortLabel(String text, int maxChars) {
   if (maxChars <= 0) return '';
   if (all.length <= maxChars) return t;
 
-  final words = t.split(wordSplit).where((w) => w.isNotEmpty).toList();
-  final String ellipsis = maxChars >= 4
-      ? '${all.take(maxChars - 1).join().trimRight()}…'
-      : '';
-  final List<String> candidates = [];
-
-  if (ellipsis.isNotEmpty && (maxChars >= 8 || words.length <= 1)) {
-    candidates.add(ellipsis);
-  }
-  if (words.length > 1) {
-    candidates.add(words.map((w) => capitalize(syllable(w))).join());
-    candidates.add(words.map((w) => getChars(w)[0].toUpperCase()).join());
-  } else if (words.length == 1) {
-    candidates.add(capitalize(syllable(words[0])));
-  }
-  if (ellipsis.isNotEmpty) {
-    candidates.add(ellipsis);
+  // If text already has newline (multi-line layout), don't truncate unless lines exceed maxChars
+  if (t.contains('\n')) {
+    final lines = t.split('\n');
+    final fitLines = lines.map((l) => shortLabel(l, maxChars)).join('\n');
+    return fitLines;
   }
 
-  for (final c in candidates) {
-    if (c.isNotEmpty && getChars(c).length <= maxChars) {
-      return c;
+  // Proper word-boundary ellipsis
+  if (maxChars >= 5) {
+    // Try truncating at last space before maxChars - 1
+    final sub = all.take(maxChars - 1).join().trimRight();
+    final lastSpace = sub.lastIndexOf(' ');
+    if (lastSpace >= 3) {
+      return '${sub.substring(0, lastSpace)}…';
     }
+    return '$sub…';
+  }
+
+  // Very constrained space: return initials or first few chars
+  final words = t.split(wordSplit).where((w) => w.isNotEmpty).toList();
+  if (words.length > 1 && maxChars >= words.length) {
+    return words.map((w) => getChars(w)[0].toUpperCase()).join();
   }
 
   return all.take(maxChars).join();
@@ -70,9 +69,37 @@ CellLabel fitLabel(
 ) {
   final String full = n.label;
   final String source = n.short ?? full;
-  final int len = math.max(1, math.min(getChars(source).length, 12));
+  final int len = math.max(1, getChars(source).length);
+
+  // Check if 2-line layout is beneficial (generous height, multiple words or long label)
+  String candidateText = source;
+  double effectiveLen = len.toDouble();
+
+  if (h >= 26.0 && source.length >= 8 && !source.contains('\n')) {
+    // Check for natural split points: space, or parenthesized count like " (5)"
+    final countMatch = RegExp(r'\s*(\(\d+\))$').firstMatch(source);
+    if (countMatch != null) {
+      final namePart = source.substring(0, countMatch.start).trim();
+      final countPart = countMatch.group(1)!;
+      candidateText = '$namePart\n$countPart';
+      effectiveLen = math.max(namePart.length, countPart.length).toDouble();
+    } else {
+      final words = source.split(' ');
+      if (words.length >= 2) {
+        final mid = (words.length / 2).ceil();
+        final line1 = words.take(mid).join(' ');
+        final line2 = words.skip(mid).join(' ');
+        candidateText = '$line1\n$line2';
+        effectiveLen = math.max(line1.length, line2.length).toDouble();
+      }
+    }
+  }
+
+  final bool isMultiLine = candidateText.contains('\n');
+  final double lineH = isMultiLine ? h * 0.38 : h * 0.55;
+
   final double fontSize = round3(
-    math.max(minFont, math.min(maxFont, math.min(h * 0.55, w / (charW * len)))),
+    math.max(minFont, math.min(maxFont, math.min(lineH, w / (charW * math.max(1, effectiveLen))))),
   );
   final int maxChars = math.max(1, ((w / (fontSize * charW)) + 0.01).floor());
 
@@ -81,7 +108,7 @@ CellLabel fitLabel(
   if (rot <= -180) rot += 360;
 
   return CellLabel(
-    text: shortLabel(source, maxChars),
+    text: shortLabel(candidateText, maxChars),
     full: full,
     x: round3(x),
     y: round3(y),

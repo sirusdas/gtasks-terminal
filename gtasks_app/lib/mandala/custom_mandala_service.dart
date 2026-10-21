@@ -233,9 +233,7 @@ class CustomMandalaService {
           id: pillarId,
           label: pillarName,
           parent: rootId,
-          short: pillarName.length > 5
-              ? pillarName.substring(0, 4)
-              : pillarName,
+          short: pillarName,
           display: NodeDisplay.portal,
         ),
       );

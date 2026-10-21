@@ -318,7 +318,7 @@ object MandalaWidgetRenderer {
             canvas.drawPath(petalPath, strokePaint)
 
             // Slice label and count
-            drawSliceLabel(canvas, cx, cy, (r0 + r1) * 0.54f, aMid, slice, isFocused, palette)
+            drawSliceLabel(canvas, cx, cy, (r0 + r1) * 0.54f, aMid, slice, isFocused, palette, slices.size)
         }
     }
 
@@ -405,7 +405,7 @@ object MandalaWidgetRenderer {
                 canvas.drawPath(sectorPath, focusStroke)
             }
 
-            drawSliceLabel(canvas, cx, cy, (r0 + rMid) * 0.5f, aMid, slice, isFocused, palette)
+            drawSliceLabel(canvas, cx, cy, (r0 + rMid) * 0.5f, aMid, slice, isFocused, palette, slices.size)
         }
     }
 
@@ -611,7 +611,7 @@ object MandalaWidgetRenderer {
 
         // 3. Sub-label (Slice label or "TASKS" / Completion %)
         val subLabel = if (focusedSlice != null) {
-            truncate(focusedSlice.label, 9)
+            truncate(focusedSlice.label, 18)
         } else if (data.completedCount > 0 && data.totalCount > 0) {
             val pct = (data.completedCount * 100) / (data.totalCount + data.completedCount)
             "$pct% DONE"
@@ -637,31 +637,84 @@ object MandalaWidgetRenderer {
         angle: Float,
         slice: MandalaSlice,
         isFocused: Boolean,
-        palette: Palette
+        palette: Palette,
+        totalSlices: Int
     ) {
         val pt = polar(cx, cy, r, angle)
 
-        val label = truncate(slice.label, 8)
-        val countText = if (slice.count > 0) " (${slice.count})" else ""
-        val fullText = "$label$countText"
+        // Dynamic typography & capacity adapting to petal density
+        val (maxChars, baseTextSize) = when {
+            totalSlices <= 3 -> Pair(22, if (isFocused) 18f else 16f)
+            totalSlices <= 4 -> Pair(18, if (isFocused) 16f else 14.5f)
+            totalSlices <= 6 -> Pair(14, if (isFocused) 14f else 12.5f)
+            else -> Pair(9, if (isFocused) 13f else 11.5f)
+        }
+
+        val cleanLabel = truncate(slice.label, maxChars)
+        val hasCount = slice.count > 0
+        val isMultiLine = (totalSlices <= 4 && (cleanLabel.length >= 7 || hasCount))
+
+        val line1: String
+        val line2: String?
+
+        if (isMultiLine) {
+            if (hasCount) {
+                line1 = cleanLabel
+                line2 = "${slice.count} task${if (slice.count == 1) "" else "s"}"
+            } else if (cleanLabel.contains(' ')) {
+                val words = cleanLabel.split(' ')
+                val mid = (words.size + 1) / 2
+                line1 = words.take(mid).joinToString(" ")
+                line2 = words.drop(mid).joinToString(" ")
+            } else {
+                line1 = cleanLabel
+                line2 = null
+            }
+        } else {
+            val countText = if (hasCount) " (${slice.count})" else ""
+            line1 = "$cleanLabel$countText"
+            line2 = null
+        }
 
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = if (isFocused) 13f else 11.5f
+            textSize = baseTextSize
             textAlign = Paint.Align.CENTER
             this.color = if (isFocused) Color.WHITE else palette.textPrimary
             typeface = Typeface.create(Typeface.DEFAULT, if (isFocused) Typeface.BOLD else Typeface.NORMAL)
         }
 
-        // Draw pill backdrop for high readability
-        val bounds = Rect()
-        textPaint.getTextBounds(fullText, 0, fullText.length, bounds)
-        val padX = 6f
-        val padY = 3.5f
+        val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = baseTextSize * 0.85f
+            textAlign = Paint.Align.CENTER
+            this.color = if (isFocused) adjustAlpha(palette.primary, 0.95f) else palette.textSecondary
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        }
+
+        val bounds1 = Rect()
+        textPaint.getTextBounds(line1, 0, line1.length, bounds1)
+        val w1 = bounds1.width()
+        val h1 = bounds1.height()
+
+        var w2 = 0
+        var h2 = 0
+        if (line2 != null) {
+            val bounds2 = Rect()
+            subPaint.getTextBounds(line2, 0, line2.length, bounds2)
+            w2 = bounds2.width()
+            h2 = bounds2.height()
+        }
+
+        val totalW = maxOf(w1, w2)
+        val gap = if (line2 != null) 4f else 0f
+        val totalH = if (line2 != null) (h1 + h2 + gap) else h1.toFloat()
+        val padX = if (totalSlices <= 4) 10f else 6f
+        val padY = if (totalSlices <= 4) 6f else 3.5f
+
         val pillRect = RectF(
-            pt.x + bounds.left - padX,
-            pt.y + bounds.top - padY,
-            pt.x + bounds.right + padX,
-            pt.y + bounds.bottom + padY
+            pt.x - totalW / 2f - padX,
+            pt.y - totalH / 2f - padY,
+            pt.x + totalW / 2f + padX,
+            pt.y + totalH / 2f + padY
         )
 
         val pillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -673,13 +726,21 @@ object MandalaWidgetRenderer {
         if (isFocused) {
             val pillStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
-                strokeWidth = 1.2f
+                strokeWidth = 1.4f
                 this.color = palette.primary
             }
             canvas.drawRoundRect(pillRect, 8f, 8f, pillStroke)
         }
 
-        canvas.drawText(fullText, pt.x, pt.y, textPaint)
+        if (line2 != null) {
+            val y1 = pt.y - totalH / 2f + h1
+            val y2 = y1 + h2 + gap
+            canvas.drawText(line1, pt.x, y1, textPaint)
+            canvas.drawText(line2, pt.x, y2, subPaint)
+        } else {
+            val y1 = pt.y + h1 / 2f
+            canvas.drawText(line1, pt.x, y1, textPaint)
+        }
     }
 
     // --- HELPER MATH ---

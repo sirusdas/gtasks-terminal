@@ -25,6 +25,8 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         const val ACTION_PREV_PILLAR = "com.gtasks.gtasks_app.mandala.ACTION_PREV_PILLAR"
         const val ACTION_NEXT_PILLAR = "com.gtasks.gtasks_app.mandala.ACTION_NEXT_PILLAR"
         const val ACTION_REFRESH_MANDALA = "com.gtasks.gtasks_app.mandala.ACTION_REFRESH_MANDALA"
+        const val ACTION_DRILL_DOWN = "com.gtasks.gtasks_app.mandala.ACTION_DRILL_DOWN"
+        const val ACTION_DRILL_UP = "com.gtasks.gtasks_app.mandala.ACTION_DRILL_UP"
         const val ACTION_OPEN_MANDALA = "com.gtasks.gtasks_app.ACTION_OPEN_MANDALA"
 
         val MODES = listOf("spaces", "harada_9x9", "priorities", "lists", "tags", "custom")
@@ -82,7 +84,32 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                     val nextIdx = (MODES.indexOf(currentMode) + 1) % MODES.size
                     prefs.edit()
                         .putString("mode_$appWidgetId", MODES[nextIdx])
+                        .remove("drill_parent_$appWidgetId") // reset drill state when switching modes
                         .putInt("focus_$appWidgetId", -1) // reset focused slice
+                        .apply()
+                    updateWidgetById(context, appWidgetId)
+                }
+            }
+            ACTION_DRILL_DOWN -> {
+                if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    val modeStr = prefs.getString("mode_$appWidgetId", "spaces") ?: "spaces"
+                    val focusIndex = prefs.getInt("focus_$appWidgetId", -1)
+                    val data = loadMandalaData(context, modeStr)
+                    if (focusIndex in data.slices.indices) {
+                        val target = data.slices[focusIndex]
+                        prefs.edit()
+                            .putString("drill_parent_$appWidgetId", target.label)
+                            .putInt("focus_$appWidgetId", -1)
+                            .apply()
+                        updateWidgetById(context, appWidgetId)
+                    }
+                }
+            }
+            ACTION_DRILL_UP -> {
+                if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    prefs.edit()
+                        .remove("drill_parent_$appWidgetId")
+                        .putInt("focus_$appWidgetId", -1)
                         .apply()
                     updateWidgetById(context, appWidgetId)
                 }
@@ -159,8 +186,15 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             THEMES[0]
         }
 
+        // Check if widget is drilled down into a sub-mandala
+        val drillParent = prefs.getString("drill_parent_$appWidgetId", null)
+
         // Fetch data
-        val data = loadMandalaData(context, modeStr)
+        val data = if (!drillParent.isNullOrEmpty()) {
+            loadDrilledData(context, modeStr, drillParent)
+        } else {
+            loadMandalaData(context, modeStr)
+        }
 
         // Validate focusIndex
         if (data.slices.isNotEmpty()) {
@@ -182,34 +216,57 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         views.setImageViewBitmap(R.id.mandala_canvas_image, bitmap)
 
         // Update Mode text
-        val modeDisplay = when (modeStr) {
-            "spaces" -> "☸ Spaces"
-            "harada_9x9" -> "🎯 9×9 Harada"
-            "priorities" -> "⚡ Priorities"
-            "lists" -> "📋 Lists"
-            "tags" -> "🏷️ Tags"
-            "custom" -> "✨ Custom"
-            else -> "Mandala"
+        val modeDisplay = if (!drillParent.isNullOrEmpty()) {
+            "⬅️ $drillParent"
+        } else {
+            when (modeStr) {
+                "spaces" -> "☸ Spaces"
+                "harada_9x9" -> "🎯 9×9 Harada"
+                "priorities" -> "⚡ Priorities"
+                "lists" -> "📋 Lists"
+                "tags" -> "🏷️ Tags"
+                "custom" -> "✨ Custom"
+                else -> "Mandala"
+            }
         }
         views.setTextViewText(R.id.mandala_mode_text, modeDisplay)
 
-        // Update Pillar info text
+        // Update Pillar info text & pending intents
         val focusedSlice = if (focusIndex in data.slices.indices) data.slices[focusIndex] else null
-        val pillarText = if (focusedSlice != null) {
+        val pillarText: String
+        val pillPendingIntent: PendingIntent
+
+        if (!drillParent.isNullOrEmpty()) {
+            pillarText = if (focusedSlice != null) {
+                "⬅️ ${focusedSlice.label} • Tap to Zoom Out"
+            } else {
+                "⬅️ $drillParent • Tap to Return Up"
+            }
+            pillPendingIntent = createBroadcastPendingIntent(context, ACTION_DRILL_UP, appWidgetId, 9)
+            views.setOnClickPendingIntent(
+                R.id.mandala_btn_mode,
+                createBroadcastPendingIntent(context, ACTION_DRILL_UP, appWidgetId, 10)
+            )
+        } else if (focusedSlice != null) {
             val subCount = if (focusedSlice.subLabels.isNotEmpty()) " [${focusedSlice.subLabels.size} sub]" else ""
-            "${focusedSlice.label}: ${focusedSlice.count} tasks$subCount"
+            pillarText = "⤵ Drill: ${focusedSlice.label} (${focusedSlice.count})$subCount"
+            pillPendingIntent = createBroadcastPendingIntent(context, ACTION_DRILL_DOWN, appWidgetId, 11)
+            views.setOnClickPendingIntent(
+                R.id.mandala_btn_mode,
+                createBroadcastPendingIntent(context, ACTION_CYCLE_MODE, appWidgetId, 1)
+            )
         } else {
-            "Total: ${data.totalCount} tasks • ${data.slices.size} sectors"
+            pillarText = "Total: ${data.totalCount} tasks • ${data.slices.size} sectors"
+            pillPendingIntent = createBroadcastPendingIntent(context, ACTION_CYCLE_MODE, appWidgetId, 1)
+            views.setOnClickPendingIntent(
+                R.id.mandala_btn_mode,
+                createBroadcastPendingIntent(context, ACTION_CYCLE_MODE, appWidgetId, 1)
+            )
         }
         views.setTextViewText(R.id.mandala_pillar_text, pillarText)
+        views.setOnClickPendingIntent(R.id.mandala_pillar_pill, pillPendingIntent)
 
         // Setup PendingIntents
-        // 1. Cycle Mode
-        views.setOnClickPendingIntent(
-            R.id.mandala_btn_mode,
-            createBroadcastPendingIntent(context, ACTION_CYCLE_MODE, appWidgetId, 1)
-        )
-
         // 2. Cycle Geometry
         views.setOnClickPendingIntent(
             R.id.mandala_btn_geom,
@@ -294,6 +351,157 @@ class MandalaWidgetProvider : AppWidgetProvider() {
     }
 
     // --- DATA LOADING LOGIC ---
+    private fun loadDrilledData(context: Context, mode: String, parentName: String): MandalaWidgetRenderer.MandalaRenderData {
+        val slices = mutableListOf<MandalaWidgetRenderer.MandalaSlice>()
+        var total = 0
+        var completed = 0
+        val cleanParent = parentName.replace(Regex("""\s*\(\d+\)$"""), "").trim()
+
+        try {
+            val dbFile = context.getDatabasePath("gtasks_local.db")
+            if (dbFile.exists()) {
+                SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                    val cursor = db.rawQuery(
+                        "SELECT title, spaces, status, priority FROM tasks WHERE sync_status != 'pending_delete'",
+                        null
+                    )
+                    val subSpaceCounts = mutableMapOf<String, Int>()
+                    val directTasks = mutableListOf<Pair<String, String>>()
+
+                    cursor.use {
+                        while (it.moveToNext()) {
+                            val taskTitle = it.getString(0) ?: "Task"
+                            val spacesJson = it.getString(1) ?: ""
+                            val status = it.getString(2) ?: "pending"
+                            val priority = it.getString(3) ?: "medium"
+                            val isDone = (status == "completed")
+
+                            var matchesParent = false
+                            var subNameFound: String? = null
+
+                            if (spacesJson.isNotBlank() && spacesJson != "{}") {
+                                try {
+                                    val obj = JSONObject(spacesJson)
+                                    if (obj.has(cleanParent)) {
+                                        matchesParent = true
+                                        val subs = obj.optJSONArray(cleanParent)
+                                        if (subs != null && subs.length() > 0) {
+                                            subNameFound = subs.getString(0).trim()
+                                        }
+                                    }
+                                } catch (e: Exception) {}
+                            }
+
+                            if (matchesParent) {
+                                if (isDone) completed++ else total++
+                                if (!isDone) {
+                                    if (subNameFound != null && subNameFound.isNotEmpty()) {
+                                        subSpaceCounts[subNameFound] = (subSpaceCounts[subNameFound] ?: 0) + 1
+                                    } else {
+                                        directTasks.add(Pair(taskTitle, priority))
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (subSpaceCounts.isNotEmpty()) {
+                        subSpaceCounts.entries.forEachIndexed { idx, e ->
+                            slices.add(
+                                MandalaWidgetRenderer.MandalaSlice(
+                                    id = "sub_$idx",
+                                    label = e.key,
+                                    count = e.value,
+                                    completedCount = 0,
+                                    color = 0
+                                )
+                            )
+                        }
+                    } else if (directTasks.isNotEmpty()) {
+                        directTasks.take(8).forEachIndexed { idx, pair ->
+                            val pColor = when (pair.second.lowercase()) {
+                                "critical" -> Color.parseColor("#EF4444")
+                                "high" -> Color.parseColor("#F59E0B")
+                                "low" -> Color.parseColor("#10B981")
+                                else -> Color.parseColor("#3B82F6")
+                            }
+                            slices.add(
+                                MandalaWidgetRenderer.MandalaSlice(
+                                    id = "task_$idx",
+                                    label = pair.first,
+                                    count = 1,
+                                    completedCount = 0,
+                                    color = pColor
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading drilled data for $parentName", e)
+        }
+
+        // Harada 9x9 fallback
+        if (slices.isEmpty()) {
+            try {
+                val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                val jsonStr = prefs.getString("flutter.gtasks_custom_mandalas", null)
+                if (!jsonStr.isNullOrEmpty()) {
+                    val arr = JSONArray(jsonStr)
+                    for (i in 0 until arr.length()) {
+                        val m = arr.getJSONObject(i)
+                        val nodes = m.optJSONArray("nodes")
+                        if (nodes != null) {
+                            var parentId: String? = null
+                            for (n in 0 until nodes.length()) {
+                                val node = nodes.getJSONObject(n)
+                                if (node.optString("label", "").equals(cleanParent, ignoreCase = true)) {
+                                    parentId = node.optString("id", "")
+                                    break
+                                }
+                            }
+                            if (parentId != null) {
+                                for (n in 0 until nodes.length()) {
+                                    val node = nodes.getJSONObject(n)
+                                    if (node.optString("parent", "") == parentId) {
+                                        slices.add(
+                                            MandalaWidgetRenderer.MandalaSlice(
+                                                id = node.optString("id", "h_$n"),
+                                                label = node.optString("label", "Action"),
+                                                count = 1,
+                                                completedCount = 0,
+                                                color = 0
+                                            )
+                                        )
+                                    }
+                                }
+                                if (slices.isNotEmpty()) {
+                                    total = slices.size
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading drilled Harada data", e)
+            }
+        }
+
+        if (slices.isEmpty()) {
+            slices.add(MandalaWidgetRenderer.MandalaSlice("empty_0", cleanParent, 0, 0, 0))
+        }
+
+        return MandalaWidgetRenderer.MandalaRenderData(
+            title = "$cleanParent Sub-Mandala",
+            centerGoal = cleanParent,
+            totalCount = total,
+            completedCount = completed,
+            slices = slices
+        )
+    }
+
     private fun loadMandalaData(context: Context, mode: String): MandalaWidgetRenderer.MandalaRenderData {
         return when (mode) {
             "harada_9x9" -> loadHaradaData(context)
