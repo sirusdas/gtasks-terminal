@@ -23,6 +23,7 @@ class MandalaScreen extends StatefulWidget {
   final GeometryId? initialGeometry;
   final String? initialCustomMandalaId;
   final String? initialFocusItem;
+  final String? initialThemeName;
 
   const MandalaScreen({
     super.key,
@@ -32,6 +33,7 @@ class MandalaScreen extends StatefulWidget {
     this.initialGeometry,
     this.initialCustomMandalaId,
     this.initialFocusItem,
+    this.initialThemeName,
   });
 
   @override
@@ -67,7 +69,11 @@ class _MandalaScreenState extends State<MandalaScreen> {
     if (widget.initialGeometry != null) {
       _forcedGeometry = widget.initialGeometry!;
     }
-    _loadTheme();
+    if (widget.initialThemeName != null && widget.initialThemeName!.isNotEmpty) {
+      _activeTheme = MandalaThemePalette.getById(widget.initialThemeName!);
+    } else {
+      _loadTheme();
+    }
     _loadCustomMandalas().then((_) {
       if (widget.initialCustomMandalaId != null && mounted) {
         final match = _customMandalas.firstWhere(

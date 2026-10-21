@@ -135,6 +135,7 @@ class _TasksScreenState extends State<TasksScreen> {
       final geomStr = parts.length > 2 ? parts[2] : 'PADMA';
       final focusedItem = parts.length > 3 ? parts[3] : '';
       final customMandalaId = parts.length > 4 ? parts[4] : '';
+      final themeStr = parts.length > 5 ? parts[5] : '';
 
       MandalaGrouping grouping = MandalaGrouping.spaces;
       if (modeStr == 'harada_9x9') {
@@ -167,6 +168,7 @@ class _TasksScreenState extends State<TasksScreen> {
             initialGeometry: geom,
             initialCustomMandalaId: customMandalaId.isNotEmpty ? customMandalaId : null,
             initialFocusItem: focusedItem.isNotEmpty ? focusedItem : null,
+            initialThemeName: themeStr.isNotEmpty ? themeStr : null,
           ),
         ),
       );

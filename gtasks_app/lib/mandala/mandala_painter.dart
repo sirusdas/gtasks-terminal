@@ -52,7 +52,7 @@ class MandalaPainter extends CustomPainter {
     // Sacred harmonic slice color from the active theme
     final Color baseColor =
         palette.sliceColors[cellIndex % palette.sliceColors.length];
-    return baseColor.withValues(alpha: isDark ? 0.45 : 0.65);
+    return baseColor.withValues(alpha: isDark ? 0.75 : 0.85);
   }
 
   Color _getStrokeColor(Cell cell, int cellIndex) {
@@ -63,12 +63,12 @@ class MandalaPainter extends CustomPainter {
       return palette.binduStroke;
     }
     if (cell.kind == CellKind.ornament || cell.kind == CellKind.gate) {
-      return palette.primary.withValues(alpha: 0.4);
+      return palette.primary.withValues(alpha: 0.5);
     }
 
     final Color baseColor =
         palette.sliceColors[cellIndex % palette.sliceColors.length];
-    return baseColor.withValues(alpha: isDark ? 0.95 : 0.85);
+    return baseColor.withValues(alpha: isDark ? 0.95 : 0.90);
   }
 
   Color _getTextColor(Cell cell) {
@@ -112,8 +112,23 @@ class MandalaPainter extends CustomPainter {
       final cell = layout.cells[i];
       final ui.Path path = _getPath(cell);
 
-      // Fill
-      fillPaint.color = _getCellColor(cell, i);
+      // Fill with vibrant luminous depth
+      if (cell.kind != CellKind.bindu && cell.kind != CellKind.ornament) {
+        final Color cellBase = _getCellColor(cell, i);
+        final bool isSelected = cell.id == selectedCellId;
+        final Offset centroid = Offset(cell.centroid[0], cell.centroid[1]);
+        fillPaint.shader = ui.Gradient.radial(
+          centroid,
+          layout.size * 0.28,
+          [
+            cellBase.withValues(alpha: isSelected ? 0.95 : 0.82),
+            cellBase.withValues(alpha: isSelected ? 0.70 : 0.48),
+          ],
+        );
+      } else {
+        fillPaint.shader = null;
+        fillPaint.color = _getCellColor(cell, i);
+      }
       canvas.drawPath(path, fillPaint);
 
       // Stroke

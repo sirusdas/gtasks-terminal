@@ -3,6 +3,7 @@ package com.gtasks.gtasks_app
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
@@ -212,17 +213,8 @@ object MandalaWidgetRenderer {
         }
         canvas.drawCircle(cx, cy, maxR, haloPaint)
 
-        // 2. Prepare slices (fallback if empty)
-        val displaySlices = if (data.slices.isEmpty()) {
-            listOf(
-                MandalaSlice("empty_1", "Focus", 0, 0, palette.sliceColors[0]),
-                MandalaSlice("empty_2", "Health", 0, 0, palette.sliceColors[1]),
-                MandalaSlice("empty_3", "Learn", 0, 0, palette.sliceColors[2]),
-                MandalaSlice("empty_4", "Work", 0, 0, palette.sliceColors[3])
-            )
-        } else {
-            data.slices
-        }
+        // 2. Prepare slices directly from data (no dummy duplicates)
+        val displaySlices = data.slices
 
         // 3. Render Geometry-specific layers
         when (geometry) {
@@ -238,7 +230,7 @@ object MandalaWidgetRenderer {
         return bitmap
     }
 
-    // --- PADMA (LOTUS) GEOMETRY ---
+    // --- PADMA (LOTUS) GEOMETRY DISPATCHER ---
     private fun renderPadma(
         canvas: Canvas,
         cx: Float,
@@ -249,11 +241,394 @@ object MandalaWidgetRenderer {
         palette: Palette,
         focusedIndex: Int
     ) {
-        val n = max(4, slices.size)
+        if (slices.isEmpty()) {
+            renderEmptyCosmicState(canvas, cx, cy, r0, r1, palette)
+            return
+        }
+
+        when (slices.size) {
+            1 -> renderCosmicMonad(canvas, cx, cy, r0, r1, slices[0], palette, focusedIndex == 0, isLotus = true)
+            2 -> renderDualHemispheres(canvas, cx, cy, r0, r1, slices, palette, focusedIndex, isLotus = true)
+            3 -> renderTrifoldTriad(canvas, cx, cy, r0, r1, slices, palette, focusedIndex, isLotus = true)
+            in 4..8 -> renderSingleTierPadma(canvas, cx, cy, r0, r1, slices, palette, focusedIndex)
+            else -> renderConcentricTiersPadma(canvas, cx, cy, r0, r1, slices, palette, focusedIndex)
+        }
+    }
+
+    // --- CHAKRA (SACRED WHEEL) GEOMETRY DISPATCHER ---
+    private fun renderChakra(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        r0: Float,
+        r1: Float,
+        slices: List<MandalaSlice>,
+        palette: Palette,
+        focusedIndex: Int
+    ) {
+        if (slices.isEmpty()) {
+            renderEmptyCosmicState(canvas, cx, cy, r0, r1, palette)
+            return
+        }
+
+        when (slices.size) {
+            1 -> renderCosmicMonad(canvas, cx, cy, r0, r1, slices[0], palette, focusedIndex == 0, isLotus = false)
+            2 -> renderDualHemispheres(canvas, cx, cy, r0, r1, slices, palette, focusedIndex, isLotus = false)
+            3 -> renderTrifoldTriad(canvas, cx, cy, r0, r1, slices, palette, focusedIndex, isLotus = false)
+            in 4..8 -> renderSingleTierChakra(canvas, cx, cy, r0, r1, slices, palette, focusedIndex)
+            else -> renderConcentricTiersChakra(canvas, cx, cy, r0, r1, slices, palette, focusedIndex)
+        }
+    }
+
+    // --- 0. COSMIC EMPTY STATE (N == 0) ---
+    private fun renderEmptyCosmicState(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        r0: Float,
+        r1: Float,
+        palette: Palette
+    ) {
+        val orbitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 1.6f
+            this.color = palette.primary
+            alpha = 85
+        }
+        canvas.drawCircle(cx, cy, r1, orbitPaint)
+
+        val dashedOrbit = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 1.3f
+            this.color = palette.accent
+            alpha = 95
+            pathEffect = DashPathEffect(floatArrayOf(10f, 14f), 0f)
+        }
+        val midR = (r0 + r1) * 0.52f
+        canvas.drawCircle(cx, cy, midR, dashedOrbit)
+        canvas.drawCircle(cx, cy, r0 * 1.08f, orbitPaint.apply { strokeWidth = 1.0f; alpha = 50 })
+
+        // 8 Starlight cosmic sparkles around the dashed orbit
+        val sparkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            this.color = palette.accent
+            alpha = 140
+        }
+        for (k in 0 until 8) {
+            val a = (k * 2 * PI / 8).toFloat()
+            val pt = polar(cx, cy, midR, a)
+            canvas.drawCircle(pt.x, pt.y, 2.6f, sparkPaint)
+        }
+    }
+
+    // --- 1. COSMIC MONAD (N == 1) ---
+    private fun renderCosmicMonad(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        r0: Float,
+        r1: Float,
+        slice: MandalaSlice,
+        palette: Palette,
+        isFocused: Boolean,
+        isLotus: Boolean
+    ) {
+        val sliceColor = if (slice.color != 0) slice.color else palette.sliceColors[0]
+        val rMid = (r0 + r1) * 0.52f
+
+        // Outer and inner celestial rings
+        val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = if (isFocused) 2.8f else 1.8f
+            this.color = if (isFocused) Color.WHITE else palette.primary
+            alpha = if (isFocused) 220 else 130
+        }
+        canvas.drawCircle(cx, cy, r1, ringPaint)
+        canvas.drawCircle(cx, cy, r0, ringPaint.apply { strokeWidth = 1.4f; alpha = 90 })
+
+        // Glowing orbital corona
+        val coronaPath = Path().apply {
+            addCircle(cx, cy, r1 * 0.97f, Path.Direction.CW)
+            addCircle(cx, cy, r0 * 1.03f, Path.Direction.CCW)
+        }
+        val coronaFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            shader = RadialGradient(
+                cx, cy, r1,
+                intArrayOf(adjustAlpha(sliceColor, if (isFocused) 0.65f else 0.35f), adjustAlpha(sliceColor, 0.12f)),
+                floatArrayOf(0.45f, 1.0f),
+                Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawPath(coronaPath, coronaFill)
+
+        // 12 Orbital Starlight Gems
+        val gemCount = 12
+        val gemPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            this.color = if (isLotus) palette.accent else palette.primary
+        }
+        for (k in 0 until gemCount) {
+            val ang = (k * 2 * PI / gemCount).toFloat()
+            val pt = polar(cx, cy, r1 * 0.97f, ang)
+            canvas.drawCircle(pt.x, pt.y, if (k % 3 == 0) 3.6f else 2.2f, gemPaint)
+        }
+
+        if (isFocused) {
+            val focusHalo = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 3f
+                this.color = Color.WHITE
+            }
+            canvas.drawCircle(cx, cy, r1 * 0.97f, focusHalo)
+        }
+
+        // Display the single focus item with generous typography
+        drawSliceLabel(canvas, cx, cy, rMid, (-PI / 2).toFloat(), slice, isFocused, palette, totalSlices = 1)
+    }
+
+    // --- 2. DUAL HEMISPHERES (N == 2) ---
+    private fun renderDualHemispheres(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        r0: Float,
+        r1: Float,
+        slices: List<MandalaSlice>,
+        palette: Palette,
+        focusedIndex: Int,
+        isLotus: Boolean
+    ) {
+        val sweep = PI.toFloat()
+        val startOffset = (-PI).toFloat() // Top is i=0 (-PI to 0), Bottom is i=1 (0 to PI)
+        val rMid = (r0 + r1) * 0.52f
+
+        val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.0f
+            this.color = palette.primary
+            alpha = 140
+        }
+        canvas.drawCircle(cx, cy, r1, ringPaint)
+
+        for (i in 0 until 2) {
+            val slice = slices[i]
+            val a0 = startOffset + i * sweep
+            val a1 = a0 + sweep
+            val aMid = (a0 + a1) / 2f
+            val isFocused = (i == focusedIndex)
+            val sliceColor = if (slice.color != 0) slice.color else palette.sliceColors[i % palette.sliceColors.size]
+
+            if (isLotus) {
+                val petalPath = Path()
+                val p0 = polar(cx, cy, r0, a0)
+                val p1 = polar(cx, cy, r0, a1)
+                val tip = polar(cx, cy, r1 * 0.96f, aMid)
+
+                val ctrlDist = r1 * 0.88f
+                val ctrl0 = polar(cx, cy, ctrlDist, aMid - sweep * 0.35f)
+                val ctrl1 = polar(cx, cy, ctrlDist, aMid + sweep * 0.35f)
+
+                petalPath.moveTo(p0.x, p0.y)
+                petalPath.cubicTo(ctrl0.x, ctrl0.y, tip.x, tip.y, tip.x, tip.y)
+                petalPath.cubicTo(tip.x, tip.y, ctrl1.x, ctrl1.y, p1.x, p1.y)
+                petalPath.close()
+
+                val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.FILL
+                    shader = LinearGradient(
+                        p0.x, p0.y, tip.x, tip.y,
+                        sliceColor,
+                        adjustAlpha(sliceColor, if (isFocused) 0.85f else 0.45f),
+                        Shader.TileMode.CLAMP
+                    )
+                }
+                canvas.drawPath(petalPath, fillPaint)
+
+                // Spine vein
+                val spinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = if (isFocused) 2.5f else 1.4f
+                    this.color = if (isFocused) Color.WHITE else adjustAlpha(sliceColor, 0.7f)
+                }
+                val spineStart = polar(cx, cy, r0 * 1.05f, aMid)
+                val spineEnd = polar(cx, cy, r1 * 0.85f, aMid)
+                canvas.drawLine(spineStart.x, spineStart.y, spineEnd.x, spineEnd.y, spinePaint)
+
+                val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = if (isFocused) 3.5f else 1.8f
+                    this.color = if (isFocused) Color.WHITE else adjustAlpha(palette.primary, 0.75f)
+                }
+                canvas.drawPath(petalPath, strokePaint)
+            } else {
+                val sectorPath = Path()
+                val degStart = Math.toDegrees(a0.toDouble()).toFloat()
+                val rectOuter = RectF(cx - r1, cy - r1, cx + r1, cy + r1)
+                val rectInner = RectF(cx - r0, cy - r0, cx + r0, cy + r0)
+
+                sectorPath.arcTo(rectOuter, degStart, 180f, true)
+                sectorPath.arcTo(rectInner, degStart + 180f, -180f, false)
+                sectorPath.close()
+
+                val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.FILL
+                    this.color = adjustAlpha(sliceColor, if (isFocused) 0.75f else 0.40f)
+                }
+                canvas.drawPath(sectorPath, fillPaint)
+
+                // Dividing spoke lines
+                val spokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = if (isFocused) 3f else 1.6f
+                    this.color = if (isFocused) Color.WHITE else adjustAlpha(palette.primary, 0.7f)
+                }
+                val spokeP0 = polar(cx, cy, r0, a0)
+                val spokeP1 = polar(cx, cy, r1, a0)
+                canvas.drawLine(spokeP0.x, spokeP0.y, spokeP1.x, spokeP1.y, spokePaint)
+
+                if (isFocused) {
+                    val focusStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        style = Paint.Style.STROKE
+                        strokeWidth = 3f
+                        this.color = Color.WHITE
+                    }
+                    canvas.drawPath(sectorPath, focusStroke)
+                }
+            }
+
+            drawSliceLabel(canvas, cx, cy, rMid, aMid, slice, isFocused, palette, totalSlices = 2)
+        }
+    }
+
+    // --- 3. TRIFOLD SACRED TRIAD (N == 3) ---
+    private fun renderTrifoldTriad(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        r0: Float,
+        r1: Float,
+        slices: List<MandalaSlice>,
+        palette: Palette,
+        focusedIndex: Int,
+        isLotus: Boolean
+    ) {
+        val sweep = (2 * PI / 3).toFloat() // 120 deg
+        val sweepDeg = 120f
+        val startOffset = (-PI / 2 - sweep / 2).toFloat() // Symmetrical top triad
+        val rMid = (r0 + r1) * 0.54f
+
+        val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.0f
+            this.color = palette.primary
+            alpha = 130
+        }
+        canvas.drawCircle(cx, cy, r1, ringPaint)
+
+        for (i in 0 until 3) {
+            val slice = slices[i]
+            val a0 = startOffset + i * sweep
+            val a1 = a0 + sweep
+            val aMid = (a0 + a1) / 2f
+            val isFocused = (i == focusedIndex)
+            val sliceColor = if (slice.color != 0) slice.color else palette.sliceColors[i % palette.sliceColors.size]
+
+            if (isLotus) {
+                val petalPath = Path()
+                val p0 = polar(cx, cy, r0, a0)
+                val p1 = polar(cx, cy, r0, a1)
+                val tip = polar(cx, cy, r1 * 0.96f, aMid)
+
+                val ctrlDist = r1 * 0.82f
+                val ctrl0 = polar(cx, cy, ctrlDist, aMid - sweep * 0.38f)
+                val ctrl1 = polar(cx, cy, ctrlDist, aMid + sweep * 0.38f)
+
+                petalPath.moveTo(p0.x, p0.y)
+                petalPath.cubicTo(ctrl0.x, ctrl0.y, tip.x, tip.y, tip.x, tip.y)
+                petalPath.cubicTo(tip.x, tip.y, ctrl1.x, ctrl1.y, p1.x, p1.y)
+                petalPath.close()
+
+                val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.FILL
+                    shader = LinearGradient(
+                        p0.x, p0.y, tip.x, tip.y,
+                        sliceColor,
+                        adjustAlpha(sliceColor, if (isFocused) 0.85f else 0.42f),
+                        Shader.TileMode.CLAMP
+                    )
+                }
+                canvas.drawPath(petalPath, fillPaint)
+
+                val spinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = if (isFocused) 2.5f else 1.3f
+                    this.color = if (isFocused) Color.WHITE else adjustAlpha(sliceColor, 0.7f)
+                }
+                val spineStart = polar(cx, cy, r0 * 1.05f, aMid)
+                val spineEnd = polar(cx, cy, r1 * 0.85f, aMid)
+                canvas.drawLine(spineStart.x, spineStart.y, spineEnd.x, spineEnd.y, spinePaint)
+
+                val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = if (isFocused) 3.5f else 1.8f
+                    this.color = if (isFocused) Color.WHITE else adjustAlpha(palette.primary, 0.75f)
+                }
+                canvas.drawPath(petalPath, strokePaint)
+            } else {
+                val sectorPath = Path()
+                val degStart = Math.toDegrees(a0.toDouble()).toFloat()
+                val rectOuter = RectF(cx - r1, cy - r1, cx + r1, cy + r1)
+                val rectInner = RectF(cx - r0, cy - r0, cx + r0, cy + r0)
+
+                sectorPath.arcTo(rectOuter, degStart, sweepDeg, true)
+                sectorPath.arcTo(rectInner, degStart + sweepDeg, -sweepDeg, false)
+                sectorPath.close()
+
+                val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.FILL
+                    this.color = adjustAlpha(sliceColor, if (isFocused) 0.75f else 0.38f)
+                }
+                canvas.drawPath(sectorPath, fillPaint)
+
+                val spokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = if (isFocused) 3f else 1.5f
+                    this.color = if (isFocused) Color.WHITE else adjustAlpha(palette.primary, 0.6f)
+                }
+                val spokeP0 = polar(cx, cy, r0, a0)
+                val spokeP1 = polar(cx, cy, r1, a0)
+                canvas.drawLine(spokeP0.x, spokeP0.y, spokeP1.x, spokeP1.y, spokePaint)
+
+                if (isFocused) {
+                    val focusStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        style = Paint.Style.STROKE
+                        strokeWidth = 3f
+                        this.color = Color.WHITE
+                    }
+                    canvas.drawPath(sectorPath, focusStroke)
+                }
+            }
+
+            drawSliceLabel(canvas, cx, cy, rMid, aMid, slice, isFocused, palette, totalSlices = 3)
+        }
+    }
+
+    // --- 4. SINGLE TIER SACRED GEOMETRY (N in 4..8) ---
+    private fun renderSingleTierPadma(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        r0: Float,
+        r1: Float,
+        slices: List<MandalaSlice>,
+        palette: Palette,
+        focusedIndex: Int
+    ) {
+        val n = slices.size
         val sweep = (2 * PI / n).toFloat()
         val startOffset = (-PI / 2).toFloat()
 
-        // Outer concentric sacred ring
         val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = 1.5f
@@ -264,15 +639,13 @@ object MandalaWidgetRenderer {
         canvas.drawCircle(cx, cy, r1 * 0.94f, ringPaint)
 
         for (i in 0 until n) {
-            val slice = slices[i % slices.size]
+            val slice = slices[i]
             val a0 = startOffset + i * sweep
             val a1 = a0 + sweep
             val aMid = (a0 + a1) / 2f
-            val isFocused = (i == focusedIndex || (focusedIndex >= 0 && i % slices.size == focusedIndex))
-
+            val isFocused = (i == focusedIndex)
             val sliceColor = if (slice.color != 0) slice.color else palette.sliceColors[i % palette.sliceColors.size]
 
-            // Petal Path with Bezier curvature
             val petalPath = Path()
             val p0 = polar(cx, cy, r0, a0)
             val p1 = polar(cx, cy, r0, a1)
@@ -287,7 +660,6 @@ object MandalaWidgetRenderer {
             petalPath.cubicTo(tip.x, tip.y, ctrl1.x, ctrl1.y, p1.x, p1.y)
             petalPath.close()
 
-            // Petal Fill with gradient
             val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
                 shader = LinearGradient(
@@ -299,7 +671,6 @@ object MandalaWidgetRenderer {
             }
             canvas.drawPath(petalPath, fillPaint)
 
-            // Petal Spine / Vein
             val spinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 strokeWidth = if (isFocused) 2.5f else 1.2f
@@ -309,7 +680,6 @@ object MandalaWidgetRenderer {
             val spineEnd = polar(cx, cy, r1 * 0.85f, aMid)
             canvas.drawLine(spineStart.x, spineStart.y, spineEnd.x, spineEnd.y, spinePaint)
 
-            // Petal Stroke Outline
             val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 strokeWidth = if (isFocused) 3.5f else 1.8f
@@ -317,13 +687,11 @@ object MandalaWidgetRenderer {
             }
             canvas.drawPath(petalPath, strokePaint)
 
-            // Slice label and count
-            drawSliceLabel(canvas, cx, cy, (r0 + r1) * 0.54f, aMid, slice, isFocused, palette, slices.size)
+            drawSliceLabel(canvas, cx, cy, (r0 + r1) * 0.54f, aMid, slice, isFocused, palette, totalSlices = n)
         }
     }
 
-    // --- CHAKRA (SACRED WHEEL) GEOMETRY ---
-    private fun renderChakra(
+    private fun renderSingleTierChakra(
         canvas: Canvas,
         cx: Float,
         cy: Float,
@@ -333,13 +701,12 @@ object MandalaWidgetRenderer {
         palette: Palette,
         focusedIndex: Int
     ) {
-        val n = max(4, slices.size)
+        val n = slices.size
         val sweep = (2 * PI / n).toFloat()
         val sweepDeg = Math.toDegrees(sweep.toDouble()).toFloat()
         val startOffset = (-PI / 2).toFloat()
         val rMid = (r0 + r1) * 0.65f
 
-        // Outer wheel rim
         val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = 3f
@@ -350,7 +717,6 @@ object MandalaWidgetRenderer {
         canvas.drawCircle(cx, cy, r1 * 0.95f, rimPaint)
         canvas.drawCircle(cx, cy, rMid, rimPaint.apply { strokeWidth = 1.2f; alpha = 100 })
 
-        // Rim studs / sacred wheel teeth
         val studCount = n * 4
         val studPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
@@ -363,16 +729,15 @@ object MandalaWidgetRenderer {
         }
 
         for (i in 0 until n) {
-            val slice = slices[i % slices.size]
+            val slice = slices[i]
             val a0 = startOffset + i * sweep
             val a1 = a0 + sweep
             val aMid = (a0 + a1) / 2f
-            val isFocused = (i == focusedIndex || (focusedIndex >= 0 && i % slices.size == focusedIndex))
+            val isFocused = (i == focusedIndex)
             val sliceColor = if (slice.color != 0) slice.color else palette.sliceColors[i % palette.sliceColors.size]
 
             val sectorPath = Path()
             val degStart = Math.toDegrees(a0.toDouble()).toFloat()
-
             val rectOuter = RectF(cx - r1, cy - r1, cx + r1, cy + r1)
             val rectInner = RectF(cx - r0, cy - r0, cx + r0, cy + r0)
 
@@ -386,7 +751,6 @@ object MandalaWidgetRenderer {
             }
             canvas.drawPath(sectorPath, fillPaint)
 
-            // Spoke lines
             val spokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 strokeWidth = if (isFocused) 3f else 1.5f
@@ -405,7 +769,230 @@ object MandalaWidgetRenderer {
                 canvas.drawPath(sectorPath, focusStroke)
             }
 
-            drawSliceLabel(canvas, cx, cy, (r0 + rMid) * 0.5f, aMid, slice, isFocused, palette, slices.size)
+            drawSliceLabel(canvas, cx, cy, (r0 + rMid) * 0.5f, aMid, slice, isFocused, palette, totalSlices = n)
+        }
+    }
+
+    // --- 5. CONCENTRIC TWO-TIER MULTI-RING GEOMETRY (N > 8) ---
+    private fun renderConcentricTiersPadma(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        r0: Float,
+        r1: Float,
+        slices: List<MandalaSlice>,
+        palette: Palette,
+        focusedIndex: Int
+    ) {
+        val n = slices.size
+        val kInner = min(6, (n + 1) / 2)
+        val kOuter = n - kInner
+        val rMid = r0 + (r1 - r0) * 0.52f
+
+        // Delineation rings
+        val tierRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 1.4f
+            this.color = palette.binduStroke
+            alpha = 80
+        }
+        canvas.drawCircle(cx, cy, rMid, tierRingPaint)
+        canvas.drawCircle(cx, cy, r1, tierRingPaint.apply { strokeWidth = 1.8f; alpha = 100 })
+
+        // Inner Tier
+        val innerSweep = (2 * PI / kInner).toFloat()
+        val startInner = (-PI / 2).toFloat()
+        for (i in 0 until kInner) {
+            val slice = slices[i]
+            val a0 = startInner + i * innerSweep
+            val a1 = a0 + innerSweep
+            val aMid = (a0 + a1) / 2f
+            val isFocused = (i == focusedIndex)
+            val sliceColor = if (slice.color != 0) slice.color else palette.sliceColors[i % palette.sliceColors.size]
+
+            val petalPath = Path()
+            val p0 = polar(cx, cy, r0, a0)
+            val p1 = polar(cx, cy, r0, a1)
+            val tip = polar(cx, cy, rMid * 0.96f, aMid)
+            val ctrlDist = rMid * 0.78f
+            val ctrl0 = polar(cx, cy, ctrlDist, aMid - innerSweep * 0.40f)
+            val ctrl1 = polar(cx, cy, ctrlDist, aMid + innerSweep * 0.40f)
+
+            petalPath.moveTo(p0.x, p0.y)
+            petalPath.cubicTo(ctrl0.x, ctrl0.y, tip.x, tip.y, tip.x, tip.y)
+            petalPath.cubicTo(tip.x, tip.y, ctrl1.x, ctrl1.y, p1.x, p1.y)
+            petalPath.close()
+
+            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                shader = LinearGradient(
+                    p0.x, p0.y, tip.x, tip.y,
+                    sliceColor,
+                    adjustAlpha(sliceColor, if (isFocused) 0.85f else 0.45f),
+                    Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawPath(petalPath, fillPaint)
+
+            val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = if (isFocused) 3f else 1.5f
+                this.color = if (isFocused) Color.WHITE else adjustAlpha(palette.primary, 0.75f)
+            }
+            canvas.drawPath(petalPath, strokePaint)
+
+            drawSliceLabel(canvas, cx, cy, (r0 + rMid) * 0.52f, aMid, slice, isFocused, palette, totalSlices = kInner)
+        }
+
+        // Outer Tier (staggered by half-sweep)
+        val outerSweep = (2 * PI / kOuter).toFloat()
+        val startOuter = (-PI / 2 + outerSweep / 2f).toFloat()
+        for (j in 0 until kOuter) {
+            val idx = kInner + j
+            val slice = slices[idx]
+            val a0 = startOuter + j * outerSweep
+            val a1 = a0 + outerSweep
+            val aMid = (a0 + a1) / 2f
+            val isFocused = (idx == focusedIndex)
+            val sliceColor = if (slice.color != 0) slice.color else palette.sliceColors[idx % palette.sliceColors.size]
+
+            val petalPath = Path()
+            val p0 = polar(cx, cy, rMid, a0)
+            val p1 = polar(cx, cy, rMid, a1)
+            val tip = polar(cx, cy, r1 * 0.97f, aMid)
+            val ctrlDist = r1 * 0.84f
+            val ctrl0 = polar(cx, cy, ctrlDist, aMid - outerSweep * 0.40f)
+            val ctrl1 = polar(cx, cy, ctrlDist, aMid + outerSweep * 0.40f)
+
+            petalPath.moveTo(p0.x, p0.y)
+            petalPath.cubicTo(ctrl0.x, ctrl0.y, tip.x, tip.y, tip.x, tip.y)
+            petalPath.cubicTo(tip.x, tip.y, ctrl1.x, ctrl1.y, p1.x, p1.y)
+            petalPath.close()
+
+            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                shader = LinearGradient(
+                    p0.x, p0.y, tip.x, tip.y,
+                    sliceColor,
+                    adjustAlpha(sliceColor, if (isFocused) 0.85f else 0.38f),
+                    Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawPath(petalPath, fillPaint)
+
+            val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = if (isFocused) 3f else 1.5f
+                this.color = if (isFocused) Color.WHITE else adjustAlpha(palette.primary, 0.70f)
+            }
+            canvas.drawPath(petalPath, strokePaint)
+
+            drawSliceLabel(canvas, cx, cy, (rMid + r1) * 0.54f, aMid, slice, isFocused, palette, totalSlices = kOuter)
+        }
+    }
+
+    private fun renderConcentricTiersChakra(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        r0: Float,
+        r1: Float,
+        slices: List<MandalaSlice>,
+        palette: Palette,
+        focusedIndex: Int
+    ) {
+        val n = slices.size
+        val kInner = min(6, (n + 1) / 2)
+        val kOuter = n - kInner
+        val rMid = r0 + (r1 - r0) * 0.52f
+
+        // Delineation rings
+        val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.2f
+            this.color = palette.primary
+            alpha = 150
+        }
+        canvas.drawCircle(cx, cy, rMid, rimPaint)
+        canvas.drawCircle(cx, cy, r1, rimPaint.apply { strokeWidth = 2.8f; alpha = 180 })
+
+        // Inner Tier
+        val innerSweep = (2 * PI / kInner).toFloat()
+        val innerSweepDeg = Math.toDegrees(innerSweep.toDouble()).toFloat()
+        val startInner = (-PI / 2).toFloat()
+        for (i in 0 until kInner) {
+            val slice = slices[i]
+            val a0 = startInner + i * innerSweep
+            val a1 = a0 + innerSweep
+            val aMid = (a0 + a1) / 2f
+            val isFocused = (i == focusedIndex)
+            val sliceColor = if (slice.color != 0) slice.color else palette.sliceColors[i % palette.sliceColors.size]
+
+            val sectorPath = Path()
+            val degStart = Math.toDegrees(a0.toDouble()).toFloat()
+            val rectOuter = RectF(cx - rMid, cy - rMid, cx + rMid, cy + rMid)
+            val rectInner = RectF(cx - r0, cy - r0, cx + r0, cy + r0)
+
+            sectorPath.arcTo(rectOuter, degStart, innerSweepDeg, true)
+            sectorPath.arcTo(rectInner, degStart + innerSweepDeg, -innerSweepDeg, false)
+            sectorPath.close()
+
+            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                this.color = adjustAlpha(sliceColor, if (isFocused) 0.75f else 0.36f)
+            }
+            canvas.drawPath(sectorPath, fillPaint)
+
+            if (isFocused) {
+                val focusStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = 3f
+                    this.color = Color.WHITE
+                }
+                canvas.drawPath(sectorPath, focusStroke)
+            }
+
+            drawSliceLabel(canvas, cx, cy, (r0 + rMid) * 0.52f, aMid, slice, isFocused, palette, totalSlices = kInner)
+        }
+
+        // Outer Tier
+        val outerSweep = (2 * PI / kOuter).toFloat()
+        val outerSweepDeg = Math.toDegrees(outerSweep.toDouble()).toFloat()
+        val startOuter = (-PI / 2 + outerSweep / 2f).toFloat()
+        for (j in 0 until kOuter) {
+            val idx = kInner + j
+            val slice = slices[idx]
+            val a0 = startOuter + j * outerSweep
+            val a1 = a0 + outerSweep
+            val aMid = (a0 + a1) / 2f
+            val isFocused = (idx == focusedIndex)
+            val sliceColor = if (slice.color != 0) slice.color else palette.sliceColors[idx % palette.sliceColors.size]
+
+            val sectorPath = Path()
+            val degStart = Math.toDegrees(a0.toDouble()).toFloat()
+            val rectOuter = RectF(cx - r1, cy - r1, cx + r1, cy + r1)
+            val rectInner = RectF(cx - rMid, cy - rMid, cx + rMid, cy + rMid)
+
+            sectorPath.arcTo(rectOuter, degStart, outerSweepDeg, true)
+            sectorPath.arcTo(rectInner, degStart + outerSweepDeg, -outerSweepDeg, false)
+            sectorPath.close()
+
+            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                this.color = adjustAlpha(sliceColor, if (isFocused) 0.70f else 0.30f)
+            }
+            canvas.drawPath(sectorPath, fillPaint)
+
+            if (isFocused) {
+                val focusStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = 3f
+                    this.color = Color.WHITE
+                }
+                canvas.drawPath(sectorPath, focusStroke)
+            }
+
+            drawSliceLabel(canvas, cx, cy, (rMid + r1) * 0.54f, aMid, slice, isFocused, palette, totalSlices = kOuter)
         }
     }
 
@@ -612,11 +1199,13 @@ object MandalaWidgetRenderer {
         // 3. Sub-label (Slice label or "TASKS" / Completion %)
         val subLabel = if (focusedSlice != null) {
             truncate(focusedSlice.label, 18)
+        } else if (slices.isEmpty()) {
+            "EMPTY"
         } else if (data.completedCount > 0 && data.totalCount > 0) {
             val pct = (data.completedCount * 100) / (data.totalCount + data.completedCount)
             "$pct% DONE"
         } else {
-            "TASKS"
+            if (data.totalCount == 1) "TASK" else "TASKS"
         }
 
         val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -644,20 +1233,25 @@ object MandalaWidgetRenderer {
 
         // Dynamic typography & capacity adapting to petal density
         val (maxChars, baseTextSize) = when {
-            totalSlices <= 3 -> Pair(22, if (isFocused) 18f else 16f)
-            totalSlices <= 4 -> Pair(18, if (isFocused) 16f else 14.5f)
+            totalSlices == 1 -> Pair(32, if (isFocused) 18f else 16.5f)
+            totalSlices == 2 -> Pair(26, if (isFocused) 17f else 15.5f)
+            totalSlices <= 3 -> Pair(22, if (isFocused) 16f else 14.5f)
+            totalSlices <= 4 -> Pair(18, if (isFocused) 15f else 13.5f)
             totalSlices <= 6 -> Pair(14, if (isFocused) 14f else 12.5f)
-            else -> Pair(9, if (isFocused) 13f else 11.5f)
+            else -> Pair(11, if (isFocused) 12.5f else 11.0f)
         }
 
         val cleanLabel = truncate(slice.label, maxChars)
         val hasCount = slice.count > 0
-        val isMultiLine = (totalSlices <= 4 && (cleanLabel.length >= 7 || hasCount))
+        val isMultiLine = (totalSlices <= 4 && (cleanLabel.length >= 7 || hasCount || totalSlices == 1))
 
         val line1: String
         val line2: String?
 
-        if (isMultiLine) {
+        if (totalSlices == 1) {
+            line1 = cleanLabel
+            line2 = if (hasCount && slice.count > 1) "${slice.count} tasks" else "★ Single Focus"
+        } else if (isMultiLine) {
             if (hasCount) {
                 line1 = cleanLabel
                 line2 = "${slice.count} task${if (slice.count == 1) "" else "s"}"
