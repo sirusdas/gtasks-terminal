@@ -3,12 +3,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'mandala_types.dart';
 import 'mandala_path_parser.dart';
+import 'mandala_themes.dart';
 
 class MandalaPainter extends CustomPainter {
   final MandalaLayout layout;
   final String? selectedCellId;
   final bool isDark;
   final Color primaryColor;
+  final MandalaThemePalette palette;
   final Map<String, ui.Path> _pathCache;
 
   MandalaPainter({
@@ -16,8 +18,10 @@ class MandalaPainter extends CustomPainter {
     this.selectedCellId,
     required this.isDark,
     required this.primaryColor,
+    MandalaThemePalette? palette,
     Map<String, ui.Path>? pathCache,
-  }) : _pathCache = pathCache ?? {};
+  })  : palette = palette ?? MandalaThemePalette.cyberpunk,
+        _pathCache = pathCache ?? {};
 
   ui.Path _getPath(Cell cell) {
     return _pathCache.putIfAbsent(
@@ -26,85 +30,55 @@ class MandalaPainter extends CustomPainter {
     );
   }
 
-  Color _getCellColor(Cell cell) {
+  Color _getCellColor(Cell cell, int cellIndex) {
     if (cell.kind == CellKind.bindu) {
-      return isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+      return palette.binduBg;
     }
     if (cell.kind == CellKind.ornament || cell.kind == CellKind.gate) {
-      return isDark
-          ? const Color(0xFF0F172A).withValues(alpha: 0.6)
-          : const Color(0xFFE2E8F0).withValues(alpha: 0.6);
-    }
-    if (cell.portal != null) {
-      return isDark
-          ? const Color(0xFF6D28D9).withValues(alpha: 0.35)
-          : const Color(0xFFDDD6FE);
+      return palette.background.withValues(alpha: 0.7);
     }
 
     final type = cell.type?.toLowerCase() ?? '';
     if (type == 'completed') {
-      return isDark
-          ? const Color(0xFF065F46).withValues(alpha: 0.35)
-          : const Color(0xFFD1FAE5);
+      return const Color(0xFF10B981).withValues(alpha: isDark ? 0.55 : 0.7);
     }
     if (type == 'critical') {
-      return isDark
-          ? const Color(0xFF991B1B).withValues(alpha: 0.4)
-          : const Color(0xFFFEE2E2);
+      return const Color(0xFFEF4444).withValues(alpha: isDark ? 0.6 : 0.75);
     }
     if (type == 'high') {
-      return isDark
-          ? const Color(0xFF92400E).withValues(alpha: 0.4)
-          : const Color(0xFFFEF3C7);
+      return const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.6 : 0.75);
     }
-    if (type == 'low') {
-      return isDark
-          ? const Color(0xFF334155).withValues(alpha: 0.4)
-          : const Color(0xFFF1F5F9);
-    }
-    // medium / default
-    return isDark
-        ? const Color(0xFF155E75).withValues(alpha: 0.4)
-        : const Color(0xFFCFFAFE);
+
+    // Sacred harmonic slice color from the active theme
+    final Color baseColor =
+        palette.sliceColors[cellIndex % palette.sliceColors.length];
+    return baseColor.withValues(alpha: isDark ? 0.45 : 0.65);
   }
 
-  Color _getStrokeColor(Cell cell) {
+  Color _getStrokeColor(Cell cell, int cellIndex) {
     if (cell.id == selectedCellId) {
-      return Colors.amberAccent;
-    }
-    if (cell.portal != null) {
-      return isDark ? const Color(0xFFA78BFA) : const Color(0xFF7C3AED);
+      return Colors.white;
     }
     if (cell.kind == CellKind.bindu) {
-      return isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7);
+      return palette.binduStroke;
     }
     if (cell.kind == CellKind.ornament || cell.kind == CellKind.gate) {
-      return isDark
-          ? const Color(0xFF334155).withValues(alpha: 0.4)
-          : const Color(0xFFCBD5E1).withValues(alpha: 0.6);
+      return palette.primary.withValues(alpha: 0.4);
     }
 
-    final type = cell.type?.toLowerCase() ?? '';
-    if (type == 'critical') {
-      return isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
-    }
-    if (type == 'high') {
-      return isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
-    }
-    if (type == 'completed') {
-      return isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
-    }
-    return isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8);
+    final Color baseColor =
+        palette.sliceColors[cellIndex % palette.sliceColors.length];
+    return baseColor.withValues(alpha: isDark ? 0.95 : 0.85);
   }
 
   Color _getTextColor(Cell cell) {
     if (cell.id == selectedCellId) {
-      return isDark ? Colors.white : Colors.black;
+      return Colors.white;
     }
     if (cell.kind == CellKind.bindu) {
-      return isDark ? Colors.white : Colors.black87;
+      return palette.textPrimary;
     }
-    return isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B);
+    return isDark ? Colors.white : const Color(0xFF0F172A);
   }
 
   @override
@@ -116,32 +90,46 @@ class MandalaPainter extends CustomPainter {
     final double scale = math.min(size.width, size.height) / layout.size;
     canvas.scale(scale, scale);
 
-    final Paint fillPaint = Paint()..style = PaintingStyle.fill;
-    final Paint strokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
+    // 0. Draw Cosmic Aura / Ambient Halo behind mandala
+    final double radius = layout.size * 0.46;
+    final Paint haloPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..shader = ui.Gradient.radial(
+        Offset.zero,
+        radius,
+        [
+          palette.haloColor,
+          palette.haloColor.withValues(alpha: 0.0),
+        ],
+      );
+    canvas.drawCircle(Offset.zero, radius, haloPaint);
 
-    // 1. Draw Cells
-    for (final cell in layout.cells) {
+    final Paint fillPaint = Paint()..style = PaintingStyle.fill;
+    final Paint strokePaint = Paint()..style = PaintingStyle.stroke;
+
+    // 1. Draw Cells with rich harmonic colors
+    for (int i = 0; i < layout.cells.length; i++) {
+      final cell = layout.cells[i];
       final ui.Path path = _getPath(cell);
 
       // Fill
-      fillPaint.color = _getCellColor(cell);
+      fillPaint.color = _getCellColor(cell, i);
       canvas.drawPath(path, fillPaint);
 
       // Stroke
-      strokePaint.color = _getStrokeColor(cell);
-      strokePaint.strokeWidth = cell.id == selectedCellId
-          ? 2.8
-          : (cell.kind == CellKind.bindu || cell.portal != null ? 1.8 : 0.9);
+      final bool isSelected = cell.id == selectedCellId;
+      strokePaint.color = _getStrokeColor(cell, i);
+      strokePaint.strokeWidth = isSelected
+          ? 3.2
+          : (cell.kind == CellKind.bindu ? 2.5 : 1.8);
       canvas.drawPath(path, strokePaint);
 
       // Highlight selected halo
-      if (cell.id == selectedCellId) {
+      if (isSelected) {
         final Paint glowPaint = Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 5.0
-          ..color = Colors.amberAccent.withValues(alpha: 0.35);
+          ..strokeWidth = 6.0
+          ..color = Colors.white.withValues(alpha: 0.6);
         canvas.drawPath(path, glowPaint);
       }
     }
@@ -151,10 +139,8 @@ class MandalaPainter extends CustomPainter {
       final ui.Path threadPath = MandalaPathParser.parse(thread.path);
       final Paint threadPaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..color = isDark
-            ? const Color(0xFF38BDF8).withValues(alpha: 0.7)
-            : const Color(0xFF0284C7).withValues(alpha: 0.7);
+        ..strokeWidth = 1.8
+        ..color = palette.accent.withValues(alpha: 0.75);
       canvas.drawPath(threadPath, threadPaint);
     }
 
@@ -221,6 +207,7 @@ class MandalaPainter extends CustomPainter {
     return oldDelegate.layout != layout ||
         oldDelegate.selectedCellId != selectedCellId ||
         oldDelegate.isDark != isDark ||
+        oldDelegate.palette != palette ||
         oldDelegate.primaryColor != primaryColor;
   }
 }

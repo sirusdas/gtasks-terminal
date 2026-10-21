@@ -320,8 +320,15 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             putExtra("open_mandala", true)
             putExtra("mandala_mode", modeStr)
             putExtra("mandala_geometry", geometry.name)
-            if (focusedSlice != null) {
-                putExtra("focused_item", focusedSlice.label)
+            val targetFocus = if (!drillParent.isNullOrEmpty()) {
+                drillParent
+            } else if (focusedSlice != null) {
+                focusedSlice.label
+            } else {
+                null
+            }
+            if (targetFocus != null) {
+                putExtra("focused_item", targetFocus)
             }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -332,7 +339,22 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         views.setOnClickPendingIntent(R.id.mandala_btn_open, openPendingIntent)
-        views.setOnClickPendingIntent(R.id.mandala_canvas_container, openPendingIntent)
+
+        if (!drillParent.isNullOrEmpty()) {
+            // When already inside sub-mandala on widget, tapping canvas zooms back out
+            views.setOnClickPendingIntent(
+                R.id.mandala_canvas_container,
+                createBroadcastPendingIntent(context, ACTION_DRILL_UP, appWidgetId, 13)
+            )
+        } else if (focusedSlice != null) {
+            // When a pillar is focused, tapping the canvas dives into that sub-mandala directly on widget!
+            views.setOnClickPendingIntent(
+                R.id.mandala_canvas_container,
+                createBroadcastPendingIntent(context, ACTION_DRILL_DOWN, appWidgetId, 14)
+            )
+        } else {
+            views.setOnClickPendingIntent(R.id.mandala_canvas_container, openPendingIntent)
+        }
 
         appWidgetManager.updateAppWidget(appWidgetId, views)
     }

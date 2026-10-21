@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/task_item.dart';
 import '../../providers/task_provider.dart';
 import '../ui/widgets/task_editor_dialog.dart';
@@ -11,6 +12,7 @@ import 'mandala_partition.dart';
 import 'mandala_layout.dart';
 import 'mandala_painter.dart';
 import 'mandala_path_parser.dart';
+import 'mandala_themes.dart';
 import 'custom_mandala_service.dart';
 import 'custom_mandala_dialog.dart';
 
@@ -46,6 +48,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
   // Custom Mandalas
   List<CustomMandala> _customMandalas = [];
   CustomMandala? _activeCustomMandala;
+  MandalaThemePalette _activeTheme = MandalaThemePalette.cyberpunk;
 
   late MandalaDoc _doc;
   late MandalaAtlas _atlas;
@@ -64,6 +67,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
     if (widget.initialGeometry != null) {
       _forcedGeometry = widget.initialGeometry!;
     }
+    _loadTheme();
     _loadCustomMandalas().then((_) {
       if (widget.initialCustomMandalaId != null && mounted) {
         final match = _customMandalas.firstWhere(
@@ -75,27 +79,77 @@ class _MandalaScreenState extends State<MandalaScreen> {
           _currentMandalaId = match.id;
           _rebuildEngine();
         });
-      } else if (widget.initialFocusItem != null &&
+      }
+      if (widget.initialFocusItem != null &&
           widget.initialFocusItem!.isNotEmpty &&
           mounted) {
-        final node = _doc.nodes.cast<MandalaNode?>().firstWhere(
-          (n) => n?.label.toLowerCase() == widget.initialFocusItem!.toLowerCase(),
-          orElse: () => null,
-        );
-        if (node != null) {
-          final cell = _layout.cells.cast<Cell?>().firstWhere(
-            (c) => c?.nodeId == node.id,
-            orElse: () => null,
-          );
-          if (cell != null) {
-            setState(() {
-              _selectedCellId = cell.id;
-            });
-          }
-        }
+        _navigateToFocusItem(widget.initialFocusItem!);
       }
     });
     _rebuildEngine();
+  }
+
+  Future<void> _loadTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final themeName = prefs.getString('mandala_theme');
+    if (themeName != null && mounted) {
+      setState(() {
+        _activeTheme = MandalaThemePalette.getById(themeName);
+      });
+    }
+  }
+
+  Future<void> _setTheme(MandalaThemePalette theme) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('mandala_theme', theme.id.name);
+    if (mounted) {
+      setState(() {
+        _activeTheme = theme;
+      });
+    }
+  }
+
+  void _navigateToFocusItem(String target) {
+    final cleanTarget = target
+        .replaceAll(RegExp(r'\s*\(\d+\)$'), '')
+        .trim()
+        .toLowerCase();
+
+    // 1. Search in atlas mandalas directly for a part matching this domain/space
+    final matchingPart = _atlas.mandalas.values.cast<MandalaPart?>().firstWhere((p) {
+      if (p == null) return false;
+      final partTitle = p.title.replaceAll(RegExp(r'\s*\(\d+\)$'), '').trim().toLowerCase();
+      final partId = p.id.toLowerCase();
+      return partTitle == cleanTarget ||
+          partId == cleanTarget ||
+          partId.endsWith('_$cleanTarget') ||
+          partId == 'space_$cleanTarget' ||
+          partId == 'list_$cleanTarget';
+    }, orElse: () => null);
+
+    if (matchingPart != null && matchingPart.id != _atlas.rootMandala) {
+      _switchMandala(matchingPart.id);
+      return;
+    }
+
+    // 2. Search for matching portal cell in the active layout
+    for (final cell in _layout.cells) {
+      final cellLabel = (cell.label?.full ?? cell.label?.text ?? cell.id)
+          .replaceAll(RegExp(r'\s*\(\d+\)$'), '')
+          .trim()
+          .toLowerCase();
+      if (cellLabel == cleanTarget || cell.id.toLowerCase().contains(cleanTarget)) {
+        if (cell.portal != null && _atlas.mandalas.containsKey(cell.portal)) {
+          _switchMandala(cell.portal!);
+          return;
+        } else {
+          setState(() {
+            _selectedCellId = cell.id;
+          });
+          return;
+        }
+      }
+    }
   }
 
   Future<void> _loadCustomMandalas() async {
@@ -729,7 +783,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
 
     return Scaffold(
       backgroundColor: isDark
-          ? const Color(0xFF0A0F1D)
+          ? _activeTheme.background
           : const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Column(
@@ -1021,6 +1075,48 @@ class _MandalaScreenState extends State<MandalaScreen> {
               ),
             ],
           ),
+
+          // Sacred Color Theme Selector
+          PopupMenuButton<MandalaThemePalette>(
+            icon: const Icon(Icons.palette_outlined),
+            tooltip: 'Sacred Color Theme',
+            initialValue: _activeTheme,
+            onSelected: (theme) async {
+              await _setTheme(theme);
+            },
+            itemBuilder: (context) => MandalaThemePalette.allThemes.map((theme) {
+              final isCurrent = theme.id == _activeTheme.id;
+              return PopupMenuItem<MandalaThemePalette>(
+                value: theme,
+                child: Row(
+                  children: [
+                    Text(theme.icon, style: const TextStyle(fontSize: 16)),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: theme.primary,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        theme.name,
+                        style: TextStyle(
+                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                          color: isCurrent ? theme.primary : null,
+                        ),
+                      ),
+                    ),
+                    if (isCurrent) const Icon(Icons.check, size: 16),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
         ],
       ),
       body: Column(
@@ -1029,7 +1125,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
           if (crumbs.length > 1)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+              color: isDark ? _activeTheme.cardBg : const Color(0xFFF1F5F9),
               child: SizedBox(
                 height: 32,
                 child: ListView.separated(
@@ -1094,7 +1190,8 @@ class _MandalaScreenState extends State<MandalaScreen> {
                             layout: _layout,
                             selectedCellId: _selectedCellId,
                             isDark: isDark,
-                            primaryColor: theme.colorScheme.primary,
+                            primaryColor: _activeTheme.primary,
+                            palette: _activeTheme,
                             pathCache: _pathCache,
                           ),
                         ),
