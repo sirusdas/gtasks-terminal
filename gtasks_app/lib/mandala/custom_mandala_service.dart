@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/widget_service.dart';
 import 'mandala_types.dart';
 
 class CustomMandalaService {
@@ -44,6 +45,7 @@ class CustomMandalaService {
 
     final jsonStr = jsonEncode(list.map((m) => m.toJson()).toList());
     await prefs.setString(_storageKey, jsonStr);
+    WidgetService.updateMandalaWidget();
   }
 
   /// Delete a custom mandala
@@ -53,6 +55,7 @@ class CustomMandalaService {
     list.removeWhere((m) => m.id == id);
     final jsonStr = jsonEncode(list.map((m) => m.toJson()).toList());
     await prefs.setString(_storageKey, jsonStr);
+    WidgetService.updateMandalaWidget();
   }
 
   static Future<List<CustomMandala>> loadCustomMandalasRaw() async {

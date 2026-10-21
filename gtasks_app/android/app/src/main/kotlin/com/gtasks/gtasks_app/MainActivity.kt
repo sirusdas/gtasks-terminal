@@ -14,6 +14,7 @@ class MainActivity : FlutterActivity() {
         const val ACTION_OPEN_AI = "com.gtasks.gtasks_app.ACTION_OPEN_AI"
         const val ACTION_OPEN_TASK_PREVIEW = "com.gtasks.gtasks_app.ACTION_OPEN_TASK_PREVIEW"
         const val ACTION_OPEN_TAB = "com.gtasks.gtasks_app.ACTION_OPEN_TAB"
+        const val ACTION_OPEN_MANDALA = "com.gtasks.gtasks_app.ACTION_OPEN_MANDALA"
     }
 
     private var pendingAction: String? = null
@@ -57,6 +58,14 @@ class MainActivity : FlutterActivity() {
             val action = "open_tab:$tabId:$filterType:$filterVal"
             pendingAction = action
             methodChannel?.invokeMethod("onActionReceived", action)
+        } else if (intent.action == ACTION_OPEN_MANDALA || intent.getBooleanExtra("open_mandala", false)) {
+            val mode = intent.getStringExtra("mandala_mode") ?: "spaces"
+            val geom = intent.getStringExtra("mandala_geometry") ?: "PADMA"
+            val focusedItem = intent.getStringExtra("focused_item") ?: ""
+            val mandalaId = intent.getStringExtra("mandala_id") ?: ""
+            val action = "open_mandala:$mode:$geom:$focusedItem:$mandalaId"
+            pendingAction = action
+            methodChannel?.invokeMethod("onActionReceived", action)
         }
     }
 
@@ -74,6 +83,11 @@ class MainActivity : FlutterActivity() {
                         prefs.edit().putString("tabs_json", tabsJson).apply()
                     }
                     GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                    MandalaWidgetProvider.updateAllMandalaWidgets(applicationContext)
+                    result.success(true)
+                }
+                "updateMandalaWidget" -> {
+                    MandalaWidgetProvider.updateAllMandalaWidgets(applicationContext)
                     result.success(true)
                 }
                 "getInitialAction" -> {

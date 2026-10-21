@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mandala_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/mandala_widget_bg"
+    android:padding="8dp">
+
+    <!-- Top Action & Filter Bar -->
+    <LinearLayout
+        android:id="@+id/mandala_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="4dp">
+
+        <!-- Mode Switcher Pill -->
+        <LinearLayout
+            android:id="@+id/mandala_btn_mode"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/mandala_pill_bg"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:clickable="true">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_mandala_mode"
+                android:contentDescription="Mode" />
+
+            <TextView
+                android:id="@+id/mandala_mode_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="Spaces"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <!-- Geometry Selector Button -->
+        <ImageView
+            android:id="@+id/mandala_btn_geom"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_mandala_lotus"
+            android:contentDescription="Geometry"
+            android:clickable="true"
+            android:padding="6dp" />
+
+        <!-- Theme Selector Button -->
+        <ImageView
+            android:id="@+id/mandala_btn_theme"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_mandala_theme"
+            android:contentDescription="Theme"
+            android:clickable="true"
+            android:padding="6dp" />
+
+        <!-- Open In App Button -->
+        <ImageView
+            android:id="@+id/mandala_btn_open"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_mandala_expand"
+            android:contentDescription="Open Mandala in App"
+            android:clickable="true"
+            android:padding="6dp" />
+    </LinearLayout>
+
+    <!-- Center Canvas Area -->
+    <FrameLayout
+        android:id="@+id/mandala_canvas_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clickable="true">
+
+        <ImageView
+            android:id="@+id/mandala_canvas_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter"
+            android:contentDescription="Sacred Mandala Canvas" />
+    </FrameLayout>
+
+    <!-- Bottom Navigation Bar -->
+    <LinearLayout
+        android:id="@+id/mandala_bottom_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp">
+
+        <!-- Previous Pillar Button -->
+        <ImageView
+            android:id="@+id/mandala_btn_prev"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_chevron_left"
+            android:contentDescription="Previous Pillar"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <!-- Focused Pillar Info Pill -->
+        <LinearLayout
+            android:id="@+id/mandala_pillar_pill"
+            android:layout_width="0dp"
+            android:layout_height="28dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:gravity="center"
+            android:background="@drawable/mandala_pill_bg"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
+
+            <TextView
+                android:id="@+id/mandala_pillar_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tap mandala to focus"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp"
+                android:singleLine="true"
+                android:ellipsize="middle" />
+        </LinearLayout>
+
+        <!-- Next Pillar Button -->
+        <ImageView
+            android:id="@+id/mandala_btn_next"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_chevron_right"
+            android:contentDescription="Next Pillar"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <!-- Refresh Button -->
+        <ImageView
+            android:id="@+id/mandala_btn_refresh"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_refresh"
+            android:contentDescription="Refresh"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <!-- Quick Add Task Button -->
+        <ImageView
+            android:id="@+id/mandala_btn_add"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_add"
+            android:contentDescription="Quick Add Task"
+            android:clickable="true"
+            android:padding="5dp" />
+    </LinearLayout>
+
+</LinearLayout>

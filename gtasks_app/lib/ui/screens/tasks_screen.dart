@@ -20,6 +20,8 @@ import 'reports_screen.dart';
 import 'ai_chat_screen.dart';
 import '../widgets/task_detail_modal.dart';
 import '../../mandala/mandala_screen.dart';
+import '../../mandala/mandala_adapter.dart';
+import '../../mandala/mandala_types.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -127,6 +129,47 @@ class _TasksScreenState extends State<TasksScreen> {
       final filterType = parts.length > 2 ? parts[2] : '';
       final filterVal = parts.length > 3 ? parts[3] : '';
       _openTabByAction(tabId, filterType, filterVal);
+    } else if (action.startsWith('open_mandala')) {
+      final parts = action.split(':');
+      final modeStr = parts.length > 1 ? parts[1] : 'spaces';
+      final geomStr = parts.length > 2 ? parts[2] : 'PADMA';
+      final focusedItem = parts.length > 3 ? parts[3] : '';
+      final customMandalaId = parts.length > 4 ? parts[4] : '';
+
+      MandalaGrouping grouping = MandalaGrouping.spaces;
+      if (modeStr == 'harada_9x9') {
+        grouping = MandalaGrouping.mandalachart;
+      } else if (modeStr == 'priorities') {
+        grouping = MandalaGrouping.priorities;
+      } else if (modeStr == 'lists') {
+        grouping = MandalaGrouping.lists;
+      } else if (modeStr == 'tags') {
+        grouping = MandalaGrouping.tags;
+      }
+
+      GeometryId? geom;
+      final lowerGeom = geomStr.toLowerCase();
+      if (lowerGeom == 'padma') {
+        geom = GeometryId.padma;
+      } else if (lowerGeom == 'chakra') {
+        geom = GeometryId.chakra;
+      } else if (lowerGeom == 'bhupura') {
+        geom = GeometryId.bhupura;
+      } else if (lowerGeom == 'sriyantra') {
+        geom = GeometryId.sriyantra;
+      }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MandalaScreen(
+            initialGrouping: grouping,
+            initialGeometry: geom,
+            initialCustomMandalaId: customMandalaId.isNotEmpty ? customMandalaId : null,
+            initialFocusItem: focusedItem.isNotEmpty ? focusedItem : null,
+          ),
+        ),
+      );
     }
   }
 

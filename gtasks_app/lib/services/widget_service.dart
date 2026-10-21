@@ -37,4 +37,13 @@ class WidgetService {
       // Gracefully ignore on non-Android platforms or when engine is detaching
     }
   }
+
+  /// Requests the native Android Mandala AppWidget to refresh its canvas and metrics
+  static Future<void> updateMandalaWidget() async {
+    try {
+      await _channel.invokeMethod('updateMandalaWidget');
+    } catch (_) {
+      // Gracefully ignore on non-Android platforms or when engine is detaching
+    }
+  }
 }

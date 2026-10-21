@@ -17,8 +17,20 @@ import 'custom_mandala_dialog.dart';
 class MandalaScreen extends StatefulWidget {
   final List<TaskItem>? initialTasks;
   final String? title;
+  final MandalaGrouping? initialGrouping;
+  final GeometryId? initialGeometry;
+  final String? initialCustomMandalaId;
+  final String? initialFocusItem;
 
-  const MandalaScreen({super.key, this.initialTasks, this.title});
+  const MandalaScreen({
+    super.key,
+    this.initialTasks,
+    this.title,
+    this.initialGrouping,
+    this.initialGeometry,
+    this.initialCustomMandalaId,
+    this.initialFocusItem,
+  });
 
   @override
   State<MandalaScreen> createState() => _MandalaScreenState();
@@ -46,7 +58,43 @@ class _MandalaScreenState extends State<MandalaScreen> {
   @override
   void initState() {
     super.initState();
-    _loadCustomMandalas();
+    if (widget.initialGrouping != null) {
+      _grouping = widget.initialGrouping!;
+    }
+    if (widget.initialGeometry != null) {
+      _forcedGeometry = widget.initialGeometry!;
+    }
+    _loadCustomMandalas().then((_) {
+      if (widget.initialCustomMandalaId != null && mounted) {
+        final match = _customMandalas.firstWhere(
+          (m) => m.id == widget.initialCustomMandalaId,
+          orElse: () => _customMandalas.first,
+        );
+        setState(() {
+          _activeCustomMandala = match;
+          _currentMandalaId = match.id;
+          _rebuildEngine();
+        });
+      } else if (widget.initialFocusItem != null &&
+          widget.initialFocusItem!.isNotEmpty &&
+          mounted) {
+        final node = _doc.nodes.cast<MandalaNode?>().firstWhere(
+          (n) => n?.label.toLowerCase() == widget.initialFocusItem!.toLowerCase(),
+          orElse: () => null,
+        );
+        if (node != null) {
+          final cell = _layout.cells.cast<Cell?>().firstWhere(
+            (c) => c?.nodeId == node.id,
+            orElse: () => null,
+          );
+          if (cell != null) {
+            setState(() {
+              _selectedCellId = cell.id;
+            });
+          }
+        }
+      }
+    });
     _rebuildEngine();
   }
 

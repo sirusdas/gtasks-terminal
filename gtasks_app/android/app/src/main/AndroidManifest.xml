@@ -36,6 +36,7 @@
                 <action android:name="com.gtasks.gtasks_app.ACTION_OPEN_AI" />
                 <action android:name="com.gtasks.gtasks_app.ACTION_OPEN_TASK_PREVIEW" />
                 <action android:name="com.gtasks.gtasks_app.ACTION_OPEN_TAB" />
+                <action android:name="com.gtasks.gtasks_app.ACTION_OPEN_MANDALA" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <intent-filter>
@@ -77,6 +78,25 @@
             android:name=".GTasksWidgetService"
             android:permission="android.permission.BIND_REMOTEVIEWS"
             android:exported="true" />
+
+        <!-- Home Screen Sacred Mandala AppWidget Receiver -->
+        <receiver
+            android:name=".MandalaWidgetProvider"
+            android:exported="true"
+            android:label="@string/mandala_widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.gtasks.gtasks_app.mandala.ACTION_CYCLE_MODE" />
+                <action android:name="com.gtasks.gtasks_app.mandala.ACTION_CYCLE_GEOMETRY" />
+                <action android:name="com.gtasks.gtasks_app.mandala.ACTION_CYCLE_THEME" />
+                <action android:name="com.gtasks.gtasks_app.mandala.ACTION_PREV_PILLAR" />
+                <action android:name="com.gtasks.gtasks_app.mandala.ACTION_NEXT_PILLAR" />
+                <action android:name="com.gtasks.gtasks_app.mandala.ACTION_REFRESH_MANDALA" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/gtasks_mandala_widget_info" />
+        </receiver>
 
         <!-- Home Screen Widget Quick Add Task Dialog (Google Tasks style) -->
         <activity

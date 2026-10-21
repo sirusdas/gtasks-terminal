@@ -3,4 +3,6 @@
     <string name="app_name">GTasks</string>
     <string name="widget_name">GTasks Pending Tasks</string>
     <string name="widget_description">Displays pending tasks with priority and space tags directly on your home screen.</string>
+    <string name="mandala_widget_name">GTasks Sacred Mandala</string>
+    <string name="mandala_widget_description">Interactive sacred radial mandala for your home screen: Harada 9x9, Spaces, Priorities, Lists, Tags &amp; Custom Mandalas.</string>
 </resources>
