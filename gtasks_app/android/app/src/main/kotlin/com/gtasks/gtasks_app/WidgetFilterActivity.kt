@@ -240,13 +240,18 @@ class WidgetFilterActivity : Activity() {
         adapter.notifyDataSetChanged()
     }
 
+    private fun notifyAllWidgets() {
+        GTasksWidgetProvider.updateAllWidgets(applicationContext)
+        MandalaWidgetProvider.updateAllMandalaWidgets(applicationContext)
+    }
+
     private fun handleClearFilter() {
         val prefs = getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
 
         when (filterType) {
             "recurring" -> {
                 prefs.edit().remove("hide_recurring_$appWidgetId").apply()
-                GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                notifyAllWidgets()
                 finish()
             }
             "hide" -> {
@@ -255,22 +260,22 @@ class WidgetFilterActivity : Activity() {
                     .remove("hidden_lists_$appWidgetId")
                     .remove("hidden_tags_$appWidgetId")
                     .apply()
-                GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                notifyAllWidgets()
                 setupForFilterType()
             }
             "hide_list" -> {
                 prefs.edit().remove("hidden_lists_$appWidgetId").apply()
-                GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                notifyAllWidgets()
                 setupForFilterType()
             }
             "hide_tag" -> {
                 prefs.edit().remove("hidden_tags_$appWidgetId").apply()
-                GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                notifyAllWidgets()
                 setupForFilterType()
             }
             "sort" -> {
                 prefs.edit().remove("sort_by_$appWidgetId").apply()
-                GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                notifyAllWidgets()
                 finish()
             }
             else -> {
@@ -278,7 +283,7 @@ class WidgetFilterActivity : Activity() {
                     .remove("filter_type_$appWidgetId")
                     .remove("filter_val_$appWidgetId")
                     .apply()
-                GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                notifyAllWidgets()
                 finish()
             }
         }
@@ -293,7 +298,7 @@ class WidgetFilterActivity : Activity() {
             "recurring" -> {
                 val hideRecurring = selected.name.startsWith("Hide")
                 prefs.edit().putBoolean("hide_recurring_$appWidgetId", hideRecurring).apply()
-                GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                notifyAllWidgets()
                 finish()
             }
             "hide" -> {
@@ -302,7 +307,7 @@ class WidgetFilterActivity : Activity() {
                         // Toggle recurring
                         val current = prefs.getBoolean("hide_recurring_$appWidgetId", false)
                         prefs.edit().putBoolean("hide_recurring_$appWidgetId", !current).apply()
-                        GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                        notifyAllWidgets()
                         setupForFilterType()
                     }
                     1 -> {
@@ -327,7 +332,7 @@ class WidgetFilterActivity : Activity() {
                     selected.isChecked = true
                 }
                 saveHiddenLists(hiddenLists)
-                GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                notifyAllWidgets()
                 adapter.notifyDataSetChanged()
             }
             "hide_tag" -> {
@@ -340,7 +345,7 @@ class WidgetFilterActivity : Activity() {
                     selected.isChecked = true
                 }
                 saveHiddenTags(hiddenTags)
-                GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                notifyAllWidgets()
                 adapter.notifyDataSetChanged()
             }
             "sort" -> {
@@ -353,7 +358,7 @@ class WidgetFilterActivity : Activity() {
                     else -> "priority"
                 }
                 prefs.edit().putString("sort_by_$appWidgetId", sortKey).apply()
-                GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                notifyAllWidgets()
                 finish()
             }
             else -> {
@@ -361,7 +366,7 @@ class WidgetFilterActivity : Activity() {
                     .putString("filter_type_$appWidgetId", filterType)
                     .putString("filter_val_$appWidgetId", selected.name)
                     .apply()
-                GTasksWidgetProvider.updateAllWidgets(applicationContext)
+                notifyAllWidgets()
                 finish()
             }
         }

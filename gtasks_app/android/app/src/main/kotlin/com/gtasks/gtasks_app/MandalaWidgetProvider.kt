@@ -38,6 +38,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         const val ACTION_PREV_TAB = "com.gtasks.gtasks_app.mandala.ACTION_PREV_TAB"
         const val ACTION_NEXT_TAB = "com.gtasks.gtasks_app.mandala.ACTION_NEXT_TAB"
         const val ACTION_TOGGLE_STATUS = "com.gtasks.gtasks_app.mandala.ACTION_TOGGLE_STATUS"
+        const val ACTION_CLEAR_FILTER = "com.gtasks.gtasks_app.mandala.ACTION_CLEAR_FILTER"
 
         val MODES = listOf("spaces", "harada_9x9", "priorities", "lists", "tags", "custom")
         val GEOMETRIES = listOf(
@@ -232,7 +233,11 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                     if (tabs.isNotEmpty()) {
                         val currentIndex = wPrefs.getInt("tab_index_$appWidgetId", 0)
                         val newIndex = (currentIndex - 1 + tabs.size) % tabs.size
-                        wPrefs.edit().putInt("tab_index_$appWidgetId", newIndex).apply()
+                        wPrefs.edit()
+                            .putInt("tab_index_$appWidgetId", newIndex)
+                            .remove("filter_type_$appWidgetId")
+                            .remove("filter_val_$appWidgetId")
+                            .apply()
                         prefs.edit()
                             .remove("drill_path_$appWidgetId")
                             .remove("drill_parent_$appWidgetId")
@@ -249,7 +254,11 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                     if (tabs.isNotEmpty()) {
                         val currentIndex = wPrefs.getInt("tab_index_$appWidgetId", 0)
                         val newIndex = (currentIndex + 1) % tabs.size
-                        wPrefs.edit().putInt("tab_index_$appWidgetId", newIndex).apply()
+                        wPrefs.edit()
+                            .putInt("tab_index_$appWidgetId", newIndex)
+                            .remove("filter_type_$appWidgetId")
+                            .remove("filter_val_$appWidgetId")
+                            .apply()
                         prefs.edit()
                             .remove("drill_path_$appWidgetId")
                             .remove("drill_parent_$appWidgetId")
@@ -269,6 +278,26 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                         else -> "pending"
                     }
                     wPrefs.edit().putString("mandala_status_$appWidgetId", next).apply()
+                    prefs.edit()
+                        .remove("drill_path_$appWidgetId")
+                        .remove("drill_parent_$appWidgetId")
+                        .putInt("focus_$appWidgetId", -1)
+                        .apply()
+                    updateWidgetById(context, appWidgetId)
+                }
+            }
+            ACTION_CLEAR_FILTER -> {
+                if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    val wPrefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                    wPrefs.edit()
+                        .remove("filter_type_$appWidgetId")
+                        .remove("filter_val_$appWidgetId")
+                        .remove("sort_by_$appWidgetId")
+                        .remove("hide_recurring_$appWidgetId")
+                        .remove("hidden_lists_$appWidgetId")
+                        .remove("hidden_tags_$appWidgetId")
+                        .remove("mandala_status_$appWidgetId")
+                        .apply()
                     prefs.edit()
                         .remove("drill_path_$appWidgetId")
                         .remove("drill_parent_$appWidgetId")
@@ -356,6 +385,34 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             R.id.mandala_btn_status,
             createBroadcastPendingIntent(context, ACTION_TOGGLE_STATUS, appWidgetId, 24)
         )
+
+        // Filter button intent -> Opens WidgetFilterActivity to set filter for this mandala widget
+        val filterIntent = Intent(context, WidgetFilterActivity::class.java).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            putExtra("filter_type", "hide")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val filterPendingIntent = PendingIntent.getActivity(
+            context,
+            appWidgetId * 100 + 25,
+            filterIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.mandala_btn_filter, filterPendingIntent)
+
+        // Active Filter Pill Container
+        val pillText = WidgetTabFilter.formatFilterPill(filter)
+        if (!pillText.isNullOrBlank()) {
+            views.setViewVisibility(R.id.mandala_active_filter_container, android.view.View.VISIBLE)
+            views.setTextViewText(R.id.mandala_active_filter_text, pillText)
+            views.setOnClickPendingIntent(R.id.mandala_active_filter_container, filterPendingIntent)
+            views.setOnClickPendingIntent(
+                R.id.mandala_btn_clear_filter,
+                createBroadcastPendingIntent(context, ACTION_CLEAR_FILTER, appWidgetId, 26)
+            )
+        } else {
+            views.setViewVisibility(R.id.mandala_active_filter_container, android.view.View.GONE)
+        }
 
         // Check if widget is drilled down into a sub-mandala
         val drillPath = prefs.getString("drill_path_$appWidgetId", null) ?: prefs.getString("drill_parent_$appWidgetId", null)
@@ -639,7 +696,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                             val cleanTag = rootSegment.replace("#", "").trim().lowercase()
                             val qb = StringBuilder("SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete'")
                             val args = mutableListOf<String>()
-                            WidgetTabFilter.applyFilterToQuery(activeFilter, qb, args)
+                            WidgetTabFilter.applyFilterToQuery(activeFilter, qb, args, skipTag = true)
                             val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                             cursor.use {
                                 while (it.moveToNext()) {
@@ -1241,7 +1298,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
                     val qb = StringBuilder("SELECT tags, status FROM tasks WHERE sync_status != 'pending_delete'")
                     val args = mutableListOf<String>()
-                    WidgetTabFilter.applyFilterToQuery(filter, qb, args)
+                    WidgetTabFilter.applyFilterToQuery(filter, qb, args, skipTag = true)
                     val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                     cursor.use {
                         while (it.moveToNext()) {

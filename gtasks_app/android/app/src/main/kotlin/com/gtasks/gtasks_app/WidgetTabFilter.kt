@@ -25,7 +25,10 @@ data class WidgetTabFilter(
     val filterType: String? = null,
     val filterVal: String? = null,
     val sortBy: String = "priority",
-    val sortAscending: Boolean = true
+    val sortAscending: Boolean = true,
+    val dateField: String? = null,
+    val dateRangeStart: String? = null,
+    val dateRangeEnd: String? = null
 ) {
     companion object {
         private const val TAG = "WidgetTabFilter"
@@ -46,10 +49,19 @@ data class WidgetTabFilter(
                 val prefs = context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
                 val tabsJson = prefs.getString("tabs_json", null)
                 val tabIndexKey = "tab_index_$appWidgetId"
-                val statusOverrideKey = "mandala_status_$appWidgetId"
-                val widgetStatus = if (isMandala && appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                val statusOverrideKey = if (isMandala) "mandala_status_$appWidgetId" else "widget_status_$appWidgetId"
+                val widgetStatus = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     prefs.getString(statusOverrideKey, null)
                 } else null
+
+                val widgetFilterType = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) prefs.getString("filter_type_$appWidgetId", null) else null
+                val widgetFilterVal = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) prefs.getString("filter_val_$appWidgetId", null) else null
+                val widgetHideRecurring = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID && prefs.contains("hide_recurring_$appWidgetId")) {
+                    prefs.getBoolean("hide_recurring_$appWidgetId", false)
+                } else null
+                val widgetHiddenLists = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) prefs.getStringSet("hidden_lists_$appWidgetId", null) else null
+                val widgetHiddenTags = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) prefs.getStringSet("hidden_tags_$appWidgetId", null) else null
+                val widgetSortBy = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) prefs.getString("sort_by_$appWidgetId", null) else null
 
                 if (!tabsJson.isNullOrEmpty()) {
                     val arr = JSONArray(tabsJson)
@@ -85,26 +97,28 @@ data class WidgetTabFilter(
                         }
 
                         val status = widgetStatus ?: obj.optNullableString("statusFilter") ?: "pending"
-                        val hideRec = obj.optBoolean("hideRecurring", false)
+                        val hideRec = widgetHideRecurring ?: obj.optBoolean("hideRecurring", false)
 
-                        val hLists = mutableSetOf<String>()
-                        val hlArr = obj.optJSONArray("hiddenLists")
-                        if (hlArr != null) {
-                            for (i in 0 until hlArr.length()) {
-                                if (!hlArr.isNull(i)) {
-                                    val l = hlArr.getString(i).trim()
-                                    if (l.isNotEmpty() && !l.equals("null", ignoreCase = true)) hLists.add(l)
+                        val hLists = widgetHiddenLists?.toSet() ?: mutableSetOf<String>().apply {
+                            val hlArr = obj.optJSONArray("hiddenLists")
+                            if (hlArr != null) {
+                                for (i in 0 until hlArr.length()) {
+                                    if (!hlArr.isNull(i)) {
+                                        val l = hlArr.getString(i).trim()
+                                        if (l.isNotEmpty() && !l.equals("null", ignoreCase = true)) add(l)
+                                    }
                                 }
                             }
                         }
 
-                        val hTags = mutableSetOf<String>()
-                        val htArr = obj.optJSONArray("hiddenTags")
-                        if (htArr != null) {
-                            for (i in 0 until htArr.length()) {
-                                if (!htArr.isNull(i)) {
-                                    val t = htArr.getString(i).trim()
-                                    if (t.isNotEmpty() && !t.equals("null", ignoreCase = true)) hTags.add(t)
+                        val hTags = widgetHiddenTags?.toSet() ?: mutableSetOf<String>().apply {
+                            val htArr = obj.optJSONArray("hiddenTags")
+                            if (htArr != null) {
+                                for (i in 0 until htArr.length()) {
+                                    if (!htArr.isNull(i)) {
+                                        val t = htArr.getString(i).trim()
+                                        if (t.isNotEmpty() && !t.equals("null", ignoreCase = true)) add(t)
+                                    }
                                 }
                             }
                         }
@@ -134,10 +148,14 @@ data class WidgetTabFilter(
                         val sp = obj.optNullableString("selectedSpace")
                         val sub = obj.optNullableString("selectedSubspace")
                         val prio = obj.optNullableString("selectedPriority")
-                        val fType = obj.optNullableString("filterType")
-                        val fVal = obj.optNullableString("filterVal")
-                        val sortF = obj.optNullableString("sortField") ?: "priority"
+                        val fType = widgetFilterType ?: obj.optNullableString("filterType")
+                        val fVal = widgetFilterVal ?: obj.optNullableString("filterVal")
+                        val sortF = widgetSortBy ?: obj.optNullableString("sortField") ?: "priority"
                         val sortAsc = obj.optBoolean("sortAscending", true)
+
+                        val dField = obj.optNullableString("dateField")
+                        val dStart = obj.optNullableString("dateRangeStart")
+                        val dEnd = obj.optNullableString("dateRangeEnd")
 
                         return WidgetTabFilter(
                             id = id,
@@ -157,7 +175,10 @@ data class WidgetTabFilter(
                             filterType = fType,
                             filterVal = fVal,
                             sortBy = sortF,
-                            sortAscending = sortAsc
+                            sortAscending = sortAsc,
+                            dateField = dField,
+                            dateRangeStart = dStart,
+                            dateRangeEnd = dEnd
                         )
                     }
                 }
@@ -165,9 +186,14 @@ data class WidgetTabFilter(
                 Log.e(TAG, "Error parsing active tab filter", e)
             }
 
-            val defaultStatus = if (isMandala && appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
-                    .getString("mandala_status_$appWidgetId", "pending") ?: "pending"
+            val defaultStatus = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                if (isMandala) {
+                    context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
+                        .getString("mandala_status_$appWidgetId", "pending") ?: "pending"
+                } else {
+                    context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
+                        .getString("widget_status_$appWidgetId", "pending") ?: "pending"
+                }
             } else {
                 "pending"
             }
@@ -257,6 +283,10 @@ data class WidgetTabFilter(
                         val sortF = obj.optNullableString("sortField") ?: "priority"
                         val sortAsc = obj.optBoolean("sortAscending", true)
 
+                        val dField = obj.optNullableString("dateField")
+                        val dStart = obj.optNullableString("dateRangeStart")
+                        val dEnd = obj.optNullableString("dateRangeEnd")
+
                         tabs.add(
                             WidgetTabFilter(
                                 id = id,
@@ -276,7 +306,10 @@ data class WidgetTabFilter(
                                 filterType = fType,
                                 filterVal = fVal,
                                 sortBy = sortF,
-                                sortAscending = sortAsc
+                                sortAscending = sortAsc,
+                                dateField = dField,
+                                dateRangeStart = dStart,
+                                dateRangeEnd = dEnd
                             )
                         )
                     }
@@ -303,7 +336,8 @@ data class WidgetTabFilter(
             args: MutableList<String>,
             skipPriority: Boolean = false,
             skipList: Boolean = false,
-            skipSpace: Boolean = false
+            skipSpace: Boolean = false,
+            skipTag: Boolean = false
         ) {
             // Account filter: safely match account or fallback to 'default' if local DB uses default
             if (filter.accounts.isNotEmpty() && !filter.accounts.contains("all")) {
@@ -346,6 +380,15 @@ data class WidgetTabFilter(
                 args.addAll(filter.selectedLists)
             }
 
+            // Selected tags filter
+            if (!skipTag && filter.selectedTags.isNotEmpty()) {
+                val tagClauses = filter.selectedTags.map { "tags LIKE ?" }.joinToString(" OR ")
+                queryBuilder.append(" AND ($tagClauses)")
+                for (t in filter.selectedTags) {
+                    args.add("%\"$t\"%")
+                }
+            }
+
             // Selected priority filter
             if (!skipPriority && !filter.selectedPriority.isNullOrBlank() && !filter.selectedPriority.equals("null", ignoreCase = true)) {
                 if (filter.selectedPriority.equals("high", ignoreCase = true)) {
@@ -363,6 +406,20 @@ data class WidgetTabFilter(
                 if (!filter.selectedSubspace.isNullOrBlank() && !filter.selectedSubspace.equals("null", ignoreCase = true)) {
                     queryBuilder.append(" AND spaces LIKE ?")
                     args.add("%\"${filter.selectedSubspace}\"%")
+                }
+            }
+
+            // Custom dateRangeStart / dateRangeEnd filter
+            if (!filter.dateRangeStart.isNullOrBlank() && !filter.dateRangeEnd.isNullOrBlank()) {
+                if (filter.dateRangeStart.startsWith("2000")) {
+                    // Today & Due convention
+                    queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) <= date('now', 'localtime')")
+                } else {
+                    val s = if (filter.dateRangeStart.length >= 10) filter.dateRangeStart.substring(0, 10) else filter.dateRangeStart
+                    val e = if (filter.dateRangeEnd.length >= 10) filter.dateRangeEnd.substring(0, 10) else filter.dateRangeEnd
+                    queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= ? AND substr(due, 1, 10) <= ?")
+                    args.add(s)
+                    args.add(e)
                 }
             }
 
@@ -387,7 +444,7 @@ data class WidgetTabFilter(
                         }
                     }
                     "tag" -> {
-                        if (filter.selectedTags.isEmpty()) {
+                        if (!skipTag && filter.selectedTags.isEmpty()) {
                             queryBuilder.append(" AND tags LIKE ?")
                             args.add("%\"${filter.filterVal}\"%")
                         }
@@ -423,6 +480,67 @@ data class WidgetTabFilter(
                     }
                 }
             }
+        }
+
+        fun formatFilterPill(filter: WidgetTabFilter, viewMode: String? = null): String? {
+            val filterLabel = when (filter.filterType?.lowercase()) {
+                "space" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "Space: ${filter.filterVal}" else null
+                "subspace" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) filter.filterVal else null
+                "tag" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "#${filter.filterVal}" else null
+                "list" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "List: ${filter.filterVal}" else null
+                "account" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "@${filter.filterVal}" else null
+                "date" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "📅 ${filter.filterVal}" else null
+                else -> if (!filter.selectedSpace.isNullOrBlank() && !filter.selectedSpace.equals("null", ignoreCase = true)) {
+                    if (!filter.selectedSubspace.isNullOrBlank() && !filter.selectedSubspace.equals("null", ignoreCase = true)) {
+                        "Space: ${filter.selectedSpace} › ${filter.selectedSubspace}"
+                    } else {
+                        "Space: ${filter.selectedSpace}"
+                    }
+                } else null
+            }
+
+            val sortLabel = when (filter.sortBy) {
+                "due_asc" -> "Due ↑"
+                "due_desc" -> "Due ↓"
+                "modified" -> "Modified"
+                "created" -> "Created"
+                "title" -> "Title A-Z"
+                else -> null
+            }
+
+            val pillParts = mutableListOf<String>()
+            if (!filterLabel.isNullOrBlank()) pillParts.add(filterLabel)
+            if (filter.selectedLists.isNotEmpty()) {
+                val sLists = filter.selectedLists.toList()
+                pillParts.add(if (sLists.size == 1) "List: ${sLists[0]}" else "${sLists.size} lists")
+            }
+            if (filter.selectedTags.isNotEmpty()) {
+                val sTags = filter.selectedTags.toList()
+                pillParts.add(if (sTags.size == 1) "#${sTags[0]}" else "${sTags.size} tags")
+            }
+            if (!filter.selectedPriority.isNullOrBlank() && !filter.selectedPriority.equals("null", ignoreCase = true)) {
+                pillParts.add("Priority: ${filter.selectedPriority}")
+            }
+            if (filter.hideRecurring) pillParts.add("No Recurring")
+            if (filter.hiddenLists.isNotEmpty()) {
+                val hLists = filter.hiddenLists.toList()
+                pillParts.add(if (hLists.size == 1) "Hide: ${hLists[0]}" else "Hide: ${hLists.size} lists")
+            }
+            if (filter.hiddenTags.isNotEmpty()) {
+                val hTags = filter.hiddenTags.toList()
+                pillParts.add(if (hTags.size == 1) "Hide: #${hTags[0]}" else "Hide: ${hTags.size} tags")
+            }
+            if (filter.statusFilter == "completed") {
+                pillParts.add("Completed")
+            } else if (filter.statusFilter == "all") {
+                pillParts.add("All Statuses")
+            }
+            if (!sortLabel.isNullOrBlank()) pillParts.add("Sort: $sortLabel")
+            if (viewMode == "compact") pillParts.add("1-Line")
+            if (viewMode == "two_column") pillParts.add("2-Col")
+            if (viewMode == "two_column_compact") pillParts.add("2-Col Compact")
+
+            return if (pillParts.isNotEmpty()) pillParts.joinToString(" • ") else null
         }
     }
 }

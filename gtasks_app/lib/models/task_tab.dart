@@ -346,6 +346,14 @@ class TaskTab {
       'isActive': isActive,
     };
 
+    if (dateRange != null) {
+      data['dateRangeStart'] = dateRange!.start.toIso8601String();
+      data['dateRangeEnd'] = dateRange!.end.toIso8601String();
+      if (dateField != null && dateField!.isNotEmpty) {
+        data['dateField'] = dateField;
+      }
+    }
+
     if (selectedAccount != null && selectedAccount!.isNotEmpty) {
       data['account'] = selectedAccount;
     }

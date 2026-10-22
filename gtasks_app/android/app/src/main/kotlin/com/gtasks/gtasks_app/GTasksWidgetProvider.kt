@@ -405,47 +405,7 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         views.setOnClickPendingIntent(R.id.widget_btn_tab_center, openTabPendingIntent)
 
         // Format active filter, exclusions & sort badge pill
-        val filterLabel = when (filter.filterType?.lowercase()) {
-            "space" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "Space: ${filter.filterVal}" else null
-            "subspace" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) filter.filterVal else null
-            "tag" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "#${filter.filterVal}" else null
-            "list" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "List: ${filter.filterVal}" else null
-            "account" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "@${filter.filterVal}" else null
-            "date" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "📅 ${filter.filterVal}" else null
-            else -> if (!filter.selectedSpace.isNullOrBlank() && !filter.selectedSpace.equals("null", ignoreCase = true)) {
-                if (!filter.selectedSubspace.isNullOrBlank() && !filter.selectedSubspace.equals("null", ignoreCase = true)) {
-                    "Space: ${filter.selectedSpace} › ${filter.selectedSubspace}"
-                } else {
-                    "Space: ${filter.selectedSpace}"
-                }
-            } else null
-        }
-        val sortLabel = when (sortBy) {
-            "due_asc" -> "Due ↑"
-            "due_desc" -> "Due ↓"
-            "modified" -> "Modified"
-            "created" -> "Created"
-            "title" -> "Title A-Z"
-            else -> null
-        }
-
-        val pillParts = mutableListOf<String>()
-        if (!filterLabel.isNullOrBlank()) pillParts.add(filterLabel)
-        if (filter.hideRecurring) pillParts.add("No Recurring")
-        if (filter.hiddenLists.isNotEmpty()) {
-            val hLists = filter.hiddenLists.toList()
-            pillParts.add(if (hLists.size == 1) "Hide: ${hLists[0]}" else "Hide: ${hLists.size} lists")
-        }
-        if (filter.hiddenTags.isNotEmpty()) {
-            val hTags = filter.hiddenTags.toList()
-            pillParts.add(if (hTags.size == 1) "Hide: #${hTags[0]}" else "Hide: ${hTags.size} tags")
-        }
-        if (!sortLabel.isNullOrBlank()) pillParts.add("Sort: $sortLabel")
-        if (viewMode == "compact") pillParts.add("1-Line")
-        if (viewMode == "two_column") pillParts.add("2-Col")
-        if (viewMode == "two_column_compact") pillParts.add("2-Col Compact")
-
-        val pillText = if (pillParts.isNotEmpty()) pillParts.joinToString(" • ") else null
+        val pillText = WidgetTabFilter.formatFilterPill(filter, viewMode)
 
         if (pillText != null) {
             views.setViewVisibility(R.id.widget_active_filter_container, View.VISIBLE)
