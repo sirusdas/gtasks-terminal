@@ -277,14 +277,17 @@ class TaskProvider with ChangeNotifier {
       final raw = jsonEncode(_tabs.map((t) => t.toJson()).toList());
       await prefs.setString(_keyBrowserTabs, raw);
       await prefs.setInt(_keyActiveTabIndex, _activeTabIndex);
-      WidgetService.updateWidget(tabsJson: _tabsToJsonString());
+      WidgetService.updateWidget(
+        tabsJson: _tabsToJsonString(),
+        activeTabIndex: _activeTabIndex,
+      );
     } catch (e) {
       debugPrint('[TaskProvider] Error saving tabs: $e');
     }
   }
 
   String _tabsToJsonString() {
-    return jsonEncode(_tabs.map((t) => t.toWidgetJson()).toList());
+    return jsonEncode(_tabs.asMap().entries.map((e) => e.value.toWidgetJson(isActive: e.key == _activeTabIndex)).toList());
   }
 
   void _applyTabFilters(TaskTab tab, {bool shouldNotify = true}) {
@@ -377,9 +380,15 @@ class TaskProvider with ChangeNotifier {
     String? priority,
     String? list,
     String? tag,
+    Set<String>? lists,
+    Set<String>? tags,
+    Set<String>? hiddenLists,
+    Set<String>? hiddenTags,
+    bool hideRecurring = false,
     DateTimeRange? dateRange,
     String? dateField,
     String? statusFilter,
+    String? viewMode,
   }) {
     final newId = 'tab_${DateTime.now().millisecondsSinceEpoch}';
     final tabAccounts = accounts ?? (account != null ? (account == 'all' ? <String>{} : {account}) : _selectedAccounts);
@@ -405,16 +414,37 @@ class TaskProvider with ChangeNotifier {
       selectedSpace: space,
       selectedSubspace: subspace,
       selectedPriority: priority,
-      selectedLists: list != null ? {list} : {},
-      selectedTags: tag != null ? {tag} : {},
+      selectedLists: lists ?? (list != null ? {list} : {}),
+      selectedTags: tags ?? (tag != null ? {tag} : {}),
+      hiddenLists: hiddenLists,
+      hiddenTags: hiddenTags,
+      hideRecurring: hideRecurring,
       dateRange: dateRange,
       dateField: dateField,
       statusFilter: statusFilter ?? 'pending',
+      viewMode: viewMode,
     );
     _tabs.add(newTab);
     _activeTabIndex = _tabs.length - 1;
     _applyTabFilters(newTab);
     _saveTabs();
+  }
+
+  void addTab(TaskTab tab) {
+    _tabs.add(tab);
+    _activeTabIndex = _tabs.length - 1;
+    _applyTabFilters(tab);
+    _saveTabs();
+  }
+
+  void setTabViewMode(int index, String? viewMode) {
+    if (index < 0 || index >= _tabs.length) return;
+    _tabs[index] = _tabs[index].copyWith(
+      viewMode: viewMode,
+      clearViewMode: viewMode == null,
+    );
+    _saveTabs();
+    notifyListeners();
   }
 
   Future<void> updateTabAccount(int index, String? account) async {

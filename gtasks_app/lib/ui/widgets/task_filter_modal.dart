@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../models/task_tab.dart';
 import '../../providers/task_provider.dart';
 import 'searchable_multiselect_modal.dart';
 import 'searchable_space_picker_modal.dart';
 
 class TaskFilterModal extends StatefulWidget {
-  const TaskFilterModal({super.key});
+  final TaskTab? initialTab;
+  final ValueChanged<TaskTab>? onApplyTab;
+
+  const TaskFilterModal({
+    super.key,
+    this.initialTab,
+    this.onApplyTab,
+  });
 
   @override
   State<TaskFilterModal> createState() => _TaskFilterModalState();
@@ -29,20 +37,21 @@ class _TaskFilterModalState extends State<TaskFilterModal> {
   @override
   void initState() {
     super.initState();
+    final tab = widget.initialTab;
     final p = context.read<TaskProvider>();
-    _status = p.statusFilter;
-    _selectedPriority = p.selectedPriority;
-    _selectedLists = Set.from(p.selectedLists);
-    _selectedTags = Set.from(p.selectedTags);
-    _selectedSpace = p.selectedSpace;
-    _selectedSubspace = p.selectedSubspace;
-    _hiddenLists = Set.from(p.hiddenLists);
-    _hiddenTags = Set.from(p.hiddenTags);
-    _hideRecurring = p.hideRecurring;
-    _sortField = p.sortField;
-    _sortAscending = p.sortAscending;
-    _dateRange = p.dateRange;
-    _dateField = p.dateField;
+    _status = tab?.statusFilter ?? p.statusFilter;
+    _selectedPriority = tab?.selectedPriority ?? p.selectedPriority;
+    _selectedLists = Set.from(tab?.selectedLists ?? p.selectedLists);
+    _selectedTags = Set.from(tab?.selectedTags ?? p.selectedTags);
+    _selectedSpace = tab?.selectedSpace ?? p.selectedSpace;
+    _selectedSubspace = tab?.selectedSubspace ?? p.selectedSubspace;
+    _hiddenLists = Set.from(tab?.hiddenLists ?? p.hiddenLists);
+    _hiddenTags = Set.from(tab?.hiddenTags ?? p.hiddenTags);
+    _hideRecurring = tab?.hideRecurring ?? p.hideRecurring;
+    _sortField = tab?.sortField ?? p.sortField;
+    _sortAscending = tab?.sortAscending ?? p.sortAscending;
+    _dateRange = tab?.dateRange ?? p.dateRange;
+    _dateField = tab?.dateField ?? p.dateField;
   }
 
   Widget _buildMultiSelectCard({
@@ -625,25 +634,50 @@ class _TaskFilterModalState extends State<TaskFilterModal> {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     onPressed: () {
-                      provider.applyFiltersBatch(
-                        statusFilter: _status,
-                        selectedLists: _selectedLists,
-                        selectedTags: _selectedTags,
-                        selectedSpace: _selectedSpace,
-                        selectedSubspace: _selectedSubspace,
-                        clearSpace: _selectedSpace == null,
-                        selectedPriority: _selectedPriority,
-                        clearPriority: _selectedPriority == null,
-                        hiddenLists: _hiddenLists,
-                        hiddenTags: _hiddenTags,
-                        hideRecurring: _hideRecurring,
-                        dateField: _dateField,
-                        dateRange: _dateRange,
-                        clearDateRange: _dateRange == null,
-                        sortField: _sortField,
-                        sortAscending: _sortAscending,
-                      );
-                      Navigator.pop(context);
+                      if (widget.onApplyTab != null) {
+                        final base = widget.initialTab ?? provider.activeTab ?? TaskTab(id: 'mandala', title: 'Mandala');
+                        final updated = base.copyWith(
+                          statusFilter: _status,
+                          selectedLists: _selectedLists,
+                          selectedTags: _selectedTags,
+                          selectedSpace: _selectedSpace,
+                          clearSpace: _selectedSpace == null,
+                          selectedSubspace: _selectedSubspace,
+                          clearSubspace: _selectedSubspace == null,
+                          selectedPriority: _selectedPriority,
+                          clearPriority: _selectedPriority == null,
+                          hiddenLists: _hiddenLists,
+                          hiddenTags: _hiddenTags,
+                          hideRecurring: _hideRecurring,
+                          dateField: _dateField,
+                          dateRange: _dateRange,
+                          clearDateRange: _dateRange == null,
+                          sortField: _sortField,
+                          sortAscending: _sortAscending,
+                        );
+                        widget.onApplyTab!(updated);
+                        Navigator.pop(context);
+                      } else {
+                        provider.applyFiltersBatch(
+                          statusFilter: _status,
+                          selectedLists: _selectedLists,
+                          selectedTags: _selectedTags,
+                          selectedSpace: _selectedSpace,
+                          selectedSubspace: _selectedSubspace,
+                          clearSpace: _selectedSpace == null,
+                          selectedPriority: _selectedPriority,
+                          clearPriority: _selectedPriority == null,
+                          hiddenLists: _hiddenLists,
+                          hiddenTags: _hiddenTags,
+                          hideRecurring: _hideRecurring,
+                          dateField: _dateField,
+                          dateRange: _dateRange,
+                          clearDateRange: _dateRange == null,
+                          sortField: _sortField,
+                          sortAscending: _sortAscending,
+                        );
+                        Navigator.pop(context);
+                      }
                     },
                   ),
                 ),

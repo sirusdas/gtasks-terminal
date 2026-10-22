@@ -71,6 +71,7 @@ class TaskTab {
     if (iconCodePoint != null) {
       return IconData(iconCodePoint!, fontFamily: 'MaterialIcons');
     }
+    if (viewMode == 'mandala') return Icons.hub_outlined;
     if (selectedSpace != null) return Icons.rocket_launch_rounded;
     if (selectedPriority != null && (selectedPriority == 'critical' || selectedPriority == 'high')) {
       return Icons.local_fire_department_rounded;
@@ -83,6 +84,39 @@ class TaskTab {
   }
 
   Color? get accentColor => colorValue != null ? Color(colorValue!) : null;
+
+  bool get hasActiveFilters {
+    return selectedLists.isNotEmpty ||
+        selectedTags.isNotEmpty ||
+        selectedSpace != null ||
+        selectedSubspace != null ||
+        selectedPriority != null ||
+        hiddenLists.isNotEmpty ||
+        hiddenTags.isNotEmpty ||
+        hideRecurring ||
+        dateRange != null ||
+        (selectedAccount != null && selectedAccount != 'all') ||
+        selectedAccounts.isNotEmpty ||
+        statusFilter != 'pending' ||
+        searchQuery.isNotEmpty;
+  }
+
+  int get activeFilterCount {
+    int count = 0;
+    if (selectedLists.isNotEmpty) count += selectedLists.length;
+    if (selectedTags.isNotEmpty) count += selectedTags.length;
+    if (selectedSpace != null) count++;
+    if (selectedSubspace != null) count++;
+    if (selectedPriority != null) count++;
+    if (hiddenLists.isNotEmpty) count += hiddenLists.length;
+    if (hiddenTags.isNotEmpty) count += hiddenTags.length;
+    if (hideRecurring) count++;
+    if (dateRange != null) count++;
+    if (statusFilter != 'pending') count++;
+    if (effectiveAccounts.isNotEmpty) count += effectiveAccounts.length;
+    if (searchQuery.isNotEmpty) count++;
+    return count;
+  }
 
   TaskTab copyWith({
     String? id,
@@ -112,6 +146,7 @@ class TaskTab {
     String? sortField,
     bool? sortAscending,
     String? viewMode,
+    bool clearViewMode = false,
   }) {
     return TaskTab(
       id: id ?? this.id,
@@ -134,11 +169,11 @@ class TaskTab {
       hiddenTags: hiddenTags != null ? Set.from(hiddenTags) : Set.from(this.hiddenTags),
       sortField: sortField ?? this.sortField,
       sortAscending: sortAscending ?? this.sortAscending,
-      viewMode: viewMode ?? this.viewMode,
+      viewMode: clearViewMode ? null : (viewMode ?? this.viewMode),
     );
   }
 
-  int computeTaskCount(List<TaskItem> allTasks) {
+  List<TaskItem> filterTasks(List<TaskItem> allTasks) {
     final now = DateTime.now();
     final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final effAccs = effectiveAccounts;
@@ -151,6 +186,11 @@ class TaskTab {
       }
       if (statusFilter == 'pending' && t.isCompleted) return false;
       if (statusFilter == 'completed' && !t.isCompleted) return false;
+
+      // Exclusions
+      if (hiddenLists.isNotEmpty && t.listTitle != null && hiddenLists.contains(t.listTitle)) return false;
+      if (hiddenTags.isNotEmpty && t.allTags.any((tag) => hiddenTags.contains(tag))) return false;
+      if (hideRecurring && t.isRecurring) return false;
 
       if (selectedSpace != null) {
         if (!t.spaces.containsKey(selectedSpace)) return false;
@@ -196,7 +236,11 @@ class TaskTab {
       }
 
       return true;
-    }).length;
+    }).toList();
+  }
+
+  int computeTaskCount(List<TaskItem> allTasks) {
+    return filterTasks(allTasks).length;
   }
 
   Map<String, dynamic> toJson() {
@@ -270,7 +314,7 @@ class TaskTab {
   }
 
   /// Compact mapping for the native Android Widget
-  Map<String, dynamic> toWidgetJson() {
+  Map<String, dynamic> toWidgetJson({bool isActive = false}) {
     String? filterType;
     String? filterVal;
     if (selectedSpace != null) {
@@ -297,8 +341,19 @@ class TaskTab {
       'title': title,
       'account': selectedAccount,
       'accounts': effectiveAccounts.toList(),
+      'statusFilter': statusFilter,
+      'selectedLists': selectedLists.toList(),
+      'selectedTags': selectedTags.toList(),
+      'selectedSpace': selectedSpace,
+      'selectedSubspace': selectedSubspace,
+      'selectedPriority': selectedPriority,
+      'hiddenLists': hiddenLists.toList(),
+      'hiddenTags': hiddenTags.toList(),
+      'hideRecurring': hideRecurring,
       'filterType': filterType,
       'filterVal': filterVal,
+      'viewMode': viewMode,
+      'isActive': isActive,
     };
   }
 }

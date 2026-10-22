@@ -164,6 +164,7 @@ class _TasksScreenState extends State<TasksScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => MandalaScreen(
+            initialTab: context.read<TaskProvider>().activeTab,
             initialGrouping: grouping,
             initialGeometry: geom,
             initialCustomMandalaId: customMandalaId.isNotEmpty ? customMandalaId : null,
@@ -428,6 +429,21 @@ class _TasksScreenState extends State<TasksScreen> {
                           },
                         ),
                         ListTile(
+                          leading: const Icon(Icons.hub_outlined, color: Colors.purpleAccent),
+                          title: Text(formatTitleWithAccounts('Mandala Radial View')),
+                          subtitle: Text('Sacred radial geometry view for ${getAccountScopeLabel()}'),
+                          dense: true,
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            provider.addNewTab(
+                              title: formatTitleWithAccounts('Mandala'),
+                              accounts: isAllSelected ? null : chosenAccounts,
+                              viewMode: 'mandala',
+                              iconCodePoint: Icons.hub_outlined.codePoint,
+                            );
+                          },
+                        ),
+                        ListTile(
                           leading: const Icon(Icons.copy_rounded, color: Colors.teal),
                           title: const Text('Duplicate Current Tab'),
                           subtitle: const Text('Copy current filters to a new tab'),
@@ -571,6 +587,15 @@ class _TasksScreenState extends State<TasksScreen> {
                   onTap: () {
                     Navigator.pop(ctx);
                     _showRenameTabDialog(context, provider, tabIndex);
+                  },
+                ),
+                ListTile(
+                  leading: Icon(tab.viewMode == 'mandala' ? Icons.list_alt_rounded : Icons.hub_outlined, color: Colors.purpleAccent),
+                  title: Text(tab.viewMode == 'mandala' ? 'Switch to Task List View' : 'Switch to Mandala View'),
+                  subtitle: Text(tab.viewMode == 'mandala' ? 'View as linear task cards' : 'View as sacred radial geometry'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    provider.setTabViewMode(tabIndex, tab.viewMode == 'mandala' ? null : 'mandala');
                   },
                 ),
                 ListTile(
@@ -987,7 +1012,7 @@ class _TasksScreenState extends State<TasksScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => MandalaScreen(
-                    initialTasks: provider.tasks,
+                    initialTab: provider.activeTab,
                   ),
                 ),
               );
@@ -1259,7 +1284,7 @@ class _TasksScreenState extends State<TasksScreen> {
         children: [
           _buildTabBar(context, provider, theme),
           // Compact Micro Active Filters Strip (Saves over 30% vertical screen space)
-          if (provider.hasActiveFilters)
+          if (provider.hasActiveFilters && provider.activeTab?.viewMode != 'mandala')
             Container(
               height: 32,
               decoration: BoxDecoration(
@@ -1349,8 +1374,14 @@ class _TasksScreenState extends State<TasksScreen> {
               ),
             ),
           Expanded(
-            child: provider.isLoading && provider.tasks.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+            child: provider.activeTab?.viewMode == 'mandala'
+                ? MandalaScreen(
+                    key: ValueKey('mandala_tab_${provider.activeTab?.id}'),
+                    initialTab: provider.activeTab,
+                    isEmbedded: true,
+                  )
+                : provider.isLoading && provider.tasks.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
                 : provider.errorMessage != null && provider.tasks.isEmpty
                     ? Center(
                         child: Column(

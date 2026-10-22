@@ -447,6 +447,158 @@ class MandalaWidgetProvider : AppWidgetProvider() {
     }
 
     // --- DATA LOADING LOGIC ---
+    private data class TabFilter(
+        val accounts: Set<String> = emptySet(),
+        val statusFilter: String = "pending",
+        val hideRecurring: Boolean = false,
+        val hiddenLists: Set<String> = emptySet(),
+        val hiddenTags: Set<String> = emptySet(),
+        val selectedLists: Set<String> = emptySet(),
+        val selectedTags: Set<String> = emptySet(),
+        val selectedSpace: String? = null,
+        val selectedSubspace: String? = null,
+        val selectedPriority: String? = null,
+        val isTodayDueOnly: Boolean = false
+    )
+
+    private fun getActiveTabFilter(context: Context): TabFilter {
+        try {
+            val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+            val tabsJson = prefs.getString("tabs_json", null)
+            val activeIndex = prefs.getInt("active_tab_index", 0)
+            if (!tabsJson.isNullOrEmpty()) {
+                val arr = JSONArray(tabsJson)
+                if (arr.length() > 0) {
+                    val idx = if (activeIndex in 0 until arr.length()) activeIndex else 0
+                    val obj = arr.getJSONObject(idx)
+
+                    val accs = mutableSetOf<String>()
+                    val accsArr = obj.optJSONArray("accounts")
+                    if (accsArr != null) {
+                        for (i in 0 until accsArr.length()) {
+                            val a = accsArr.getString(i).trim()
+                            if (a.isNotEmpty() && a != "all") accs.add(a)
+                        }
+                    } else {
+                        val acc = obj.optString("account", "").trim()
+                        if (acc.isNotEmpty() && acc != "all") accs.add(acc)
+                    }
+
+                    val status = obj.optString("statusFilter", "pending")
+                    val hideRec = obj.optBoolean("hideRecurring", false)
+
+                    val hLists = mutableSetOf<String>()
+                    val hlArr = obj.optJSONArray("hiddenLists")
+                    if (hlArr != null) {
+                        for (i in 0 until hlArr.length()) {
+                            val l = hlArr.getString(i).trim()
+                            if (l.isNotEmpty()) hLists.add(l)
+                        }
+                    }
+
+                    val hTags = mutableSetOf<String>()
+                    val htArr = obj.optJSONArray("hiddenTags")
+                    if (htArr != null) {
+                        for (i in 0 until htArr.length()) {
+                            val t = htArr.getString(i).trim()
+                            if (t.isNotEmpty()) hTags.add(t)
+                        }
+                    }
+
+                    val sLists = mutableSetOf<String>()
+                    val slArr = obj.optJSONArray("selectedLists")
+                    if (slArr != null) {
+                        for (i in 0 until slArr.length()) {
+                            val l = slArr.getString(i).trim()
+                            if (l.isNotEmpty()) sLists.add(l)
+                        }
+                    }
+
+                    val sTags = mutableSetOf<String>()
+                    val stArr = obj.optJSONArray("selectedTags")
+                    if (stArr != null) {
+                        for (i in 0 until stArr.length()) {
+                            val t = stArr.getString(i).trim()
+                            if (t.isNotEmpty()) sTags.add(t)
+                        }
+                    }
+
+                    val sp = obj.optString("selectedSpace").ifEmpty { null }
+                    val sub = obj.optString("selectedSubspace").ifEmpty { null }
+                    val prio = obj.optString("selectedPriority").ifEmpty { null }
+                    val filterType = obj.optString("filterType")
+                    val isToday = filterType == "date"
+
+                    return TabFilter(
+                        accounts = accs,
+                        statusFilter = status,
+                        hideRecurring = hideRec,
+                        hiddenLists = hLists,
+                        hiddenTags = hTags,
+                        selectedLists = sLists,
+                        selectedTags = sTags,
+                        selectedSpace = sp,
+                        selectedSubspace = sub,
+                        selectedPriority = prio,
+                        isTodayDueOnly = isToday
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing active tab filter", e)
+        }
+        return TabFilter()
+    }
+
+    private fun applyFilterToQuery(
+        filter: TabFilter,
+        queryBuilder: StringBuilder,
+        args: MutableList<String>,
+        skipPriority: Boolean = false,
+        skipList: Boolean = false
+    ) {
+        if (filter.accounts.isNotEmpty()) {
+            val placeholders = filter.accounts.map { "?" }.joinToString(",")
+            queryBuilder.append(" AND account IN ($placeholders)")
+            args.addAll(filter.accounts)
+        }
+        if (filter.statusFilter == "pending") {
+            queryBuilder.append(" AND status != 'completed'")
+        } else if (filter.statusFilter == "completed") {
+            queryBuilder.append(" AND status = 'completed'")
+        }
+        if (filter.hideRecurring) {
+            queryBuilder.append(" AND (is_recurring = 0 OR is_recurring IS NULL) AND (recurrence_type IS NULL OR recurrence_type = '')")
+        }
+        if (filter.hiddenLists.isNotEmpty()) {
+            val placeholders = filter.hiddenLists.map { "?" }.joinToString(",")
+            queryBuilder.append(" AND (list_title IS NULL OR list_title NOT IN ($placeholders))")
+            args.addAll(filter.hiddenLists)
+        }
+        if (filter.hiddenTags.isNotEmpty()) {
+            for (t in filter.hiddenTags) {
+                queryBuilder.append(" AND (tags IS NULL OR tags NOT LIKE ?)")
+                args.add("%\"$t\"%")
+            }
+        }
+        if (!skipList && filter.selectedLists.isNotEmpty()) {
+            val placeholders = filter.selectedLists.map { "?" }.joinToString(",")
+            queryBuilder.append(" AND list_title IN ($placeholders)")
+            args.addAll(filter.selectedLists)
+        }
+        if (!skipPriority && filter.selectedPriority != null) {
+            if (filter.selectedPriority.equals("high", ignoreCase = true)) {
+                queryBuilder.append(" AND lower(priority) IN ('critical', 'high')")
+            } else {
+                queryBuilder.append(" AND lower(priority) = ?")
+                args.add(filter.selectedPriority.lowercase())
+            }
+        }
+        if (filter.isTodayDueOnly) {
+            queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) <= date('now', 'localtime')")
+        }
+    }
+
     private data class WidgetTask(
         val id: String,
         val title: String,
@@ -481,6 +633,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         }
 
         val allTasks = mutableListOf<WidgetTask>()
+        val activeFilter = getActiveTabFilter(context)
 
         try {
             val dbFile = context.getDatabasePath("gtasks_local.db")
@@ -495,10 +648,10 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                                 rootSegment.contains("low", ignoreCase = true) -> "low"
                                 else -> rootSegment.lowercase()
                             }
-                            val cursor = db.rawQuery(
-                                "SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete' AND lower(priority) = lower(?) ORDER BY id DESC",
-                                arrayOf(prioTarget)
-                            )
+                            val qb = StringBuilder("SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete' AND lower(priority) = lower(?)")
+                            val args = mutableListOf(prioTarget)
+                            applyFilterToQuery(activeFilter, qb, args, skipPriority = true)
+                            val cursor = db.rawQuery(qb.toString(), args.toTypedArray())
                             cursor.use {
                                 while (it.moveToNext()) {
                                     allTasks.add(WidgetTask(
@@ -515,10 +668,10 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                             }
                         }
                         "lists" -> {
-                            val cursor = db.rawQuery(
-                                "SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete' AND lower(trim(list_title)) = lower(trim(?)) ORDER BY id DESC",
-                                arrayOf(rootSegment)
-                            )
+                            val qb = StringBuilder("SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete' AND lower(trim(list_title)) = lower(trim(?))")
+                            val args = mutableListOf(rootSegment)
+                            applyFilterToQuery(activeFilter, qb, args, skipList = true)
+                            val cursor = db.rawQuery(qb.toString(), args.toTypedArray())
                             cursor.use {
                                 while (it.moveToNext()) {
                                     allTasks.add(WidgetTask(
@@ -536,10 +689,10 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                         }
                         "tags" -> {
                             val cleanTag = rootSegment.replace("#", "").trim().lowercase()
-                            val cursor = db.rawQuery(
-                                "SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete' ORDER BY id DESC",
-                                null
-                            )
+                            val qb = StringBuilder("SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete'")
+                            val args = mutableListOf<String>()
+                            applyFilterToQuery(activeFilter, qb, args)
+                            val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                             cursor.use {
                                 while (it.moveToNext()) {
                                     val tagsJson = it.getString(7) ?: ""
@@ -571,10 +724,10 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                             }
                         }
                         else -> { // "spaces", "harada_9x9", "custom", etc.
-                            val cursor = db.rawQuery(
-                                "SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete' ORDER BY id DESC",
-                                null
-                            )
+                            val qb = StringBuilder("SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete'")
+                            val args = mutableListOf<String>()
+                            applyFilterToQuery(activeFilter, qb, args)
+                            val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                             cursor.use {
                                 while (it.moveToNext()) {
                                     val spacesJson = it.getString(6) ?: ""
@@ -615,8 +768,8 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             Log.e(TAG, "Error loading drilled data for $drillPath", e)
         }
 
-        val pendingTasks = allTasks.filter { it.status != "completed" }
-        val completedTasks = allTasks.filter { it.status == "completed" }
+        val pendingTasks = if (activeFilter.statusFilter == "completed") allTasks else allTasks.filter { it.status != "completed" }
+        val completedTasks = if (activeFilter.statusFilter == "pending") emptyList() else allTasks.filter { it.status == "completed" }
         total = pendingTasks.size
         completed = completedTasks.size
 
@@ -822,10 +975,11 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (dbFile.exists()) {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                    val cursor = db.rawQuery(
-                        "SELECT spaces, status FROM tasks WHERE sync_status != 'pending_delete'",
-                        null
-                    )
+                    val filter = getActiveTabFilter(context)
+                    val qb = StringBuilder("SELECT spaces, status FROM tasks WHERE sync_status != 'pending_delete'")
+                    val args = mutableListOf<String>()
+                    applyFilterToQuery(filter, qb, args)
+                    val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                     cursor.use {
                         while (it.moveToNext()) {
                             val spacesJson = it.getString(0) ?: ""
@@ -982,10 +1136,11 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (dbFile.exists()) {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                    val cursor = db.rawQuery(
-                        "SELECT priority, status FROM tasks WHERE sync_status != 'pending_delete'",
-                        null
-                    )
+                    val filter = getActiveTabFilter(context)
+                    val qb = StringBuilder("SELECT priority, status FROM tasks WHERE sync_status != 'pending_delete'")
+                    val args = mutableListOf<String>()
+                    applyFilterToQuery(filter, qb, args, skipPriority = true)
+                    val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                     cursor.use {
                         while (it.moveToNext()) {
                             val prio = it.getString(0)?.lowercase() ?: "medium"
@@ -1035,10 +1190,12 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (dbFile.exists()) {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                    val cursor = db.rawQuery(
-                        "SELECT list_title, status, count(*) FROM tasks WHERE sync_status != 'pending_delete' GROUP BY list_title, status",
-                        null
-                    )
+                    val filter = getActiveTabFilter(context)
+                    val qb = StringBuilder("SELECT list_title, status, count(*) FROM tasks WHERE sync_status != 'pending_delete'")
+                    val args = mutableListOf<String>()
+                    applyFilterToQuery(filter, qb, args, skipList = true)
+                    qb.append(" GROUP BY list_title, status")
+                    val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                     cursor.use {
                         while (it.moveToNext()) {
                             val title = it.getString(0) ?: "Tasks"
@@ -1096,10 +1253,11 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (dbFile.exists()) {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                    val cursor = db.rawQuery(
-                        "SELECT tags, status FROM tasks WHERE sync_status != 'pending_delete'",
-                        null
-                    )
+                    val filter = getActiveTabFilter(context)
+                    val qb = StringBuilder("SELECT tags, status FROM tasks WHERE sync_status != 'pending_delete'")
+                    val args = mutableListOf<String>()
+                    applyFilterToQuery(filter, qb, args)
+                    val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                     cursor.use {
                         while (it.moveToNext()) {
                             val tagsJson = it.getString(0) ?: ""

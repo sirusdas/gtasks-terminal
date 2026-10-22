@@ -79,10 +79,16 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "updateWidget" -> {
                     val tabsJson = call.argument<String>("tabsJson")
+                    val activeTabIndex = call.argument<Int>("activeTabIndex")
+                    val prefs = applicationContext.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                    val editor = prefs.edit()
                     if (!tabsJson.isNullOrEmpty()) {
-                        val prefs = applicationContext.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-                        prefs.edit().putString("tabs_json", tabsJson).apply()
+                        editor.putString("tabs_json", tabsJson)
                     }
+                    if (activeTabIndex != null) {
+                        editor.putInt("active_tab_index", activeTabIndex)
+                    }
+                    editor.apply()
                     GTasksWidgetProvider.updateAllWidgets(applicationContext)
                     MandalaWidgetProvider.updateAllMandalaWidgets(applicationContext)
                     result.success(true)

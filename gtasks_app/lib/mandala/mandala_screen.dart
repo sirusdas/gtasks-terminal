@@ -15,6 +15,8 @@ import 'mandala_path_parser.dart';
 import 'mandala_themes.dart';
 import 'custom_mandala_service.dart';
 import 'custom_mandala_dialog.dart';
+import '../../models/task_tab.dart';
+import '../ui/widgets/task_filter_modal.dart';
 
 class MandalaScreen extends StatefulWidget {
   final List<TaskItem>? initialTasks;
@@ -24,6 +26,8 @@ class MandalaScreen extends StatefulWidget {
   final String? initialCustomMandalaId;
   final String? initialFocusItem;
   final String? initialThemeName;
+  final TaskTab? initialTab;
+  final bool isEmbedded;
 
   const MandalaScreen({
     super.key,
@@ -34,6 +38,8 @@ class MandalaScreen extends StatefulWidget {
     this.initialCustomMandalaId,
     this.initialFocusItem,
     this.initialThemeName,
+    this.initialTab,
+    this.isEmbedded = false,
   });
 
   @override
@@ -46,6 +52,8 @@ class _MandalaScreenState extends State<MandalaScreen> {
   GeometryId? _forcedGeometry;
   String? _currentMandalaId;
   String? _selectedCellId;
+
+  late TaskTab _mandalaTab;
 
   // Custom Mandalas
   List<CustomMandala> _customMandalas = [];
@@ -63,6 +71,10 @@ class _MandalaScreenState extends State<MandalaScreen> {
   @override
   void initState() {
     super.initState();
+    final p = context.read<TaskProvider>();
+    _mandalaTab = (widget.initialTab ?? p.activeTab ?? TaskTab(id: 'mandala', title: widget.title ?? 'Mandala')).copyWith(
+      id: 'mandala_${DateTime.now().millisecondsSinceEpoch}',
+    );
     if (widget.initialGrouping != null) {
       _grouping = widget.initialGrouping!;
     }
@@ -182,11 +194,18 @@ class _MandalaScreenState extends State<MandalaScreen> {
         );
       }
     } else {
-      final tasks = widget.initialTasks ?? context.read<TaskProvider>().tasks;
+      final allTasks = context.read<TaskProvider>().allTasksUnfiltered;
+      final tasks = widget.initialTasks != null && widget.initialTab == null
+          ? widget.initialTasks!
+          : _mandalaTab.filterTasks(allTasks);
+
+      final tabTitle = _mandalaTab.title;
+      final focusTitle = widget.title ?? (tabTitle != 'All Tasks' && tabTitle != 'Tab' && tabTitle != 'Mandala' ? tabTitle : null);
+
       _doc = MandalaAdapter.fromTasks(
         tasks: tasks,
         grouping: _grouping,
-        focusTitle: widget.title,
+        focusTitle: focusTitle,
         forcedGeometry: _forcedGeometry,
         nestingMode: _nestingMode,
       );
@@ -269,7 +288,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
   }
 
   TaskItem? _findTaskForCell(Cell cell) {
-    final tasks = widget.initialTasks ?? context.read<TaskProvider>().tasks;
+    final tasks = context.read<TaskProvider>().allTasksUnfiltered;
     return tasks.cast<TaskItem?>().firstWhere((t) {
       if (t == null) return false;
       if (t.id == cell.nodeId) return true;
@@ -733,7 +752,10 @@ class _MandalaScreenState extends State<MandalaScreen> {
   }
 
   Future<void> _extractPillarFromTasks(Cell cell) async {
-    final tasks = widget.initialTasks ?? context.read<TaskProvider>().tasks;
+    final allTasks = context.read<TaskProvider>().allTasksUnfiltered;
+    final tasks = widget.initialTasks != null && widget.initialTab == null
+        ? widget.initialTasks!
+        : _mandalaTab.filterTasks(allTasks);
     final rawLabel = cell.label?.full ?? cell.id;
     final pillarName = rawLabel.replaceAll(RegExp(r'\s*\(\d+\)$'), '').trim();
 
@@ -781,11 +803,780 @@ class _MandalaScreenState extends State<MandalaScreen> {
     return Colors.cyan;
   }
 
+  void _openFilterModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TaskFilterModal(
+        initialTab: _mandalaTab,
+        onApplyTab: (newTab) {
+          setState(() {
+            _mandalaTab = newTab;
+            _rebuildEngine(targetMandalaId: _currentMandalaId);
+          });
+        },
+      ),
+    );
+  }
+
+  void _openAsBrowserTab() {
+    final provider = context.read<TaskProvider>();
+    final tabTitle = _mandalaTab.title.isNotEmpty && _mandalaTab.title != 'Mandala' && _mandalaTab.title != 'All Tasks'
+        ? '${_mandalaTab.title} (Mandala)'
+        : 'Mandala';
+    final newTab = _mandalaTab.copyWith(
+      id: 'tab_${DateTime.now().millisecondsSinceEpoch}',
+      title: tabTitle,
+      viewMode: 'mandala',
+      iconCodePoint: Icons.hub_outlined.codePoint,
+    );
+    provider.addTab(newTab);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✨ Opened "$tabTitle" as a new tab!'),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'Switch to Tab',
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+            provider.switchToTab(provider.tabs.length - 1);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChipsBar(ThemeData theme) {
+    if (!_mandalaTab.hasActiveFilters) return const SizedBox.shrink();
+
+    return Container(
+      height: 32,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        child: Row(
+          children: [
+            ..._mandalaTab.selectedLists.map((l) => _buildMicroPill(
+                  label: 'List: $l',
+                  icon: Icons.folder,
+                  onDeleted: () {
+                    final next = Set<String>.from(_mandalaTab.selectedLists)..remove(l);
+                    setState(() {
+                      _mandalaTab = _mandalaTab.copyWith(selectedLists: next);
+                      _rebuildEngine(targetMandalaId: _currentMandalaId);
+                    });
+                  },
+                  color: Colors.blueAccent,
+                )),
+            ..._mandalaTab.selectedTags.map((t) => _buildMicroPill(
+                  label: '#$t',
+                  icon: Icons.tag,
+                  onDeleted: () {
+                    final next = Set<String>.from(_mandalaTab.selectedTags)..remove(t);
+                    setState(() {
+                      _mandalaTab = _mandalaTab.copyWith(selectedTags: next);
+                      _rebuildEngine(targetMandalaId: _currentMandalaId);
+                    });
+                  },
+                  color: Colors.teal,
+                )),
+            if (_mandalaTab.selectedSpace != null)
+              _buildMicroPill(
+                label: _mandalaTab.selectedSubspace != null
+                    ? '${_mandalaTab.selectedSpace} › ${_mandalaTab.selectedSubspace}'
+                    : _mandalaTab.selectedSpace!,
+                icon: Icons.rocket_launch,
+                onDeleted: () {
+                  setState(() {
+                    _mandalaTab = _mandalaTab.copyWith(clearSpace: true);
+                    _rebuildEngine(targetMandalaId: _currentMandalaId);
+                  });
+                },
+                color: Colors.deepPurpleAccent,
+              ),
+            if (_mandalaTab.selectedPriority != null)
+              _buildMicroPill(
+                label: 'Priority: ${_mandalaTab.selectedPriority}',
+                icon: Icons.flag,
+                onDeleted: () {
+                  setState(() {
+                    _mandalaTab = _mandalaTab.copyWith(clearPriority: true);
+                    _rebuildEngine(targetMandalaId: _currentMandalaId);
+                  });
+                },
+                color: Colors.deepOrangeAccent,
+              ),
+            if (_mandalaTab.statusFilter != 'pending')
+              _buildMicroPill(
+                label: 'Status: ${_mandalaTab.statusFilter}',
+                icon: Icons.check_circle_outline,
+                onDeleted: () {
+                  setState(() {
+                    _mandalaTab = _mandalaTab.copyWith(statusFilter: 'pending');
+                    _rebuildEngine(targetMandalaId: _currentMandalaId);
+                  });
+                },
+                color: Colors.indigoAccent,
+              ),
+            if (_mandalaTab.hideRecurring)
+              _buildMicroPill(
+                label: 'Hide Recurring',
+                icon: Icons.redo_outlined,
+                onDeleted: () {
+                  setState(() {
+                    _mandalaTab = _mandalaTab.copyWith(hideRecurring: false);
+                    _rebuildEngine(targetMandalaId: _currentMandalaId);
+                  });
+                },
+                color: Colors.orange,
+              ),
+            ..._mandalaTab.hiddenLists.map((hl) => _buildMicroPill(
+                  label: 'Hide: $hl',
+                  icon: Icons.visibility_off,
+                  onDeleted: () {
+                    final next = Set<String>.from(_mandalaTab.hiddenLists)..remove(hl);
+                    setState(() {
+                      _mandalaTab = _mandalaTab.copyWith(hiddenLists: next);
+                      _rebuildEngine(targetMandalaId: _currentMandalaId);
+                    });
+                  },
+                  color: Colors.redAccent,
+                )),
+            ..._mandalaTab.hiddenTags.map((ht) => _buildMicroPill(
+                  label: 'Hide: #$ht',
+                  icon: Icons.visibility_off,
+                  onDeleted: () {
+                    final next = Set<String>.from(_mandalaTab.hiddenTags)..remove(ht);
+                    setState(() {
+                      _mandalaTab = _mandalaTab.copyWith(hiddenTags: next);
+                      _rebuildEngine(targetMandalaId: _currentMandalaId);
+                    });
+                  },
+                  color: Colors.redAccent,
+                )),
+            if (_mandalaTab.dateRange != null)
+              _buildMicroPill(
+                label: '${_mandalaTab.dateField}: ${_mandalaTab.dateRange!.start.month}/${_mandalaTab.dateRange!.start.day} - ${_mandalaTab.dateRange!.end.month}/${_mandalaTab.dateRange!.end.day}',
+                icon: Icons.date_range,
+                onDeleted: () {
+                  setState(() {
+                    _mandalaTab = _mandalaTab.copyWith(clearDateRange: true);
+                    _rebuildEngine(targetMandalaId: _currentMandalaId);
+                  });
+                },
+                color: Colors.indigoAccent,
+              ),
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () {
+                setState(() {
+                  _mandalaTab = _mandalaTab.copyWith(
+                    selectedLists: {},
+                    selectedTags: {},
+                    clearSpace: true,
+                    clearPriority: true,
+                    statusFilter: 'pending',
+                    hideRecurring: false,
+                    hiddenLists: {},
+                    hiddenTags: {},
+                    clearDateRange: true,
+                  );
+                  _rebuildEngine(targetMandalaId: _currentMandalaId);
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  'Clear All',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMicroPill({
+    required String label,
+    required IconData icon,
+    required VoidCallback onDeleted,
+    Color? color,
+  }) {
+    final pillColor = color ?? Colors.blueAccent;
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: pillColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: pillColor.withValues(alpha: 0.35),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: pillColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: pillColor,
+            ),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: onDeleted,
+            child: Icon(Icons.close_rounded, size: 13, color: pillColor),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGroupingButton() {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.filter_vintage_outlined),
+      tooltip: 'Grouping & Custom Mandalas',
+      onSelected: (action) async {
+        if (action == 'new_custom') {
+          final custom = await showDialog<CustomMandala>(
+            context: context,
+            builder: (_) => CustomMandalaDialog(
+              taskProvider: context.read<TaskProvider>(),
+            ),
+          );
+          if (custom != null) {
+            await _loadCustomMandalas();
+            setState(() {
+              _activeCustomMandala = custom;
+              _rebuildEngine();
+            });
+          }
+          return;
+        }
+
+        if (action.startsWith('custom:')) {
+          final id = action.substring(7);
+          final found = _customMandalas.firstWhere((m) => m.id == id);
+          setState(() {
+            _activeCustomMandala = found;
+            _rebuildEngine();
+          });
+          return;
+        }
+
+        // Standard Projections
+        setState(() {
+          _activeCustomMandala = null;
+          if (action == 'spaces') {
+            _grouping = MandalaGrouping.spaces;
+          } else if (action == 'lists') {
+            _grouping = MandalaGrouping.lists;
+          } else if (action == 'tags') {
+            _grouping = MandalaGrouping.tags;
+          } else if (action == 'priorities') {
+            _grouping = MandalaGrouping.priorities;
+          } else if (action == 'mandalachart') {
+            _grouping = MandalaGrouping.mandalachart;
+          }
+          _rebuildEngine();
+        });
+      },
+      itemBuilder: (context) {
+        final List<PopupMenuEntry<String>> items = [
+          const PopupMenuItem(
+            enabled: false,
+            child: Text(
+              'STANDARDS PERSPECTIVES',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ),
+          PopupMenuItem(
+            value: 'spaces',
+            child: Row(
+              children: [
+                const Icon(Icons.folder_copy_outlined, size: 18),
+                const SizedBox(width: 8),
+                const Text('📂 By Spaces & Sub-spaces'),
+                if (_activeCustomMandala == null &&
+                    _grouping == MandalaGrouping.spaces)
+                  const Spacer(),
+                if (_activeCustomMandala == null &&
+                    _grouping == MandalaGrouping.spaces)
+                  const Icon(Icons.check, size: 16),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'lists',
+            child: Row(
+              children: [
+                const Icon(Icons.format_list_bulleted, size: 18),
+                const SizedBox(width: 8),
+                const Text('📋 By Task Lists'),
+                if (_activeCustomMandala == null &&
+                    _grouping == MandalaGrouping.lists)
+                  const Spacer(),
+                if (_activeCustomMandala == null &&
+                    _grouping == MandalaGrouping.lists)
+                  const Icon(Icons.check, size: 16),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'tags',
+            child: Row(
+              children: [
+                const Icon(Icons.label_outline, size: 18),
+                const SizedBox(width: 8),
+                const Text('🏷️ By Tags & Topics'),
+                if (_activeCustomMandala == null &&
+                    _grouping == MandalaGrouping.tags)
+                  const Spacer(),
+                if (_activeCustomMandala == null &&
+                    _grouping == MandalaGrouping.tags)
+                  const Icon(Icons.check, size: 16),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'priorities',
+            child: Row(
+              children: [
+                const Icon(Icons.priority_high, size: 18),
+                const SizedBox(width: 8),
+                const Text('🎯 By Priority Urgency'),
+                if (_activeCustomMandala == null &&
+                    _grouping == MandalaGrouping.priorities)
+                  const Spacer(),
+                if (_activeCustomMandala == null &&
+                    _grouping == MandalaGrouping.priorities)
+                  const Icon(Icons.check, size: 16),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'mandalachart',
+            child: Row(
+              children: [
+                const Icon(Icons.hub_outlined, size: 18),
+                const SizedBox(width: 8),
+                const Text('☸️ 9×9 Goal Mandalachart'),
+                if (_activeCustomMandala == null &&
+                    _grouping == MandalaGrouping.mandalachart)
+                  const Spacer(),
+                if (_activeCustomMandala == null &&
+                    _grouping == MandalaGrouping.mandalachart)
+                  const Icon(Icons.check, size: 16),
+              ],
+            ),
+          ),
+          const PopupMenuDivider(),
+          const PopupMenuItem(
+            enabled: false,
+            child: Text(
+              'MY CUSTOM MANDALAS',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ];
+
+        for (final cm in _customMandalas) {
+          final isCurrent = _activeCustomMandala?.id == cm.id;
+          items.add(
+            PopupMenuItem(
+              value: 'custom:${cm.id}',
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.auto_awesome,
+                    size: 18,
+                    color: Colors.amber,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      cm.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isCurrent) const Icon(Icons.check, size: 16),
+                ],
+              ),
+            ),
+          );
+        }
+
+        items.add(const PopupMenuDivider());
+        items.add(
+          const PopupMenuItem(
+            value: 'new_custom',
+            child: Row(
+              children: [
+                Icon(
+                  Icons.add_circle_outline,
+                  color: Colors.blueAccent,
+                  size: 18,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  '+ Create Custom Mandala',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blueAccent,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        return items;
+      },
+    );
+  }
+
+  Widget _buildNestingButton() {
+    return PopupMenuButton<MandalaNestingMode>(
+      icon: Icon(
+        _nestingMode == MandalaNestingMode.hierarchicalPortals
+            ? Icons.account_tree_outlined
+            : (_nestingMode == MandalaNestingMode.flat
+                  ? Icons.circle_outlined
+                  : Icons.layers_outlined),
+      ),
+      tooltip: 'Nesting Mode',
+      initialValue: _nestingMode,
+      onSelected: (mode) {
+        setState(() {
+          _nestingMode = mode;
+          _rebuildEngine();
+        });
+      },
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: MandalaNestingMode.hierarchicalPortals,
+          child: Text('🌀 Hierarchical Portals (Deep Drill-down)'),
+        ),
+        PopupMenuItem(
+          value: MandalaNestingMode.adaptive,
+          child: Text('🌿 Adaptive Budget (Auto-Portals)'),
+        ),
+        PopupMenuItem(
+          value: MandalaNestingMode.flat,
+          child: Text('🌐 Flat Single Canvas (No Portals)'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGeometryButton() {
+    return PopupMenuButton<GeometryId?>(
+      icon: const Icon(Icons.shape_line_outlined),
+      tooltip: 'Mandala Geometry',
+      initialValue: _forcedGeometry,
+      onSelected: (geom) {
+        setState(() {
+          _forcedGeometry = geom;
+          _rebuildEngine(targetMandalaId: _currentMandalaId);
+        });
+      },
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: null,
+          child: Text('✨ Auto-Suggest Geometry'),
+        ),
+        PopupMenuItem(
+          value: GeometryId.padma,
+          child: Text('🌸 Padma (Lotus)'),
+        ),
+        PopupMenuItem(
+          value: GeometryId.chakra,
+          child: Text('☸️ Chakra (Wheel)'),
+        ),
+        PopupMenuItem(
+          value: GeometryId.bhupura,
+          child: Text('🏛️ Bhupura (Temple Gate)'),
+        ),
+        PopupMenuItem(
+          value: GeometryId.sriyantra,
+          child: Text('🔺 Sri Yantra (43 Triangles)'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildThemeButton() {
+    return PopupMenuButton<MandalaThemePalette>(
+      icon: const Icon(Icons.palette_outlined),
+      tooltip: 'Sacred Color Theme',
+      initialValue: _activeTheme,
+      onSelected: (theme) async {
+        await _setTheme(theme);
+      },
+      itemBuilder: (context) => MandalaThemePalette.allThemes.map((theme) {
+        final isCurrent = theme.id == _activeTheme.id;
+        return PopupMenuItem<MandalaThemePalette>(
+          value: theme,
+          child: Row(
+            children: [
+              Text(theme.icon, style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 8),
+              Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: theme.primary,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.5),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  theme.name,
+                  style: TextStyle(
+                    fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                    color: isCurrent ? theme.primary : null,
+                  ),
+                ),
+              ),
+              if (isCurrent) const Icon(Icons.check, size: 16),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildEmbeddedToolbar(ThemeData theme, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? _activeTheme.cardBg : const Color(0xFFF1F5F9),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.hub_outlined, size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${_layout.title} (${_layout.geometry.name.toUpperCase()} · ${_layout.cells.length})',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Badge(
+            isLabelVisible: _mandalaTab.activeFilterCount > 0,
+            label: Text('${_mandalaTab.activeFilterCount}'),
+            child: IconButton(
+              icon: const Icon(Icons.filter_list, size: 20),
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Mandala Filters',
+              onPressed: _openFilterModal,
+            ),
+          ),
+          _buildGroupingButton(),
+          _buildNestingButton(),
+          _buildGeometryButton(),
+          _buildThemeButton(),
+          IconButton(
+            icon: const Icon(Icons.list_alt_rounded, size: 20),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Switch back to List View',
+            onPressed: () {
+              final p = context.read<TaskProvider>();
+              p.setTabViewMode(p.activeTabIndex, null);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBreadcrumbs(ThemeData theme, bool isDark, List<String> crumbs) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: isDark ? _activeTheme.cardBg : const Color(0xFFF1F5F9),
+      child: SizedBox(
+        height: 32,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: crumbs.length,
+          separatorBuilder: (context, index) => const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Icon(
+              Icons.chevron_right,
+              size: 16,
+              color: Colors.grey,
+            ),
+          ),
+          itemBuilder: (context, index) {
+            final id = crumbs[index];
+            final part = _atlas.mandalas[id];
+            final title = part?.title ?? id;
+            final isCurrent = id == _currentMandalaId;
+
+            return ActionChip(
+              visualDensity: VisualDensity.compact,
+              label: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isCurrent
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                  color: isCurrent
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurface,
+                ),
+              ),
+              onPressed: () => _switchMandala(id),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final List<String> crumbs = _layout.breadcrumb;
+
+    final content = Column(
+      children: [
+        if (widget.isEmbedded)
+          _buildEmbeddedToolbar(theme, isDark),
+        _buildFilterChipsBar(theme),
+        if (crumbs.length > 1)
+          _buildBreadcrumbs(theme, isDark, crumbs),
+
+        // Main Interactive Canvas
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final canvasSize = Size(
+                constraints.maxWidth,
+                constraints.maxHeight,
+              );
+
+              return Stack(
+                children: [
+                  InteractiveViewer(
+                    transformationController: _transformController,
+                    minScale: 0.5,
+                    maxScale: 6.0,
+                    boundaryMargin: const EdgeInsets.all(300),
+                    child: GestureDetector(
+                      onTapUp: (details) => _handleTapUp(details, canvasSize),
+                      child: CustomPaint(
+                        size: canvasSize,
+                        painter: MandalaPainter(
+                          layout: _layout,
+                          selectedCellId: _selectedCellId,
+                          isDark: isDark,
+                          primaryColor: _activeTheme.primary,
+                          palette: _activeTheme,
+                          pathCache: _pathCache,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Reset Zoom Button
+                  Positioned(
+                    bottom: 16,
+                    right: 16,
+                    child: FloatingActionButton.small(
+                      heroTag: 'mandala_reset_zoom',
+                      tooltip: 'Reset Zoom & Center',
+                      backgroundColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFFFFFFF),
+                      child: const Icon(Icons.center_focus_strong, size: 18),
+                      onPressed: () {
+                        _transformController.value = Matrix4.identity();
+                      },
+                    ),
+                  ),
+
+                  // Up Navigation Button if nested
+                  if (crumbs.length > 1)
+                    Positioned(
+                      bottom: 16,
+                      left: 16,
+                      child: FloatingActionButton.extended(
+                        heroTag: 'mandala_up',
+                        icon: const Icon(Icons.arrow_upward, size: 18),
+                        label: const Text('Up Level'),
+                        onPressed: () {
+                          final parentId = _atlas
+                              .mandalas[_currentMandalaId]
+                              ?.parentMandala;
+                          if (parentId != null) _switchMandala(parentId);
+                        },
+                      ),
+                    ),
+
+                  // Custom Mandala Floating Action: Add Petal to Center
+                  if (_activeCustomMandala != null)
+                    Positioned(
+                      top: 16,
+                      right: 16,
+                      child: FilledButton.tonalIcon(
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Add Petal'),
+                        onPressed: () {
+                          _showAddCustomNodeDialog(
+                            parentId: _currentMandalaId ?? 'center_goal',
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+
+    if (widget.isEmbedded) {
+      return Container(
+        color: isDark ? _activeTheme.background : const Color(0xFFF8FAFC),
+        child: content,
+      );
+    }
 
     return Scaffold(
       backgroundColor: isDark
@@ -811,456 +1602,27 @@ class _MandalaScreenState extends State<MandalaScreen> {
           ],
         ),
         actions: [
-          // Perspective & Custom Mandala Selector
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.filter_vintage_outlined),
-            tooltip: 'Grouping & Custom Mandalas',
-            onSelected: (action) async {
-              if (action == 'new_custom') {
-                final custom = await showDialog<CustomMandala>(
-                  context: context,
-                  builder: (_) => CustomMandalaDialog(
-                    taskProvider: context.read<TaskProvider>(),
-                  ),
-                );
-                if (custom != null) {
-                  await _loadCustomMandalas();
-                  setState(() {
-                    _activeCustomMandala = custom;
-                    _rebuildEngine();
-                  });
-                }
-                return;
-              }
-
-              if (action.startsWith('custom:')) {
-                final id = action.substring(7);
-                final found = _customMandalas.firstWhere((m) => m.id == id);
-                setState(() {
-                  _activeCustomMandala = found;
-                  _rebuildEngine();
-                });
-                return;
-              }
-
-              // Standard Projections
-              setState(() {
-                _activeCustomMandala = null;
-                if (action == 'spaces') {
-                  _grouping = MandalaGrouping.spaces;
-                } else if (action == 'lists') {
-                  _grouping = MandalaGrouping.lists;
-                } else if (action == 'tags') {
-                  _grouping = MandalaGrouping.tags;
-                } else if (action == 'priorities') {
-                  _grouping = MandalaGrouping.priorities;
-                } else if (action == 'mandalachart') {
-                  _grouping = MandalaGrouping.mandalachart;
-                }
-                _rebuildEngine();
-              });
-            },
-            itemBuilder: (context) {
-              final List<PopupMenuEntry<String>> items = [
-                const PopupMenuItem(
-                  enabled: false,
-                  child: Text(
-                    'STANDARDS PERSPECTIVES',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'spaces',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.folder_copy_outlined, size: 18),
-                      const SizedBox(width: 8),
-                      const Text('📂 By Spaces & Sub-spaces'),
-                      if (_activeCustomMandala == null &&
-                          _grouping == MandalaGrouping.spaces)
-                        const Spacer(),
-                      if (_activeCustomMandala == null &&
-                          _grouping == MandalaGrouping.spaces)
-                        const Icon(Icons.check, size: 16),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'lists',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.format_list_bulleted, size: 18),
-                      const SizedBox(width: 8),
-                      const Text('📋 By Task Lists'),
-                      if (_activeCustomMandala == null &&
-                          _grouping == MandalaGrouping.lists)
-                        const Spacer(),
-                      if (_activeCustomMandala == null &&
-                          _grouping == MandalaGrouping.lists)
-                        const Icon(Icons.check, size: 16),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'tags',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.label_outline, size: 18),
-                      const SizedBox(width: 8),
-                      const Text('🏷️ By Tags & Topics'),
-                      if (_activeCustomMandala == null &&
-                          _grouping == MandalaGrouping.tags)
-                        const Spacer(),
-                      if (_activeCustomMandala == null &&
-                          _grouping == MandalaGrouping.tags)
-                        const Icon(Icons.check, size: 16),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'priorities',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.priority_high, size: 18),
-                      const SizedBox(width: 8),
-                      const Text('🎯 By Priority Urgency'),
-                      if (_activeCustomMandala == null &&
-                          _grouping == MandalaGrouping.priorities)
-                        const Spacer(),
-                      if (_activeCustomMandala == null &&
-                          _grouping == MandalaGrouping.priorities)
-                        const Icon(Icons.check, size: 16),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'mandalachart',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.hub_outlined, size: 18),
-                      const SizedBox(width: 8),
-                      const Text('☸️ 9×9 Goal Mandalachart'),
-                      if (_activeCustomMandala == null &&
-                          _grouping == MandalaGrouping.mandalachart)
-                        const Spacer(),
-                      if (_activeCustomMandala == null &&
-                          _grouping == MandalaGrouping.mandalachart)
-                        const Icon(Icons.check, size: 16),
-                    ],
-                  ),
-                ),
-                const PopupMenuDivider(),
-                const PopupMenuItem(
-                  enabled: false,
-                  child: Text(
-                    'MY CUSTOM MANDALAS',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ];
-
-              for (final cm in _customMandalas) {
-                final isCurrent = _activeCustomMandala?.id == cm.id;
-                items.add(
-                  PopupMenuItem(
-                    value: 'custom:${cm.id}',
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.auto_awesome,
-                          size: 18,
-                          color: Colors.amber,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            cm.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (isCurrent) const Icon(Icons.check, size: 16),
-                      ],
-                    ),
-                  ),
-                );
-              }
-
-              items.add(const PopupMenuDivider());
-              items.add(
-                const PopupMenuItem(
-                  value: 'new_custom',
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.add_circle_outline,
-                        color: Colors.blueAccent,
-                        size: 18,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        '+ Create Custom Mandala',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-
-              return items;
-            },
-          ),
-
-          // Nesting Mode Toggle
-          PopupMenuButton<MandalaNestingMode>(
-            icon: Icon(
-              _nestingMode == MandalaNestingMode.hierarchicalPortals
-                  ? Icons.account_tree_outlined
-                  : (_nestingMode == MandalaNestingMode.flat
-                        ? Icons.circle_outlined
-                        : Icons.layers_outlined),
+          Badge(
+            isLabelVisible: _mandalaTab.activeFilterCount > 0,
+            label: Text('${_mandalaTab.activeFilterCount}'),
+            child: IconButton(
+              icon: const Icon(Icons.filter_list),
+              tooltip: 'Mandala Filters',
+              onPressed: _openFilterModal,
             ),
-            tooltip: 'Nesting Mode',
-            initialValue: _nestingMode,
-            onSelected: (mode) {
-              setState(() {
-                _nestingMode = mode;
-                _rebuildEngine();
-              });
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: MandalaNestingMode.hierarchicalPortals,
-                child: Text('🌀 Hierarchical Portals (Deep Drill-down)'),
-              ),
-              PopupMenuItem(
-                value: MandalaNestingMode.adaptive,
-                child: Text('🌿 Adaptive Budget (Auto-Portals)'),
-              ),
-              PopupMenuItem(
-                value: MandalaNestingMode.flat,
-                child: Text('🌐 Flat Single Canvas (No Portals)'),
-              ),
-            ],
           ),
-
-          // Geometry Selector
-          PopupMenuButton<GeometryId?>(
-            icon: const Icon(Icons.shape_line_outlined),
-            tooltip: 'Mandala Geometry',
-            initialValue: _forcedGeometry,
-            onSelected: (geom) {
-              setState(() {
-                _forcedGeometry = geom;
-                _rebuildEngine(targetMandalaId: _currentMandalaId);
-              });
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: null,
-                child: Text('✨ Auto-Suggest Geometry'),
-              ),
-              PopupMenuItem(
-                value: GeometryId.padma,
-                child: Text('🌸 Padma (Lotus)'),
-              ),
-              PopupMenuItem(
-                value: GeometryId.chakra,
-                child: Text('☸️ Chakra (Wheel)'),
-              ),
-              PopupMenuItem(
-                value: GeometryId.bhupura,
-                child: Text('🏛️ Bhupura (Temple Gate)'),
-              ),
-              PopupMenuItem(
-                value: GeometryId.sriyantra,
-                child: Text('🔺 Sri Yantra (43 Triangles)'),
-              ),
-            ],
+          IconButton(
+            icon: const Icon(Icons.tab_outlined),
+            tooltip: 'Open as Tab',
+            onPressed: _openAsBrowserTab,
           ),
-
-          // Sacred Color Theme Selector
-          PopupMenuButton<MandalaThemePalette>(
-            icon: const Icon(Icons.palette_outlined),
-            tooltip: 'Sacred Color Theme',
-            initialValue: _activeTheme,
-            onSelected: (theme) async {
-              await _setTheme(theme);
-            },
-            itemBuilder: (context) => MandalaThemePalette.allThemes.map((theme) {
-              final isCurrent = theme.id == _activeTheme.id;
-              return PopupMenuItem<MandalaThemePalette>(
-                value: theme,
-                child: Row(
-                  children: [
-                    Text(theme.icon, style: const TextStyle(fontSize: 16)),
-                    const SizedBox(width: 8),
-                    Container(
-                      width: 14,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: theme.primary,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        theme.name,
-                        style: TextStyle(
-                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                          color: isCurrent ? theme.primary : null,
-                        ),
-                      ),
-                    ),
-                    if (isCurrent) const Icon(Icons.check, size: 16),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
+          _buildGroupingButton(),
+          _buildNestingButton(),
+          _buildGeometryButton(),
+          _buildThemeButton(),
         ],
       ),
-      body: Column(
-        children: [
-          // Breadcrumb Bar
-          if (crumbs.length > 1)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: isDark ? _activeTheme.cardBg : const Color(0xFFF1F5F9),
-              child: SizedBox(
-                height: 32,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: crumbs.length,
-                  separatorBuilder: (context, index) => const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4),
-                    child: Icon(
-                      Icons.chevron_right,
-                      size: 16,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  itemBuilder: (context, index) {
-                    final id = crumbs[index];
-                    final part = _atlas.mandalas[id];
-                    final title = part?.title ?? id;
-                    final isCurrent = id == _currentMandalaId;
-
-                    return ActionChip(
-                      visualDensity: VisualDensity.compact,
-                      label: Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: isCurrent
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          color: isCurrent
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurface,
-                        ),
-                      ),
-                      onPressed: () => _switchMandala(id),
-                    );
-                  },
-                ),
-              ),
-            ),
-
-          // Main Interactive Canvas
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final canvasSize = Size(
-                  constraints.maxWidth,
-                  constraints.maxHeight,
-                );
-
-                return Stack(
-                  children: [
-                    InteractiveViewer(
-                      transformationController: _transformController,
-                      minScale: 0.5,
-                      maxScale: 6.0,
-                      boundaryMargin: const EdgeInsets.all(300),
-                      child: GestureDetector(
-                        onTapUp: (details) => _handleTapUp(details, canvasSize),
-                        child: CustomPaint(
-                          size: canvasSize,
-                          painter: MandalaPainter(
-                            layout: _layout,
-                            selectedCellId: _selectedCellId,
-                            isDark: isDark,
-                            primaryColor: _activeTheme.primary,
-                            palette: _activeTheme,
-                            pathCache: _pathCache,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Reset Zoom Button
-                    Positioned(
-                      bottom: 16,
-                      right: 16,
-                      child: FloatingActionButton.small(
-                        heroTag: 'mandala_reset_zoom',
-                        tooltip: 'Reset Zoom & Center',
-                        backgroundColor: isDark
-                            ? const Color(0xFF1E293B)
-                            : const Color(0xFFFFFFFF),
-                        child: const Icon(Icons.center_focus_strong, size: 18),
-                        onPressed: () {
-                          _transformController.value = Matrix4.identity();
-                        },
-                      ),
-                    ),
-
-                    // Up Navigation Button if nested
-                    if (crumbs.length > 1)
-                      Positioned(
-                        bottom: 16,
-                        left: 16,
-                        child: FloatingActionButton.extended(
-                          heroTag: 'mandala_up',
-                          icon: const Icon(Icons.arrow_upward, size: 18),
-                          label: const Text('Up Level'),
-                          onPressed: () {
-                            final parentId = _atlas
-                                .mandalas[_currentMandalaId]
-                                ?.parentMandala;
-                            if (parentId != null) _switchMandala(parentId);
-                          },
-                        ),
-                      ),
-
-                    // Custom Mandala Floating Action: Add Petal to Center
-                    if (_activeCustomMandala != null)
-                      Positioned(
-                        top: 16,
-                        right: 16,
-                        child: FilledButton.tonalIcon(
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Add Petal'),
-                          onPressed: () {
-                            _showAddCustomNodeDialog(
-                              parentId: _currentMandalaId ?? 'center_goal',
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
-      ),
+      body: content,
     );
   }
 }
