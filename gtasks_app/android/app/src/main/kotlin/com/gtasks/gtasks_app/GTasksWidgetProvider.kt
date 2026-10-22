@@ -504,9 +504,9 @@ class GTasksWidgetProvider : AppWidgetProvider() {
             action = "com.gtasks.gtasks_app.ACTION_OPEN_AI"
             putExtra("open_ai_chat", true)
             putExtra("is_from_widget", true)
-            if (!filterType.isNullOrBlank() && !filterVal.isNullOrBlank()) {
-                putExtra("widget_filter_type", filterType)
-                putExtra("widget_filter_val", filterVal)
+            if (!filter.filterType.isNullOrBlank() && !filter.filterVal.isNullOrBlank()) {
+                putExtra("widget_filter_type", filter.filterType)
+                putExtra("widget_filter_val", filter.filterVal)
             }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }

@@ -1309,21 +1309,6 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             slices = slices
         )
     }
-                        completedCount = 0,
-                        color = 0
-                    )
-                )
-            }
-        }
-
-        return MandalaWidgetRenderer.MandalaRenderData(
-            title = "Top Tags",
-            centerGoal = "Tags",
-            totalCount = total,
-            completedCount = completed,
-            slices = slices
-        )
-    }
 
     private fun loadCustomMandalaData(context: Context): MandalaWidgetRenderer.MandalaRenderData {
         var title = "Custom Mandala"
