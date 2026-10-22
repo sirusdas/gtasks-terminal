@@ -31,6 +31,12 @@ data class WidgetTabFilter(
         private const val TAG = "WidgetTabFilter"
         const val WIDGET_PREFS = "gtasks_widget_prefs"
 
+        private fun JSONObject.optNullableString(name: String): String? {
+            if (this.isNull(name)) return null
+            val v = this.optString(name, "").trim()
+            return if (v.isEmpty() || v.equals("null", ignoreCase = true)) null else v
+        }
+
         fun getActiveTabFilter(
             context: Context,
             appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID,
@@ -59,30 +65,36 @@ data class WidgetTabFilter(
                         }
                         val obj = arr.getJSONObject(tabIndex)
 
-                        val id = obj.optString("id", "tab_$tabIndex")
-                        val title = obj.optString("title", "✦ Tab ${tabIndex + 1}")
+                        val id = obj.optNullableString("id") ?: "tab_$tabIndex"
+                        val title = obj.optNullableString("title") ?: "✦ Tab ${tabIndex + 1}"
 
                         val accs = mutableSetOf<String>()
                         val accsArr = obj.optJSONArray("accounts")
                         if (accsArr != null) {
                             for (i in 0 until accsArr.length()) {
-                                val a = accsArr.getString(i).trim()
-                                if (a.isNotEmpty() && a != "all") accs.add(a)
+                                if (!accsArr.isNull(i)) {
+                                    val a = accsArr.getString(i).trim()
+                                    if (a.isNotEmpty() && a != "all" && !a.equals("null", ignoreCase = true)) {
+                                        accs.add(a)
+                                    }
+                                }
                             }
                         } else {
-                            val acc = obj.optString("account", "").trim()
-                            if (acc.isNotEmpty() && acc != "all") accs.add(acc)
+                            val acc = obj.optNullableString("account")
+                            if (acc != null && acc != "all") accs.add(acc)
                         }
 
-                        val status = widgetStatus ?: obj.optString("statusFilter", "pending")
+                        val status = widgetStatus ?: obj.optNullableString("statusFilter") ?: "pending"
                         val hideRec = obj.optBoolean("hideRecurring", false)
 
                         val hLists = mutableSetOf<String>()
                         val hlArr = obj.optJSONArray("hiddenLists")
                         if (hlArr != null) {
                             for (i in 0 until hlArr.length()) {
-                                val l = hlArr.getString(i).trim()
-                                if (l.isNotEmpty()) hLists.add(l)
+                                if (!hlArr.isNull(i)) {
+                                    val l = hlArr.getString(i).trim()
+                                    if (l.isNotEmpty() && !l.equals("null", ignoreCase = true)) hLists.add(l)
+                                }
                             }
                         }
 
@@ -90,8 +102,10 @@ data class WidgetTabFilter(
                         val htArr = obj.optJSONArray("hiddenTags")
                         if (htArr != null) {
                             for (i in 0 until htArr.length()) {
-                                val t = htArr.getString(i).trim()
-                                if (t.isNotEmpty()) hTags.add(t)
+                                if (!htArr.isNull(i)) {
+                                    val t = htArr.getString(i).trim()
+                                    if (t.isNotEmpty() && !t.equals("null", ignoreCase = true)) hTags.add(t)
+                                }
                             }
                         }
 
@@ -99,8 +113,10 @@ data class WidgetTabFilter(
                         val slArr = obj.optJSONArray("selectedLists")
                         if (slArr != null) {
                             for (i in 0 until slArr.length()) {
-                                val l = slArr.getString(i).trim()
-                                if (l.isNotEmpty()) sLists.add(l)
+                                if (!slArr.isNull(i)) {
+                                    val l = slArr.getString(i).trim()
+                                    if (l.isNotEmpty() && !l.equals("null", ignoreCase = true)) sLists.add(l)
+                                }
                             }
                         }
 
@@ -108,17 +124,19 @@ data class WidgetTabFilter(
                         val stArr = obj.optJSONArray("selectedTags")
                         if (stArr != null) {
                             for (i in 0 until stArr.length()) {
-                                val t = stArr.getString(i).trim()
-                                if (t.isNotEmpty()) sTags.add(t)
+                                if (!stArr.isNull(i)) {
+                                    val t = stArr.getString(i).trim()
+                                    if (t.isNotEmpty() && !t.equals("null", ignoreCase = true)) sTags.add(t)
+                                }
                             }
                         }
 
-                        val sp = obj.optString("selectedSpace").ifEmpty { null }
-                        val sub = obj.optString("selectedSubspace").ifEmpty { null }
-                        val prio = obj.optString("selectedPriority").ifEmpty { null }
-                        val fType = obj.optString("filterType").ifEmpty { null }
-                        val fVal = obj.optString("filterVal").ifEmpty { null }
-                        val sortF = obj.optString("sortField", "priority")
+                        val sp = obj.optNullableString("selectedSpace")
+                        val sub = obj.optNullableString("selectedSubspace")
+                        val prio = obj.optNullableString("selectedPriority")
+                        val fType = obj.optNullableString("filterType")
+                        val fVal = obj.optNullableString("filterVal")
+                        val sortF = obj.optNullableString("sortField") ?: "priority"
                         val sortAsc = obj.optBoolean("sortAscending", true)
 
                         return WidgetTabFilter(
@@ -165,30 +183,36 @@ data class WidgetTabFilter(
                     val arr = JSONArray(tabsJson)
                     for (i in 0 until arr.length()) {
                         val obj = arr.getJSONObject(i)
-                        val id = obj.optString("id", "tab_$i")
-                        val title = obj.optString("title", "✦ Tab ${i + 1}")
+                        val id = obj.optNullableString("id") ?: "tab_$i"
+                        val title = obj.optNullableString("title") ?: "✦ Tab ${i + 1}"
 
                         val accs = mutableSetOf<String>()
                         val accsArr = obj.optJSONArray("accounts")
                         if (accsArr != null) {
                             for (j in 0 until accsArr.length()) {
-                                val a = accsArr.getString(j).trim()
-                                if (a.isNotEmpty() && a != "all") accs.add(a)
+                                if (!accsArr.isNull(j)) {
+                                    val a = accsArr.getString(j).trim()
+                                    if (a.isNotEmpty() && a != "all" && !a.equals("null", ignoreCase = true)) {
+                                        accs.add(a)
+                                    }
+                                }
                             }
                         } else {
-                            val acc = obj.optString("account", "").trim()
-                            if (acc.isNotEmpty() && acc != "all") accs.add(acc)
+                            val acc = obj.optNullableString("account")
+                            if (acc != null && acc != "all") accs.add(acc)
                         }
 
-                        val status = obj.optString("statusFilter", "pending")
+                        val status = obj.optNullableString("statusFilter") ?: "pending"
                         val hideRec = obj.optBoolean("hideRecurring", false)
 
                         val hLists = mutableSetOf<String>()
                         val hlArr = obj.optJSONArray("hiddenLists")
                         if (hlArr != null) {
                             for (j in 0 until hlArr.length()) {
-                                val l = hlArr.getString(j).trim()
-                                if (l.isNotEmpty()) hLists.add(l)
+                                if (!hlArr.isNull(j)) {
+                                    val l = hlArr.getString(j).trim()
+                                    if (l.isNotEmpty() && !l.equals("null", ignoreCase = true)) hLists.add(l)
+                                }
                             }
                         }
 
@@ -196,8 +220,10 @@ data class WidgetTabFilter(
                         val htArr = obj.optJSONArray("hiddenTags")
                         if (htArr != null) {
                             for (j in 0 until htArr.length()) {
-                                val t = htArr.getString(j).trim()
-                                if (t.isNotEmpty()) hTags.add(t)
+                                if (!htArr.isNull(j)) {
+                                    val t = htArr.getString(j).trim()
+                                    if (t.isNotEmpty() && !t.equals("null", ignoreCase = true)) hTags.add(t)
+                                }
                             }
                         }
 
@@ -205,8 +231,10 @@ data class WidgetTabFilter(
                         val slArr = obj.optJSONArray("selectedLists")
                         if (slArr != null) {
                             for (j in 0 until slArr.length()) {
-                                val l = slArr.getString(j).trim()
-                                if (l.isNotEmpty()) sLists.add(l)
+                                if (!slArr.isNull(j)) {
+                                    val l = slArr.getString(j).trim()
+                                    if (l.isNotEmpty() && !l.equals("null", ignoreCase = true)) sLists.add(l)
+                                }
                             }
                         }
 
@@ -214,17 +242,19 @@ data class WidgetTabFilter(
                         val stArr = obj.optJSONArray("selectedTags")
                         if (stArr != null) {
                             for (j in 0 until stArr.length()) {
-                                val t = stArr.getString(j).trim()
-                                if (t.isNotEmpty()) sTags.add(t)
+                                if (!stArr.isNull(j)) {
+                                    val t = stArr.getString(j).trim()
+                                    if (t.isNotEmpty() && !t.equals("null", ignoreCase = true)) sTags.add(t)
+                                }
                             }
                         }
 
-                        val sp = obj.optString("selectedSpace").ifEmpty { null }
-                        val sub = obj.optString("selectedSubspace").ifEmpty { null }
-                        val prio = obj.optString("selectedPriority").ifEmpty { null }
-                        val fType = obj.optString("filterType").ifEmpty { null }
-                        val fVal = obj.optString("filterVal").ifEmpty { null }
-                        val sortF = obj.optString("sortField", "priority")
+                        val sp = obj.optNullableString("selectedSpace")
+                        val sub = obj.optNullableString("selectedSubspace")
+                        val prio = obj.optNullableString("selectedPriority")
+                        val fType = obj.optNullableString("filterType")
+                        val fVal = obj.optNullableString("filterVal")
+                        val sortF = obj.optNullableString("sortField") ?: "priority"
                         val sortAsc = obj.optBoolean("sortAscending", true)
 
                         tabs.add(
@@ -317,7 +347,7 @@ data class WidgetTabFilter(
             }
 
             // Selected priority filter
-            if (!skipPriority && filter.selectedPriority != null) {
+            if (!skipPriority && !filter.selectedPriority.isNullOrBlank() && !filter.selectedPriority.equals("null", ignoreCase = true)) {
                 if (filter.selectedPriority.equals("high", ignoreCase = true)) {
                     queryBuilder.append(" AND lower(priority) IN ('critical', 'high')")
                 } else {
@@ -327,17 +357,18 @@ data class WidgetTabFilter(
             }
 
             // Selected space & subspace filter
-            if (!skipSpace && filter.selectedSpace != null) {
+            if (!skipSpace && !filter.selectedSpace.isNullOrBlank() && !filter.selectedSpace.equals("null", ignoreCase = true)) {
                 queryBuilder.append(" AND spaces LIKE ?")
                 args.add("%\"${filter.selectedSpace}\"%")
-                if (filter.selectedSubspace != null && filter.selectedSubspace.isNotBlank()) {
+                if (!filter.selectedSubspace.isNullOrBlank() && !filter.selectedSubspace.equals("null", ignoreCase = true)) {
                     queryBuilder.append(" AND spaces LIKE ?")
                     args.add("%\"${filter.selectedSubspace}\"%")
                 }
             }
 
             // filterType & filterVal logic (e.g. date / list / tag / space / priority)
-            if (!filter.filterType.isNullOrBlank() && !filter.filterVal.isNullOrBlank()) {
+            if (!filter.filterType.isNullOrBlank() && !filter.filterType.equals("null", ignoreCase = true) &&
+                !filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) {
                 when (filter.filterType) {
                     "date" -> {
                         when (filter.filterVal.lowercase()) {

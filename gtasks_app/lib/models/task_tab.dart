@@ -317,12 +317,12 @@ class TaskTab {
   Map<String, dynamic> toWidgetJson({bool isActive = false}) {
     String? filterType;
     String? filterVal;
-    if (selectedSpace != null) {
+    if (selectedSpace != null && selectedSpace!.isNotEmpty) {
       filterType = 'space';
       filterVal = (selectedSubspace != null && selectedSubspace!.isNotEmpty)
           ? '$selectedSpace › $selectedSubspace'
           : selectedSpace;
-    } else if (selectedPriority != null) {
+    } else if (selectedPriority != null && selectedPriority!.isNotEmpty) {
       filterType = 'priority';
       filterVal = selectedPriority;
     } else if (selectedLists.isNotEmpty) {
@@ -336,26 +336,53 @@ class TaskTab {
       filterVal = 'today';
     }
 
-    return {
+    final data = <String, dynamic>{
       'id': id,
       'title': title,
-      'account': selectedAccount,
-      'accounts': effectiveAccounts.toList(),
       'statusFilter': statusFilter,
-      'selectedLists': selectedLists.toList(),
-      'selectedTags': selectedTags.toList(),
-      'selectedSpace': selectedSpace,
-      'selectedSubspace': selectedSubspace,
-      'selectedPriority': selectedPriority,
-      'hiddenLists': hiddenLists.toList(),
-      'hiddenTags': hiddenTags.toList(),
       'hideRecurring': hideRecurring,
-      'filterType': filterType,
-      'filterVal': filterVal,
       'sortField': sortField,
       'sortAscending': sortAscending,
-      'viewMode': viewMode,
       'isActive': isActive,
     };
+
+    if (selectedAccount != null && selectedAccount!.isNotEmpty) {
+      data['account'] = selectedAccount;
+    }
+    if (effectiveAccounts.isNotEmpty) {
+      data['accounts'] = effectiveAccounts.toList();
+    }
+    if (selectedLists.isNotEmpty) {
+      data['selectedLists'] = selectedLists.toList();
+    }
+    if (selectedTags.isNotEmpty) {
+      data['selectedTags'] = selectedTags.toList();
+    }
+    if (selectedSpace != null && selectedSpace!.isNotEmpty) {
+      data['selectedSpace'] = selectedSpace;
+    }
+    if (selectedSubspace != null && selectedSubspace!.isNotEmpty) {
+      data['selectedSubspace'] = selectedSubspace;
+    }
+    if (selectedPriority != null && selectedPriority!.isNotEmpty) {
+      data['selectedPriority'] = selectedPriority;
+    }
+    if (hiddenLists.isNotEmpty) {
+      data['hiddenLists'] = hiddenLists.toList();
+    }
+    if (hiddenTags.isNotEmpty) {
+      data['hiddenTags'] = hiddenTags.toList();
+    }
+    if (filterType != null && filterType.isNotEmpty) {
+      data['filterType'] = filterType;
+    }
+    if (filterVal != null && filterVal.isNotEmpty) {
+      data['filterVal'] = filterVal;
+    }
+    if (viewMode != null && viewMode!.isNotEmpty) {
+      data['viewMode'] = viewMode;
+    }
+
+    return data;
   }
 }

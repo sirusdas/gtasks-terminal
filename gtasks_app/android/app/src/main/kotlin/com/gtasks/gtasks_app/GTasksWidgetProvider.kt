@@ -59,9 +59,9 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                         val obj = arr.getJSONObject(i)
                         val id = obj.optString("id", "tab_$i")
                         val title = obj.optString("title", "Tab ${i + 1}")
-                        val filterType = obj.optString("filterType").ifEmpty { null }
-                        val filterVal = obj.optString("filterVal").ifEmpty { null }
-                        val account = obj.optString("account").ifEmpty { null }
+                        val filterType = if (obj.isNull("filterType")) null else obj.optString("filterType").trim().let { if (it.isEmpty() || it.equals("null", ignoreCase = true)) null else it }
+                        val filterVal = if (obj.isNull("filterVal")) null else obj.optString("filterVal").trim().let { if (it.isEmpty() || it.equals("null", ignoreCase = true)) null else it }
+                        val account = if (obj.isNull("account")) null else obj.optString("account").trim().let { if (it.isEmpty() || it.equals("null", ignoreCase = true)) null else it }
                         tabs.add(WidgetTab(id, title, filterType, filterVal, account))
                     }
                 }
@@ -275,7 +275,11 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                         val currentIndex = prefs.getInt("tab_index_$appWidgetId", 0)
                         val newIndex = (currentIndex - 1 + tabs.size) % tabs.size
                         val tab = tabs[newIndex]
-                        prefs.edit().putInt("tab_index_$appWidgetId", newIndex).apply()
+                        prefs.edit()
+                            .putInt("tab_index_$appWidgetId", newIndex)
+                            .remove("filter_type_$appWidgetId")
+                            .remove("filter_val_$appWidgetId")
+                            .apply()
                         Toast.makeText(context, "${tab.title} (${newIndex + 1}/${tabs.size})", Toast.LENGTH_SHORT).show()
                         updateAllWidgets(context)
                     }
@@ -288,7 +292,11 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                         val currentIndex = prefs.getInt("tab_index_$appWidgetId", 0)
                         val newIndex = (currentIndex + 1) % tabs.size
                         val tab = tabs[newIndex]
-                        prefs.edit().putInt("tab_index_$appWidgetId", newIndex).apply()
+                        prefs.edit()
+                            .putInt("tab_index_$appWidgetId", newIndex)
+                            .remove("filter_type_$appWidgetId")
+                            .remove("filter_val_$appWidgetId")
+                            .apply()
                         Toast.makeText(context, "${tab.title} (${newIndex + 1}/${tabs.size})", Toast.LENGTH_SHORT).show()
                         updateAllWidgets(context)
                     }
@@ -397,14 +405,20 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         views.setOnClickPendingIntent(R.id.widget_btn_tab_center, openTabPendingIntent)
 
         // Format active filter, exclusions & sort badge pill
-        val filterLabel = when (filter.filterType) {
-            "space" -> "Space: ${filter.filterVal}"
-            "subspace" -> filter.filterVal
-            "tag" -> "#${filter.filterVal}"
-            "list" -> "List: ${filter.filterVal}"
-            "account" -> "@${filter.filterVal}"
-            "date" -> "📅 ${filter.filterVal}"
-            else -> if (filter.selectedSpace != null) "Space: ${filter.selectedSpace}" else null
+        val filterLabel = when (filter.filterType?.lowercase()) {
+            "space" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "Space: ${filter.filterVal}" else null
+            "subspace" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) filter.filterVal else null
+            "tag" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "#${filter.filterVal}" else null
+            "list" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "List: ${filter.filterVal}" else null
+            "account" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "@${filter.filterVal}" else null
+            "date" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "📅 ${filter.filterVal}" else null
+            else -> if (!filter.selectedSpace.isNullOrBlank() && !filter.selectedSpace.equals("null", ignoreCase = true)) {
+                if (!filter.selectedSubspace.isNullOrBlank() && !filter.selectedSubspace.equals("null", ignoreCase = true)) {
+                    "Space: ${filter.selectedSpace} › ${filter.selectedSubspace}"
+                } else {
+                    "Space: ${filter.selectedSpace}"
+                }
+            } else null
         }
         val sortLabel = when (sortBy) {
             "due_asc" -> "Due ↑"
