@@ -352,6 +352,8 @@ class TaskTab {
       'hideRecurring': hideRecurring,
       'filterType': filterType,
       'filterVal': filterVal,
+      'sortField': sortField,
+      'sortAscending': sortAscending,
       'viewMode': viewMode,
       'isActive': isActive,
     };

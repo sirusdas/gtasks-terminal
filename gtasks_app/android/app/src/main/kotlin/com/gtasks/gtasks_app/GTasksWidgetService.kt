@@ -54,27 +54,10 @@ class GTasksRemoteViewsFactory(
             if (!dbFile.exists()) return
 
             val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-            val filterType = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                prefs.getString("filter_type_$appWidgetId", null)
-            } else null
-            val filterVal = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                prefs.getString("filter_val_$appWidgetId", null)
-            } else null
+            val filter = WidgetTabFilter.getActiveTabFilter(context, appWidgetId)
             val sortBy = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                prefs.getString("sort_by_$appWidgetId", "priority")
-            } else "priority"
-            val hideRecurring = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                prefs.getBoolean("hide_recurring_$appWidgetId", false)
-            } else false
-            val hiddenListsJson = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                prefs.getString("hidden_lists_$appWidgetId", null)
-            } else null
-            val hiddenTagsJson = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                prefs.getString("hidden_tags_$appWidgetId", null)
-            } else null
-            val tabAccount = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                prefs.getString("account_$appWidgetId", null)
-            } else null
+                prefs.getString("sort_by_$appWidgetId", filter.sortBy) ?: filter.sortBy
+            } else filter.sortBy
 
             SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
                 val checkCursor = db.rawQuery(
@@ -88,101 +71,11 @@ class GTasksRemoteViewsFactory(
                     """
                     SELECT id, title, description, priority, due, list_title, spaces, tags, account 
                     FROM tasks 
-                    WHERE status != 'completed' AND sync_status != 'pending_delete'
+                    WHERE sync_status != 'pending_delete'
                     """.trimIndent()
                 )
                 val args = mutableListOf<String>()
-
-                if (!tabAccount.isNullOrBlank() && tabAccount != "all") {
-                    queryBuilder.append(" AND account = ?")
-                    args.add(tabAccount)
-                }
-
-                if (!filterType.isNullOrBlank() && !filterVal.isNullOrBlank()) {
-                    when (filterType) {
-                        "list" -> {
-                            queryBuilder.append(" AND list_title = ?")
-                            args.add(filterVal)
-                        }
-                        "account" -> {
-                            queryBuilder.append(" AND account = ?")
-                            args.add(filterVal)
-                        }
-                        "tag" -> {
-                            queryBuilder.append(" AND tags LIKE ?")
-                            args.add("%\"$filterVal\"%")
-                        }
-                        "space" -> {
-                            queryBuilder.append(" AND spaces LIKE ?")
-                            args.add("%\"$filterVal\"%")
-                        }
-                        "subspace" -> {
-                            val parts = filterVal.split(" › ")
-                            if (parts.size >= 2) {
-                                queryBuilder.append(" AND spaces LIKE ? AND spaces LIKE ?")
-                                args.add("%\"${parts[0]}\"%")
-                                args.add("%\"${parts[1]}\"%")
-                            } else {
-                                queryBuilder.append(" AND spaces LIKE ?")
-                                args.add("%\"$filterVal\"%")
-                            }
-                        }
-                        "priority" -> {
-                            if (filterVal.lowercase() == "high") {
-                                queryBuilder.append(" AND priority IN ('critical', 'high')")
-                            } else {
-                                queryBuilder.append(" AND priority = ?")
-                                args.add(filterVal)
-                            }
-                        }
-                        "date" -> {
-                            when (filterVal.lowercase()) {
-                                "today" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) <= date('now', 'localtime')")
-                                "tomorrow" -> queryBuilder.append(" AND substr(due, 1, 10) = date('now', 'localtime', '+1 day')")
-                                "overdue" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) < date('now', 'localtime')")
-                                "next 7 days" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= date('now', 'localtime') AND substr(due, 1, 10) <= date('now', 'localtime', '+7 days')")
-                                "upcoming" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= date('now', 'localtime')")
-                                "no due date" -> queryBuilder.append(" AND (due IS NULL OR due = '')")
-                            }
-                        }
-                    }
-                }
-
-                // Exclusion: Recurring tasks
-                if (hideRecurring) {
-                    queryBuilder.append(" AND (is_recurring = 0 OR is_recurring IS NULL) AND (recurrence_type IS NULL OR recurrence_type = '')")
-                }
-
-                // Exclusion: Hidden lists
-                if (!hiddenListsJson.isNullOrBlank()) {
-                    try {
-                        val arr = JSONArray(hiddenListsJson)
-                        val hiddenLists = mutableListOf<String>()
-                        for (i in 0 until arr.length()) {
-                            val s = arr.getString(i).trim()
-                            if (s.isNotEmpty()) hiddenLists.add(s)
-                        }
-                        if (hiddenLists.isNotEmpty()) {
-                            val placeholders = hiddenLists.map { "?" }.joinToString(",")
-                            queryBuilder.append(" AND (list_title IS NULL OR list_title NOT IN ($placeholders))")
-                            args.addAll(hiddenLists)
-                        }
-                    } catch (_: Exception) {}
-                }
-
-                // Exclusion: Hidden tags
-                if (!hiddenTagsJson.isNullOrBlank()) {
-                    try {
-                        val arr = JSONArray(hiddenTagsJson)
-                        for (i in 0 until arr.length()) {
-                            val t = arr.getString(i).trim()
-                            if (t.isNotEmpty()) {
-                                queryBuilder.append(" AND (tags IS NULL OR tags NOT LIKE ?)")
-                                args.add("%\"$t\"%")
-                            }
-                        }
-                    } catch (_: Exception) {}
-                }
+                WidgetTabFilter.applyFilterToQuery(filter, queryBuilder, args)
 
                 val orderByClause = when (sortBy) {
                     "due_asc" -> """

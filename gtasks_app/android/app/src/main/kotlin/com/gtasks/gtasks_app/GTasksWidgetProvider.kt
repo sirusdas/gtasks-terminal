@@ -149,109 +149,12 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                     val tableExists = checkCursor.use { it.moveToFirst() }
                     if (!tableExists) return 0
 
-                    val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-                    val filterType = prefs.getString("filter_type_$appWidgetId", null)
-                    val filterVal = prefs.getString("filter_val_$appWidgetId", null)
-                    val hideRecurring = prefs.getBoolean("hide_recurring_$appWidgetId", false)
-                    val hiddenListsJson = prefs.getString("hidden_lists_$appWidgetId", null)
-                    val hiddenTagsJson = prefs.getString("hidden_tags_$appWidgetId", null)
-                    val tabAccount = prefs.getString("account_$appWidgetId", null)
-
+                    val filter = WidgetTabFilter.getActiveTabFilter(context, appWidgetId)
                     val queryBuilder = StringBuilder(
-                        "SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete'"
+                        "SELECT COUNT(*) FROM tasks WHERE sync_status != 'pending_delete'"
                     )
                     val args = mutableListOf<String>()
-
-                    if (!tabAccount.isNullOrBlank() && tabAccount != "all") {
-                        queryBuilder.append(" AND account = ?")
-                        args.add(tabAccount)
-                    }
-
-                    if (!filterType.isNullOrBlank() && !filterVal.isNullOrBlank()) {
-                        when (filterType) {
-                            "list" -> {
-                                queryBuilder.append(" AND list_title = ?")
-                                args.add(filterVal)
-                            }
-                            "account" -> {
-                                queryBuilder.append(" AND account = ?")
-                                args.add(filterVal)
-                            }
-                            "tag" -> {
-                                queryBuilder.append(" AND tags LIKE ?")
-                                args.add("%\"$filterVal\"%")
-                            }
-                            "space" -> {
-                                queryBuilder.append(" AND spaces LIKE ?")
-                                args.add("%\"$filterVal\"%")
-                            }
-                            "subspace" -> {
-                                val parts = filterVal.split(" › ")
-                                if (parts.size >= 2) {
-                                    queryBuilder.append(" AND spaces LIKE ? AND spaces LIKE ?")
-                                    args.add("%\"${parts[0]}\"%")
-                                    args.add("%\"${parts[1]}\"%")
-                                } else {
-                                    queryBuilder.append(" AND spaces LIKE ?")
-                                    args.add("%\"$filterVal\"%")
-                                }
-                            }
-                            "priority" -> {
-                                if (filterVal.lowercase() == "high") {
-                                    queryBuilder.append(" AND priority IN ('critical', 'high')")
-                                } else {
-                                    queryBuilder.append(" AND priority = ?")
-                                    args.add(filterVal)
-                                }
-                            }
-                            "date" -> {
-                                when (filterVal.lowercase()) {
-                                    "today" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) <= date('now', 'localtime')")
-                                    "tomorrow" -> queryBuilder.append(" AND substr(due, 1, 10) = date('now', 'localtime', '+1 day')")
-                                    "overdue" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) < date('now', 'localtime')")
-                                    "next 7 days" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= date('now', 'localtime') AND substr(due, 1, 10) <= date('now', 'localtime', '+7 days')")
-                                    "upcoming" -> queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) >= date('now', 'localtime')")
-                                    "no due date" -> queryBuilder.append(" AND (due IS NULL OR due = '')")
-                                }
-                            }
-                        }
-                    }
-
-                    // Exclusion: Recurring tasks
-                    if (hideRecurring) {
-                        queryBuilder.append(" AND (is_recurring = 0 OR is_recurring IS NULL) AND (recurrence_type IS NULL OR recurrence_type = '')")
-                    }
-
-                    // Exclusion: Hidden lists
-                    if (!hiddenListsJson.isNullOrBlank()) {
-                        try {
-                            val arr = JSONArray(hiddenListsJson)
-                            val hiddenLists = mutableListOf<String>()
-                            for (i in 0 until arr.length()) {
-                                val s = arr.getString(i).trim()
-                                if (s.isNotEmpty()) hiddenLists.add(s)
-                            }
-                            if (hiddenLists.isNotEmpty()) {
-                                val placeholders = hiddenLists.map { "?" }.joinToString(",")
-                                queryBuilder.append(" AND (list_title IS NULL OR list_title NOT IN ($placeholders))")
-                                args.addAll(hiddenLists)
-                            }
-                        } catch (_: Exception) {}
-                    }
-
-                    // Exclusion: Hidden tags
-                    if (!hiddenTagsJson.isNullOrBlank()) {
-                        try {
-                            val arr = JSONArray(hiddenTagsJson)
-                            for (i in 0 until arr.length()) {
-                                val t = arr.getString(i).trim()
-                                if (t.isNotEmpty()) {
-                                    queryBuilder.append(" AND (tags IS NULL OR tags NOT LIKE ?)")
-                                    args.add("%\"$t\"%")
-                                }
-                            }
-                        } catch (_: Exception) {}
-                    }
+                    WidgetTabFilter.applyFilterToQuery(filter, queryBuilder, args)
 
                     val cursor = db.rawQuery(queryBuilder.toString(), args.toTypedArray())
                     cursor.use {
@@ -368,25 +271,11 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                     val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                     if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                         val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-                        val tabs = getAvailableTabs(context)
+                        val tabs = WidgetTabFilter.getAvailableTabs(context)
                         val currentIndex = prefs.getInt("tab_index_$appWidgetId", 0)
                         val newIndex = (currentIndex - 1 + tabs.size) % tabs.size
                         val tab = tabs[newIndex]
-                        val editor = prefs.edit().putInt("tab_index_$appWidgetId", newIndex)
-                        if (tab.filterType != null) {
-                            editor.putString("filter_type_$appWidgetId", tab.filterType)
-                            editor.putString("filter_val_$appWidgetId", tab.filterVal)
-                        } else {
-                            editor.remove("filter_type_$appWidgetId")
-                            editor.remove("filter_val_$appWidgetId")
-                        }
-                        if (!tab.account.isNullOrBlank() && tab.account != "all") {
-                            editor.putString("account_$appWidgetId", tab.account)
-                        } else {
-                            editor.remove("account_$appWidgetId")
-                        }
-                        editor.apply()
-
+                        prefs.edit().putInt("tab_index_$appWidgetId", newIndex).apply()
                         Toast.makeText(context, "${tab.title} (${newIndex + 1}/${tabs.size})", Toast.LENGTH_SHORT).show()
                         updateAllWidgets(context)
                     }
@@ -395,25 +284,11 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                     val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                     if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                         val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-                        val tabs = getAvailableTabs(context)
+                        val tabs = WidgetTabFilter.getAvailableTabs(context)
                         val currentIndex = prefs.getInt("tab_index_$appWidgetId", 0)
                         val newIndex = (currentIndex + 1) % tabs.size
                         val tab = tabs[newIndex]
-                        val editor = prefs.edit().putInt("tab_index_$appWidgetId", newIndex)
-                        if (tab.filterType != null) {
-                            editor.putString("filter_type_$appWidgetId", tab.filterType)
-                            editor.putString("filter_val_$appWidgetId", tab.filterVal)
-                        } else {
-                            editor.remove("filter_type_$appWidgetId")
-                            editor.remove("filter_val_$appWidgetId")
-                        }
-                        if (!tab.account.isNullOrBlank() && tab.account != "all") {
-                            editor.putString("account_$appWidgetId", tab.account)
-                        } else {
-                            editor.remove("account_$appWidgetId")
-                        }
-                        editor.apply()
-
+                        prefs.edit().putInt("tab_index_$appWidgetId", newIndex).apply()
                         Toast.makeText(context, "${tab.title} (${newIndex + 1}/${tabs.size})", Toast.LENGTH_SHORT).show()
                         updateAllWidgets(context)
                     }
@@ -454,14 +329,10 @@ class GTasksWidgetProvider : AppWidgetProvider() {
     private fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
         val views = RemoteViews(context.packageName, R.layout.gtasks_widget_layout)
 
-        // Read active filter, sort & exclusions
+        // Read active filter, sort & exclusions via WidgetTabFilter
         val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-        val filterType = prefs.getString("filter_type_$appWidgetId", null)
-        val filterVal = prefs.getString("filter_val_$appWidgetId", null)
-        val sortBy = prefs.getString("sort_by_$appWidgetId", "priority")
-        val hideRecurring = prefs.getBoolean("hide_recurring_$appWidgetId", false)
-        val hiddenListsJson = prefs.getString("hidden_lists_$appWidgetId", null)
-        val hiddenTagsJson = prefs.getString("hidden_tags_$appWidgetId", null)
+        val filter = WidgetTabFilter.getActiveTabFilter(context, appWidgetId)
+        val sortBy = prefs.getString("sort_by_$appWidgetId", filter.sortBy) ?: filter.sortBy
         val viewMode = prefs.getString("view_mode_$appWidgetId", "detailed") ?: "detailed"
 
         val count = getFilteredTaskCount(context, appWidgetId)
@@ -478,22 +349,8 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         // ----------------------------------------------------
         // Tab Navigation Strip (Next & Prev buttons & active tab pill)
         // ----------------------------------------------------
-        val tabs = getAvailableTabs(context)
-        val tabIndexKey = "tab_index_$appWidgetId"
-        var tabIndex = prefs.getInt(tabIndexKey, 0)
-        if (tabIndex < 0 || tabIndex >= tabs.size) {
-            tabIndex = 0
-            prefs.edit().putInt(tabIndexKey, 0).apply()
-        }
-        val currentTab = tabs[tabIndex]
-        if (!currentTab.account.isNullOrBlank() && currentTab.account != "all") {
-            prefs.edit().putString("account_$appWidgetId", currentTab.account).apply()
-        } else if (prefs.contains("account_$appWidgetId")) {
-            prefs.edit().remove("account_$appWidgetId").apply()
-        }
-
-        views.setTextViewText(R.id.widget_tab_title, currentTab.title)
-        views.setTextViewText(R.id.widget_tab_badge, "($count) • ${tabIndex + 1}/${tabs.size}")
+        views.setTextViewText(R.id.widget_tab_title, filter.title)
+        views.setTextViewText(R.id.widget_tab_badge, "($count) • ${filter.tabIndex + 1}/${filter.totalTabs}")
 
         // Prev Tab Button ◀
         val prevTabIntent = Intent(context, GTasksWidgetProvider::class.java).apply {
@@ -524,10 +381,10 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         // Center Tab Pill -> Opens In-App scoped to this Tab
         val openTabIntent = Intent(context, MainActivity::class.java).apply {
             action = ACTION_OPEN_TAB
-            putExtra("open_tab_id", currentTab.id)
-            if (!currentTab.filterType.isNullOrBlank() && !currentTab.filterVal.isNullOrBlank()) {
-                putExtra("tab_filter_type", currentTab.filterType)
-                putExtra("tab_filter_val", currentTab.filterVal)
+            putExtra("open_tab_id", filter.id)
+            if (!filter.filterType.isNullOrBlank() && !filter.filterVal.isNullOrBlank()) {
+                putExtra("tab_filter_type", filter.filterType)
+                putExtra("tab_filter_val", filter.filterVal)
             }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -540,14 +397,14 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         views.setOnClickPendingIntent(R.id.widget_btn_tab_center, openTabPendingIntent)
 
         // Format active filter, exclusions & sort badge pill
-        val filterLabel = when (filterType) {
-            "space" -> "Space: $filterVal"
-            "subspace" -> filterVal
-            "tag" -> "#$filterVal"
-            "list" -> "List: $filterVal"
-            "account" -> "@$filterVal"
-            "date" -> "📅 $filterVal"
-            else -> null
+        val filterLabel = when (filter.filterType) {
+            "space" -> "Space: ${filter.filterVal}"
+            "subspace" -> filter.filterVal
+            "tag" -> "#${filter.filterVal}"
+            "list" -> "List: ${filter.filterVal}"
+            "account" -> "@${filter.filterVal}"
+            "date" -> "📅 ${filter.filterVal}"
+            else -> if (filter.selectedSpace != null) "Space: ${filter.selectedSpace}" else null
         }
         val sortLabel = when (sortBy) {
             "due_asc" -> "Due ↑"
@@ -558,36 +415,16 @@ class GTasksWidgetProvider : AppWidgetProvider() {
             else -> null
         }
 
-        val hiddenLists = mutableListOf<String>()
-        if (!hiddenListsJson.isNullOrBlank()) {
-            try {
-                val arr = JSONArray(hiddenListsJson)
-                for (i in 0 until arr.length()) {
-                    val s = arr.getString(i).trim()
-                    if (s.isNotEmpty()) hiddenLists.add(s)
-                }
-            } catch (_: Exception) {}
-        }
-
-        val hiddenTags = mutableListOf<String>()
-        if (!hiddenTagsJson.isNullOrBlank()) {
-            try {
-                val arr = JSONArray(hiddenTagsJson)
-                for (i in 0 until arr.length()) {
-                    val s = arr.getString(i).trim()
-                    if (s.isNotEmpty()) hiddenTags.add(s)
-                }
-            } catch (_: Exception) {}
-        }
-
         val pillParts = mutableListOf<String>()
         if (!filterLabel.isNullOrBlank()) pillParts.add(filterLabel)
-        if (hideRecurring) pillParts.add("No Recurring")
-        if (hiddenLists.isNotEmpty()) {
-            pillParts.add(if (hiddenLists.size == 1) "Hide: ${hiddenLists[0]}" else "Hide: ${hiddenLists.size} lists")
+        if (filter.hideRecurring) pillParts.add("No Recurring")
+        if (filter.hiddenLists.isNotEmpty()) {
+            val hLists = filter.hiddenLists.toList()
+            pillParts.add(if (hLists.size == 1) "Hide: ${hLists[0]}" else "Hide: ${hLists.size} lists")
         }
-        if (hiddenTags.isNotEmpty()) {
-            pillParts.add(if (hiddenTags.size == 1) "Hide: #${hiddenTags[0]}" else "Hide: ${hiddenTags.size} tags")
+        if (filter.hiddenTags.isNotEmpty()) {
+            val hTags = filter.hiddenTags.toList()
+            pillParts.add(if (hTags.size == 1) "Hide: #${hTags[0]}" else "Hide: ${hTags.size} tags")
         }
         if (!sortLabel.isNullOrBlank()) pillParts.add("Sort: $sortLabel")
         if (viewMode == "compact") pillParts.add("1-Line")

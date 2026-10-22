@@ -228,7 +228,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             ACTION_PREV_TAB -> {
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     val wPrefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-                    val tabs = GTasksWidgetProvider.getAvailableTabs(context)
+                    val tabs = WidgetTabFilter.getAvailableTabs(context)
                     if (tabs.isNotEmpty()) {
                         val currentIndex = wPrefs.getInt("tab_index_$appWidgetId", 0)
                         val newIndex = (currentIndex - 1 + tabs.size) % tabs.size
@@ -245,7 +245,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             ACTION_NEXT_TAB -> {
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     val wPrefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-                    val tabs = GTasksWidgetProvider.getAvailableTabs(context)
+                    val tabs = WidgetTabFilter.getAvailableTabs(context)
                     if (tabs.isNotEmpty()) {
                         val currentIndex = wPrefs.getInt("tab_index_$appWidgetId", 0)
                         val newIndex = (currentIndex + 1) % tabs.size
@@ -314,7 +314,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         }
 
         // Fetch tab filter for this widget
-        val filter = getActiveTabFilter(context, appWidgetId)
+        val filter = WidgetTabFilter.getActiveTabFilter(context, appWidgetId, isMandala = true)
 
         // Bind Tab Bar views
         views.setTextViewText(R.id.mandala_tab_title, filter.title)
@@ -547,194 +547,6 @@ class MandalaWidgetProvider : AppWidgetProvider() {
     }
 
     // --- DATA LOADING LOGIC ---
-    private data class TabFilter(
-        val id: String = "all",
-        val title: String = "✦ All Tasks",
-        val tabIndex: Int = 0,
-        val totalTabs: Int = 1,
-        val accounts: Set<String> = emptySet(),
-        val statusFilter: String = "pending",
-        val hideRecurring: Boolean = false,
-        val hiddenLists: Set<String> = emptySet(),
-        val hiddenTags: Set<String> = emptySet(),
-        val selectedLists: Set<String> = emptySet(),
-        val selectedTags: Set<String> = emptySet(),
-        val selectedSpace: String? = null,
-        val selectedSubspace: String? = null,
-        val selectedPriority: String? = null,
-        val isTodayDueOnly: Boolean = false
-    )
-
-    private fun getActiveTabFilter(context: Context, appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID): TabFilter {
-        try {
-            val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-            val tabsJson = prefs.getString("tabs_json", null)
-            val tabIndexKey = "tab_index_$appWidgetId"
-            val statusOverrideKey = "mandala_status_$appWidgetId"
-            val widgetStatus = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) prefs.getString(statusOverrideKey, null) else null
-
-            if (!tabsJson.isNullOrEmpty()) {
-                val arr = JSONArray(tabsJson)
-                if (arr.length() > 0) {
-                    val defaultActive = prefs.getInt("active_tab_index", 0)
-                    var tabIndex = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                        prefs.getInt(tabIndexKey, defaultActive)
-                    } else {
-                        defaultActive
-                    }
-                    if (tabIndex < 0 || tabIndex >= arr.length()) {
-                        tabIndex = 0
-                    }
-                    val obj = arr.getJSONObject(tabIndex)
-
-                    val id = obj.optString("id", "tab_$tabIndex")
-                    val title = obj.optString("title", "✦ Tab ${tabIndex + 1}")
-
-                    val accs = mutableSetOf<String>()
-                    val accsArr = obj.optJSONArray("accounts")
-                    if (accsArr != null) {
-                        for (i in 0 until accsArr.length()) {
-                            val a = accsArr.getString(i).trim()
-                            if (a.isNotEmpty() && a != "all") accs.add(a)
-                        }
-                    } else {
-                        val acc = obj.optString("account", "").trim()
-                        if (acc.isNotEmpty() && acc != "all") accs.add(acc)
-                    }
-
-                    val status = widgetStatus ?: obj.optString("statusFilter", "pending")
-                    val hideRec = obj.optBoolean("hideRecurring", false)
-
-                    val hLists = mutableSetOf<String>()
-                    val hlArr = obj.optJSONArray("hiddenLists")
-                    if (hlArr != null) {
-                        for (i in 0 until hlArr.length()) {
-                            val l = hlArr.getString(i).trim()
-                            if (l.isNotEmpty()) hLists.add(l)
-                        }
-                    }
-
-                    val hTags = mutableSetOf<String>()
-                    val htArr = obj.optJSONArray("hiddenTags")
-                    if (htArr != null) {
-                        for (i in 0 until htArr.length()) {
-                            val t = htArr.getString(i).trim()
-                            if (t.isNotEmpty()) hTags.add(t)
-                        }
-                    }
-
-                    val sLists = mutableSetOf<String>()
-                    val slArr = obj.optJSONArray("selectedLists")
-                    if (slArr != null) {
-                        for (i in 0 until slArr.length()) {
-                            val l = slArr.getString(i).trim()
-                            if (l.isNotEmpty()) sLists.add(l)
-                        }
-                    }
-
-                    val sTags = mutableSetOf<String>()
-                    val stArr = obj.optJSONArray("selectedTags")
-                    if (stArr != null) {
-                        for (i in 0 until stArr.length()) {
-                            val t = stArr.getString(i).trim()
-                            if (t.isNotEmpty()) sTags.add(t)
-                        }
-                    }
-
-                    val sp = obj.optString("selectedSpace").ifEmpty { null }
-                    val sub = obj.optString("selectedSubspace").ifEmpty { null }
-                    val prio = obj.optString("selectedPriority").ifEmpty { null }
-                    val filterType = obj.optString("filterType")
-                    val isToday = filterType == "date"
-
-                    return TabFilter(
-                        id = id,
-                        title = title,
-                        tabIndex = tabIndex,
-                        totalTabs = arr.length(),
-                        accounts = accs,
-                        statusFilter = status,
-                        hideRecurring = hideRec,
-                        hiddenLists = hLists,
-                        hiddenTags = hTags,
-                        selectedLists = sLists,
-                        selectedTags = sTags,
-                        selectedSpace = sp,
-                        selectedSubspace = sub,
-                        selectedPriority = prio,
-                        isTodayDueOnly = isToday
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing active tab filter", e)
-        }
-        val defaultStatus = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-            context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-                .getString("mandala_status_$appWidgetId", "pending") ?: "pending"
-        } else {
-            "pending"
-        }
-        return TabFilter(statusFilter = defaultStatus)
-    }
-
-    private fun applyFilterToQuery(
-        filter: TabFilter,
-        queryBuilder: StringBuilder,
-        args: MutableList<String>,
-        skipPriority: Boolean = false,
-        skipList: Boolean = false
-    ) {
-        if (filter.accounts.isNotEmpty()) {
-            val placeholders = filter.accounts.map { "?" }.joinToString(",")
-            queryBuilder.append(" AND account IN ($placeholders)")
-            args.addAll(filter.accounts)
-        }
-        if (filter.statusFilter == "pending") {
-            queryBuilder.append(" AND status != 'completed'")
-        } else if (filter.statusFilter == "completed") {
-            queryBuilder.append(" AND status = 'completed'")
-        }
-        if (filter.hideRecurring) {
-            queryBuilder.append(" AND (is_recurring = 0 OR is_recurring IS NULL) AND (recurrence_type IS NULL OR recurrence_type = '')")
-        }
-        if (filter.hiddenLists.isNotEmpty()) {
-            val placeholders = filter.hiddenLists.map { "?" }.joinToString(",")
-            queryBuilder.append(" AND (list_title IS NULL OR list_title NOT IN ($placeholders))")
-            args.addAll(filter.hiddenLists)
-        }
-        if (filter.hiddenTags.isNotEmpty()) {
-            for (t in filter.hiddenTags) {
-                queryBuilder.append(" AND (tags IS NULL OR tags NOT LIKE ?)")
-                args.add("%\"$t\"%")
-            }
-        }
-        if (!skipList && filter.selectedLists.isNotEmpty()) {
-            val placeholders = filter.selectedLists.map { "?" }.joinToString(",")
-            queryBuilder.append(" AND list_title IN ($placeholders)")
-            args.addAll(filter.selectedLists)
-        }
-        if (!skipPriority && filter.selectedPriority != null) {
-            if (filter.selectedPriority.equals("high", ignoreCase = true)) {
-                queryBuilder.append(" AND lower(priority) IN ('critical', 'high')")
-            } else {
-                queryBuilder.append(" AND lower(priority) = ?")
-                args.add(filter.selectedPriority.lowercase())
-            }
-        }
-        if (filter.selectedSpace != null) {
-            queryBuilder.append(" AND spaces LIKE ?")
-            args.add("%\"${filter.selectedSpace}\"%")
-            if (filter.selectedSubspace != null) {
-                queryBuilder.append(" AND spaces LIKE ?")
-                args.add("%\"${filter.selectedSubspace}\"%")
-            }
-        }
-        if (filter.isTodayDueOnly) {
-            queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) <= date('now', 'localtime')")
-        }
-    }
-
     private data class WidgetTask(
         val id: String,
         val title: String,
@@ -769,7 +581,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         }
 
         val allTasks = mutableListOf<WidgetTask>()
-        val activeFilter = getActiveTabFilter(context, appWidgetId)
+        val activeFilter = WidgetTabFilter.getActiveTabFilter(context, appWidgetId, isMandala = true)
 
         try {
             val dbFile = context.getDatabasePath("gtasks_local.db")
@@ -786,7 +598,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                             }
                             val qb = StringBuilder("SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete' AND lower(priority) = lower(?)")
                             val args = mutableListOf(prioTarget)
-                            applyFilterToQuery(activeFilter, qb, args, skipPriority = true)
+                            WidgetTabFilter.applyFilterToQuery(activeFilter, qb, args, skipPriority = true)
                             val cursor = db.rawQuery(qb.toString(), args.toTypedArray())
                             cursor.use {
                                 while (it.moveToNext()) {
@@ -806,7 +618,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                         "lists" -> {
                             val qb = StringBuilder("SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete' AND lower(trim(list_title)) = lower(trim(?))")
                             val args = mutableListOf(rootSegment)
-                            applyFilterToQuery(activeFilter, qb, args, skipList = true)
+                            WidgetTabFilter.applyFilterToQuery(activeFilter, qb, args, skipList = true)
                             val cursor = db.rawQuery(qb.toString(), args.toTypedArray())
                             cursor.use {
                                 while (it.moveToNext()) {
@@ -827,7 +639,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                             val cleanTag = rootSegment.replace("#", "").trim().lowercase()
                             val qb = StringBuilder("SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete'")
                             val args = mutableListOf<String>()
-                            applyFilterToQuery(activeFilter, qb, args)
+                            WidgetTabFilter.applyFilterToQuery(activeFilter, qb, args)
                             val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                             cursor.use {
                                 while (it.moveToNext()) {
@@ -862,7 +674,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                         else -> { // "spaces", "harada_9x9", "custom", etc.
                             val qb = StringBuilder("SELECT id, title, priority, status, due, list_title, spaces, tags FROM tasks WHERE sync_status != 'pending_delete'")
                             val args = mutableListOf<String>()
-                            applyFilterToQuery(activeFilter, qb, args)
+                            WidgetTabFilter.applyFilterToQuery(activeFilter, qb, args, skipSpace = true)
                             val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                             cursor.use {
                                 while (it.moveToNext()) {
@@ -1107,14 +919,15 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         var total = 0
         var completed = 0
 
+        val filter = WidgetTabFilter.getActiveTabFilter(context, appWidgetId, isMandala = true)
+
         try {
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (dbFile.exists()) {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                    val filter = getActiveTabFilter(context, appWidgetId)
                     val qb = StringBuilder("SELECT spaces, status FROM tasks WHERE sync_status != 'pending_delete'")
                     val args = mutableListOf<String>()
-                    applyFilterToQuery(filter, qb, args)
+                    WidgetTabFilter.applyFilterToQuery(filter, qb, args, skipSpace = true)
                     val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                     cursor.use {
                         while (it.moveToNext()) {
@@ -1129,27 +942,34 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                                 else -> !isDone
                             }
 
-                            if (spacesJson.isNotBlank() && spacesJson != "{}" && shouldInclude) {
-                                try {
-                                    val obj = JSONObject(spacesJson)
-                                    val keys = obj.keys()
-                                    while (keys.hasNext()) {
-                                        val space = keys.next().trim()
-                                        if (space.isNotEmpty()) {
-                                            spaceCounts[space] = (spaceCounts[space] ?: 0) + 1
-                                            val subList = spaceMap.getOrPut(space) { mutableListOf() }
-                                            val subs = obj.optJSONArray(space)
-                                            if (subs != null) {
-                                                for (s in 0 until subs.length()) {
-                                                    val subName = subs.getString(s).trim()
-                                                    if (subName.isNotEmpty() && !subList.contains(subName)) {
-                                                        subList.add(subName)
+                            if (shouldInclude) {
+                                var hasAssignedSpace = false
+                                if (spacesJson.isNotBlank() && spacesJson != "{}") {
+                                    try {
+                                        val obj = JSONObject(spacesJson)
+                                        val keys = obj.keys()
+                                        while (keys.hasNext()) {
+                                            val space = keys.next().trim()
+                                            if (space.isNotEmpty()) {
+                                                hasAssignedSpace = true
+                                                spaceCounts[space] = (spaceCounts[space] ?: 0) + 1
+                                                val subList = spaceMap.getOrPut(space) { mutableListOf() }
+                                                val subs = obj.optJSONArray(space)
+                                                if (subs != null) {
+                                                    for (s in 0 until subs.length()) {
+                                                        val subName = subs.getString(s).trim()
+                                                        if (subName.isNotEmpty() && !subList.contains(subName)) {
+                                                            subList.add(subName)
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
-                                    }
-                                } catch (e: Exception) {}
+                                    } catch (e: Exception) {}
+                                }
+                                if (!hasAssignedSpace) {
+                                    spaceCounts["General"] = (spaceCounts["General"] ?: 0) + 1
+                                }
                             }
                         }
                     }
@@ -1159,16 +979,22 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             Log.e(TAG, "Error loading spaces data", e)
         }
 
-        // If no spaces found yet, provide starter spaces
         val slices = mutableListOf<MandalaWidgetRenderer.MandalaSlice>()
         if (spaceCounts.isEmpty()) {
-            val defaultSpaces = listOf("Work", "Personal", "Health", "Projects", "Finance")
-            defaultSpaces.forEachIndexed { idx, name ->
+            if (total == 0) {
+                slices.add(MandalaWidgetRenderer.MandalaSlice("space_empty", "No Tasks 🎉", 0, 0, Color.parseColor("#64748B")))
+            } else {
+                slices.add(MandalaWidgetRenderer.MandalaSlice("space_general", "General", total, 0, 0))
+            }
+        } else if (spaceCounts.size == 1 && (spaceMap[spaceCounts.keys.first()]?.isNotEmpty() == true)) {
+            val singleSpace = spaceCounts.keys.first()
+            val subs = spaceMap[singleSpace] ?: emptyList()
+            subs.forEachIndexed { idx, subName ->
                 slices.add(
                     MandalaWidgetRenderer.MandalaSlice(
-                        id = "space_$idx",
-                        label = name,
-                        count = 0,
+                        id = "sub_$idx",
+                        label = subName,
+                        count = 1,
                         completedCount = 0,
                         color = 0,
                         subLabels = emptyList()
@@ -1192,7 +1018,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
 
         return MandalaWidgetRenderer.MandalaRenderData(
             title = "Spaces & Subspaces",
-            centerGoal = "Focus",
+            centerGoal = if (filter.title.isNotBlank()) filter.title else "Focus",
             totalCount = total,
             completedCount = completed,
             slices = slices
@@ -1274,14 +1100,15 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         var total = 0
         var completed = 0
 
+        val filter = WidgetTabFilter.getActiveTabFilter(context, appWidgetId, isMandala = true)
+
         try {
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (dbFile.exists()) {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                    val filter = getActiveTabFilter(context, appWidgetId)
                     val qb = StringBuilder("SELECT priority, status FROM tasks WHERE sync_status != 'pending_delete'")
                     val args = mutableListOf<String>()
-                    applyFilterToQuery(filter, qb, args, skipPriority = true)
+                    WidgetTabFilter.applyFilterToQuery(filter, qb, args, skipPriority = true)
                     val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                     cursor.use {
                         while (it.moveToNext()) {
@@ -1300,7 +1127,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                                 when (prio) {
                                     "critical" -> pCritical++
                                     "high" -> pHigh++
-                                    "medium" -> pMed++
+                                    "medium", "normal" -> pMed++
                                     "low" -> pLow++
                                     else -> pMed++
                                 }
@@ -1322,7 +1149,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
 
         return MandalaWidgetRenderer.MandalaRenderData(
             title = "Priority Urgency Rings",
-            centerGoal = "Focus",
+            centerGoal = if (filter.title.isNotBlank()) filter.title else "Focus",
             totalCount = total,
             completedCount = completed,
             slices = slices
@@ -1334,19 +1161,21 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         var total = 0
         var completed = 0
 
+        val filter = WidgetTabFilter.getActiveTabFilter(context, appWidgetId, isMandala = true)
+
         try {
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (dbFile.exists()) {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                    val filter = getActiveTabFilter(context, appWidgetId)
                     val qb = StringBuilder("SELECT list_title, status, count(*) FROM tasks WHERE sync_status != 'pending_delete'")
                     val args = mutableListOf<String>()
-                    applyFilterToQuery(filter, qb, args, skipList = true)
+                    WidgetTabFilter.applyFilterToQuery(filter, qb, args, skipList = true)
                     qb.append(" GROUP BY list_title, status")
                     val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                     cursor.use {
                         while (it.moveToNext()) {
-                            val title = it.getString(0) ?: "Tasks"
+                            val rawTitle = it.getString(0)
+                            val title = if (rawTitle.isNullOrBlank()) "Tasks" else rawTitle.trim()
                             val status = it.getString(1) ?: "pending"
                             val count = it.getInt(2)
                             val isDone = (status == "completed")
@@ -1371,10 +1200,11 @@ class MandalaWidgetProvider : AppWidgetProvider() {
 
         val slices = mutableListOf<MandalaWidgetRenderer.MandalaSlice>()
         if (listCounts.isEmpty()) {
-            slices.add(MandalaWidgetRenderer.MandalaSlice("l_0", "My Tasks", 0, 0, 0))
-            slices.add(MandalaWidgetRenderer.MandalaSlice("l_1", "Work", 0, 0, 0))
-            slices.add(MandalaWidgetRenderer.MandalaSlice("l_2", "Personal", 0, 0, 0))
-            slices.add(MandalaWidgetRenderer.MandalaSlice("l_3", "Projects", 0, 0, 0))
+            if (total == 0) {
+                slices.add(MandalaWidgetRenderer.MandalaSlice("l_empty", "No Tasks 🎉", 0, 0, Color.parseColor("#64748B")))
+            } else {
+                slices.add(MandalaWidgetRenderer.MandalaSlice("l_0", "My Tasks", total, 0, 0))
+            }
         } else {
             listCounts.entries.forEachIndexed { idx, entry ->
                 slices.add(
@@ -1391,7 +1221,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
 
         return MandalaWidgetRenderer.MandalaRenderData(
             title = "Task Lists",
-            centerGoal = "Lists",
+            centerGoal = if (filter.title.isNotBlank()) filter.title else "Lists",
             totalCount = total,
             completedCount = completed,
             slices = slices
@@ -1403,14 +1233,15 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         var total = 0
         var completed = 0
 
+        val filter = WidgetTabFilter.getActiveTabFilter(context, appWidgetId, isMandala = true)
+
         try {
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (dbFile.exists()) {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                    val filter = getActiveTabFilter(context, appWidgetId)
                     val qb = StringBuilder("SELECT tags, status FROM tasks WHERE sync_status != 'pending_delete'")
                     val args = mutableListOf<String>()
-                    applyFilterToQuery(filter, qb, args)
+                    WidgetTabFilter.applyFilterToQuery(filter, qb, args)
                     val cursor = db.rawQuery(qb.toString(), if (args.isNotEmpty()) args.toTypedArray() else null)
                     cursor.use {
                         while (it.moveToNext()) {
@@ -1425,16 +1256,21 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                                 else -> !isDone
                             }
 
+                            var hasTag = false
                             if (shouldInclude && tagsJson.isNotBlank() && tagsJson != "[]") {
                                 try {
                                     val arr = JSONArray(tagsJson)
                                     for (i in 0 until arr.length()) {
                                         val t = arr.getString(i).trim()
                                         if (t.isNotEmpty()) {
+                                            hasTag = true
                                             tagCounts[t] = (tagCounts[t] ?: 0) + 1
                                         }
                                     }
                                 } catch (e: Exception) {}
+                            }
+                            if (shouldInclude && !hasTag) {
+                                tagCounts["Untagged"] = (tagCounts["Untagged"] ?: 0) + 1
                             }
                         }
                     }
@@ -1446,8 +1282,10 @@ class MandalaWidgetProvider : AppWidgetProvider() {
 
         val slices = mutableListOf<MandalaWidgetRenderer.MandalaSlice>()
         if (tagCounts.isEmpty()) {
-            listOf("Urgent", "Followup", "Ideas", "Review").forEachIndexed { idx, tag ->
-                slices.add(MandalaWidgetRenderer.MandalaSlice("t_$idx", "#$tag", 0, 0, 0))
+            if (total == 0) {
+                slices.add(MandalaWidgetRenderer.MandalaSlice("t_empty", "No Tasks 🎉", 0, 0, Color.parseColor("#64748B")))
+            } else {
+                slices.add(MandalaWidgetRenderer.MandalaSlice("t_0", "#Untagged", total, 0, 0))
             }
         } else {
             tagCounts.entries.sortedByDescending { it.value }.take(8).forEachIndexed { idx, entry ->
@@ -1456,6 +1294,21 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                         id = "t_$idx",
                         label = "#${entry.key}",
                         count = entry.value,
+                        completedCount = 0,
+                        color = 0
+                    )
+                )
+            }
+        }
+
+        return MandalaWidgetRenderer.MandalaRenderData(
+            title = "Top Tags",
+            centerGoal = if (filter.title.isNotBlank()) filter.title else "Tags",
+            totalCount = total,
+            completedCount = completed,
+            slices = slices
+        )
+    }
                         completedCount = 0,
                         color = 0
                     )
