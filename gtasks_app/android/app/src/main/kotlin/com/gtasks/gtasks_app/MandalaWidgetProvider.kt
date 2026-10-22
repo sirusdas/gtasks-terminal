@@ -35,6 +35,9 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         const val ACTION_DRILL_UP = "com.gtasks.gtasks_app.mandala.ACTION_DRILL_UP"
         const val ACTION_CANVAS_CLICK = "com.gtasks.gtasks_app.mandala.ACTION_CANVAS_CLICK"
         const val ACTION_OPEN_MANDALA = "com.gtasks.gtasks_app.ACTION_OPEN_MANDALA"
+        const val ACTION_PREV_TAB = "com.gtasks.gtasks_app.mandala.ACTION_PREV_TAB"
+        const val ACTION_NEXT_TAB = "com.gtasks.gtasks_app.mandala.ACTION_NEXT_TAB"
+        const val ACTION_TOGGLE_STATUS = "com.gtasks.gtasks_app.mandala.ACTION_TOGGLE_STATUS"
 
         val MODES = listOf("spaces", "harada_9x9", "priorities", "lists", "tags", "custom")
         val GEOMETRIES = listOf(
@@ -111,9 +114,9 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                     val drillPath = prefs.getString("drill_path_$appWidgetId", null) ?: prefs.getString("drill_parent_$appWidgetId", null)
                     val focusIndex = prefs.getInt("focus_$appWidgetId", -1)
                     val data = if (!drillPath.isNullOrEmpty()) {
-                        loadDrilledData(context, modeStr, drillPath)
+                        loadDrilledData(context, modeStr, drillPath, appWidgetId)
                     } else {
-                        loadMandalaData(context, modeStr)
+                        loadMandalaData(context, modeStr, appWidgetId)
                     }
                     if (focusIndex in data.slices.indices) {
                         val target = data.slices[focusIndex]
@@ -156,9 +159,9 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                     val modeStr = prefs.getString("mode_$appWidgetId", "spaces") ?: "spaces"
                     val focusIndex = prefs.getInt("focus_$appWidgetId", -1)
                     val data = if (!drillPath.isNullOrEmpty()) {
-                        loadDrilledData(context, modeStr, drillPath)
+                        loadDrilledData(context, modeStr, drillPath, appWidgetId)
                     } else {
-                        loadMandalaData(context, modeStr)
+                        loadMandalaData(context, modeStr, appWidgetId)
                     }
 
                     if (focusIndex in data.slices.indices) {
@@ -222,6 +225,58 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                     updateWidgetById(context, appWidgetId)
                 }
             }
+            ACTION_PREV_TAB -> {
+                if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    val wPrefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                    val tabs = GTasksWidgetProvider.getAvailableTabs(context)
+                    if (tabs.isNotEmpty()) {
+                        val currentIndex = wPrefs.getInt("tab_index_$appWidgetId", 0)
+                        val newIndex = (currentIndex - 1 + tabs.size) % tabs.size
+                        wPrefs.edit().putInt("tab_index_$appWidgetId", newIndex).apply()
+                        prefs.edit()
+                            .remove("drill_path_$appWidgetId")
+                            .remove("drill_parent_$appWidgetId")
+                            .putInt("focus_$appWidgetId", -1)
+                            .apply()
+                        updateWidgetById(context, appWidgetId)
+                    }
+                }
+            }
+            ACTION_NEXT_TAB -> {
+                if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    val wPrefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                    val tabs = GTasksWidgetProvider.getAvailableTabs(context)
+                    if (tabs.isNotEmpty()) {
+                        val currentIndex = wPrefs.getInt("tab_index_$appWidgetId", 0)
+                        val newIndex = (currentIndex + 1) % tabs.size
+                        wPrefs.edit().putInt("tab_index_$appWidgetId", newIndex).apply()
+                        prefs.edit()
+                            .remove("drill_path_$appWidgetId")
+                            .remove("drill_parent_$appWidgetId")
+                            .putInt("focus_$appWidgetId", -1)
+                            .apply()
+                        updateWidgetById(context, appWidgetId)
+                    }
+                }
+            }
+            ACTION_TOGGLE_STATUS -> {
+                if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    val wPrefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                    val cur = wPrefs.getString("mandala_status_$appWidgetId", "pending") ?: "pending"
+                    val next = when (cur) {
+                        "pending" -> "completed"
+                        "completed" -> "all"
+                        else -> "pending"
+                    }
+                    wPrefs.edit().putString("mandala_status_$appWidgetId", next).apply()
+                    prefs.edit()
+                        .remove("drill_path_$appWidgetId")
+                        .remove("drill_parent_$appWidgetId")
+                        .putInt("focus_$appWidgetId", -1)
+                        .apply()
+                    updateWidgetById(context, appWidgetId)
+                }
+            }
             ACTION_REFRESH_MANDALA, AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     updateWidgetById(context, appWidgetId)
@@ -258,15 +313,59 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             THEMES[0]
         }
 
+        // Fetch tab filter for this widget
+        val filter = getActiveTabFilter(context, appWidgetId)
+
+        // Bind Tab Bar views
+        views.setTextViewText(R.id.mandala_tab_title, filter.title)
+        views.setTextViewText(R.id.mandala_tab_badge, "(${filter.tabIndex + 1}/${filter.totalTabs})")
+
+        // Status icon indicator
+        when (filter.statusFilter) {
+            "completed" -> views.setImageViewResource(R.id.mandala_btn_status, R.drawable.ic_widget_checked)
+            "all" -> views.setImageViewResource(R.id.mandala_btn_status, R.drawable.ic_widget_check_circle)
+            else -> views.setImageViewResource(R.id.mandala_btn_status, R.drawable.ic_widget_unchecked)
+        }
+
+        // Setup Tab navigation intents
+        views.setOnClickPendingIntent(
+            R.id.mandala_btn_tab_prev,
+            createBroadcastPendingIntent(context, ACTION_PREV_TAB, appWidgetId, 21)
+        )
+        views.setOnClickPendingIntent(
+            R.id.mandala_btn_tab_next,
+            createBroadcastPendingIntent(context, ACTION_NEXT_TAB, appWidgetId, 22)
+        )
+
+        // Center Tab Pill -> Opens In-App scoped to this Tab
+        val openTabIntent = Intent(context, MainActivity::class.java).apply {
+            action = GTasksWidgetProvider.ACTION_OPEN_TAB
+            putExtra("open_tab_id", filter.id)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val openTabPendingIntent = PendingIntent.getActivity(
+            context,
+            appWidgetId * 100 + 23,
+            openTabIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.mandala_btn_tab_center, openTabPendingIntent)
+
+        // Status Toggle intent
+        views.setOnClickPendingIntent(
+            R.id.mandala_btn_status,
+            createBroadcastPendingIntent(context, ACTION_TOGGLE_STATUS, appWidgetId, 24)
+        )
+
         // Check if widget is drilled down into a sub-mandala
         val drillPath = prefs.getString("drill_path_$appWidgetId", null) ?: prefs.getString("drill_parent_$appWidgetId", null)
         val pathSegments = drillPath?.split("||")?.filter { it.isNotBlank() } ?: emptyList()
 
         // Fetch data
         val data = if (pathSegments.isNotEmpty()) {
-            loadDrilledData(context, modeStr, drillPath!!)
+            loadDrilledData(context, modeStr, drillPath!!, appWidgetId)
         } else {
-            loadMandalaData(context, modeStr)
+            loadMandalaData(context, modeStr, appWidgetId)
         }
 
         // Validate focusIndex
@@ -405,6 +504,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             putExtra("mandala_mode", modeStr)
             putExtra("mandala_geometry", geometry.name)
             putExtra("mandala_theme", theme.name)
+            putExtra("open_tab_id", filter.id)
             val targetFocus = if (pathSegments.isNotEmpty()) {
                 cleanSegment(pathSegments.last())
             } else if (focusedSlice != null) {
@@ -448,6 +548,10 @@ class MandalaWidgetProvider : AppWidgetProvider() {
 
     // --- DATA LOADING LOGIC ---
     private data class TabFilter(
+        val id: String = "all",
+        val title: String = "✦ All Tasks",
+        val tabIndex: Int = 0,
+        val totalTabs: Int = 1,
         val accounts: Set<String> = emptySet(),
         val statusFilter: String = "pending",
         val hideRecurring: Boolean = false,
@@ -461,16 +565,30 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         val isTodayDueOnly: Boolean = false
     )
 
-    private fun getActiveTabFilter(context: Context): TabFilter {
+    private fun getActiveTabFilter(context: Context, appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID): TabFilter {
         try {
             val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
             val tabsJson = prefs.getString("tabs_json", null)
-            val activeIndex = prefs.getInt("active_tab_index", 0)
+            val tabIndexKey = "tab_index_$appWidgetId"
+            val statusOverrideKey = "mandala_status_$appWidgetId"
+            val widgetStatus = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) prefs.getString(statusOverrideKey, null) else null
+
             if (!tabsJson.isNullOrEmpty()) {
                 val arr = JSONArray(tabsJson)
                 if (arr.length() > 0) {
-                    val idx = if (activeIndex in 0 until arr.length()) activeIndex else 0
-                    val obj = arr.getJSONObject(idx)
+                    val defaultActive = prefs.getInt("active_tab_index", 0)
+                    var tabIndex = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                        prefs.getInt(tabIndexKey, defaultActive)
+                    } else {
+                        defaultActive
+                    }
+                    if (tabIndex < 0 || tabIndex >= arr.length()) {
+                        tabIndex = 0
+                    }
+                    val obj = arr.getJSONObject(tabIndex)
+
+                    val id = obj.optString("id", "tab_$tabIndex")
+                    val title = obj.optString("title", "✦ Tab ${tabIndex + 1}")
 
                     val accs = mutableSetOf<String>()
                     val accsArr = obj.optJSONArray("accounts")
@@ -484,7 +602,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                         if (acc.isNotEmpty() && acc != "all") accs.add(acc)
                     }
 
-                    val status = obj.optString("statusFilter", "pending")
+                    val status = widgetStatus ?: obj.optString("statusFilter", "pending")
                     val hideRec = obj.optBoolean("hideRecurring", false)
 
                     val hLists = mutableSetOf<String>()
@@ -530,6 +648,10 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                     val isToday = filterType == "date"
 
                     return TabFilter(
+                        id = id,
+                        title = title,
+                        tabIndex = tabIndex,
+                        totalTabs = arr.length(),
                         accounts = accs,
                         statusFilter = status,
                         hideRecurring = hideRec,
@@ -547,7 +669,13 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing active tab filter", e)
         }
-        return TabFilter()
+        val defaultStatus = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+            context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+                .getString("mandala_status_$appWidgetId", "pending") ?: "pending"
+        } else {
+            "pending"
+        }
+        return TabFilter(statusFilter = defaultStatus)
     }
 
     private fun applyFilterToQuery(
@@ -594,6 +722,14 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                 args.add(filter.selectedPriority.lowercase())
             }
         }
+        if (filter.selectedSpace != null) {
+            queryBuilder.append(" AND spaces LIKE ?")
+            args.add("%\"${filter.selectedSpace}\"%")
+            if (filter.selectedSubspace != null) {
+                queryBuilder.append(" AND spaces LIKE ?")
+                args.add("%\"${filter.selectedSubspace}\"%")
+            }
+        }
         if (filter.isTodayDueOnly) {
             queryBuilder.append(" AND due IS NOT NULL AND due != '' AND substr(due, 1, 10) <= date('now', 'localtime')")
         }
@@ -610,13 +746,13 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         val tagsJson: String?
     )
 
-    private fun loadDrilledData(context: Context, mode: String, drillPath: String): MandalaWidgetRenderer.MandalaRenderData {
+    private fun loadDrilledData(context: Context, mode: String, drillPath: String, appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID): MandalaWidgetRenderer.MandalaRenderData {
         val slices = mutableListOf<MandalaWidgetRenderer.MandalaSlice>()
         var total = 0
         var completed = 0
 
         val pathSegments = drillPath.split("||").map { it.trim() }.filter { it.isNotEmpty() }
-        if (pathSegments.isEmpty()) return loadMandalaData(context, mode)
+        if (pathSegments.isEmpty()) return loadMandalaData(context, mode, appWidgetId)
 
         val rootSegment = cleanSegment(pathSegments[0])
 
@@ -633,7 +769,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         }
 
         val allTasks = mutableListOf<WidgetTask>()
-        val activeFilter = getActiveTabFilter(context)
+        val activeFilter = getActiveTabFilter(context, appWidgetId)
 
         try {
             val dbFile = context.getDatabasePath("gtasks_local.db")
@@ -954,18 +1090,18 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         )
     }
 
-    private fun loadMandalaData(context: Context, mode: String): MandalaWidgetRenderer.MandalaRenderData {
+    private fun loadMandalaData(context: Context, mode: String, appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID): MandalaWidgetRenderer.MandalaRenderData {
         return when (mode) {
             "harada_9x9" -> loadHaradaData(context)
-            "priorities" -> loadPrioritiesData(context)
-            "lists" -> loadListsData(context)
-            "tags" -> loadTagsData(context)
+            "priorities" -> loadPrioritiesData(context, appWidgetId)
+            "lists" -> loadListsData(context, appWidgetId)
+            "tags" -> loadTagsData(context, appWidgetId)
             "custom" -> loadCustomMandalaData(context)
-            else -> loadSpacesData(context)
+            else -> loadSpacesData(context, appWidgetId)
         }
     }
 
-    private fun loadSpacesData(context: Context): MandalaWidgetRenderer.MandalaRenderData {
+    private fun loadSpacesData(context: Context, appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID): MandalaWidgetRenderer.MandalaRenderData {
         val spaceMap = mutableMapOf<String, MutableList<String>>() // Space -> Subspaces
         val spaceCounts = mutableMapOf<String, Int>()
         var total = 0
@@ -975,7 +1111,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (dbFile.exists()) {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                    val filter = getActiveTabFilter(context)
+                    val filter = getActiveTabFilter(context, appWidgetId)
                     val qb = StringBuilder("SELECT spaces, status FROM tasks WHERE sync_status != 'pending_delete'")
                     val args = mutableListOf<String>()
                     applyFilterToQuery(filter, qb, args)
@@ -987,7 +1123,13 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                             val isDone = (status == "completed")
                             if (isDone) completed++ else total++
 
-                            if (spacesJson.isNotBlank() && spacesJson != "{}" && !isDone) {
+                            val shouldInclude = when (filter.statusFilter) {
+                                "completed" -> isDone
+                                "all" -> true
+                                else -> !isDone
+                            }
+
+                            if (spacesJson.isNotBlank() && spacesJson != "{}" && shouldInclude) {
                                 try {
                                     val obj = JSONObject(spacesJson)
                                     val keys = obj.keys()
@@ -1124,7 +1266,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         )
     }
 
-    private fun loadPrioritiesData(context: Context): MandalaWidgetRenderer.MandalaRenderData {
+    private fun loadPrioritiesData(context: Context, appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID): MandalaWidgetRenderer.MandalaRenderData {
         var pCritical = 0
         var pHigh = 0
         var pMed = 0
@@ -1136,7 +1278,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (dbFile.exists()) {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                    val filter = getActiveTabFilter(context)
+                    val filter = getActiveTabFilter(context, appWidgetId)
                     val qb = StringBuilder("SELECT priority, status FROM tasks WHERE sync_status != 'pending_delete'")
                     val args = mutableListOf<String>()
                     applyFilterToQuery(filter, qb, args, skipPriority = true)
@@ -1145,10 +1287,16 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                         while (it.moveToNext()) {
                             val prio = it.getString(0)?.lowercase() ?: "medium"
                             val status = it.getString(1) ?: "pending"
-                            if (status == "completed") {
-                                completed++
-                            } else {
-                                total++
+                            val isDone = (status == "completed")
+                            if (isDone) completed++ else total++
+
+                            val shouldInclude = when (filter.statusFilter) {
+                                "completed" -> isDone
+                                "all" -> true
+                                else -> !isDone
+                            }
+
+                            if (shouldInclude) {
                                 when (prio) {
                                     "critical" -> pCritical++
                                     "high" -> pHigh++
@@ -1181,7 +1329,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         )
     }
 
-    private fun loadListsData(context: Context): MandalaWidgetRenderer.MandalaRenderData {
+    private fun loadListsData(context: Context, appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID): MandalaWidgetRenderer.MandalaRenderData {
         val listCounts = mutableMapOf<String, Int>()
         var total = 0
         var completed = 0
@@ -1190,7 +1338,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (dbFile.exists()) {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                    val filter = getActiveTabFilter(context)
+                    val filter = getActiveTabFilter(context, appWidgetId)
                     val qb = StringBuilder("SELECT list_title, status, count(*) FROM tasks WHERE sync_status != 'pending_delete'")
                     val args = mutableListOf<String>()
                     applyFilterToQuery(filter, qb, args, skipList = true)
@@ -1201,10 +1349,16 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                             val title = it.getString(0) ?: "Tasks"
                             val status = it.getString(1) ?: "pending"
                             val count = it.getInt(2)
-                            if (status == "completed") {
-                                completed += count
-                            } else {
-                                total += count
+                            val isDone = (status == "completed")
+                            if (isDone) completed += count else total += count
+
+                            val shouldInclude = when (filter.statusFilter) {
+                                "completed" -> isDone
+                                "all" -> true
+                                else -> !isDone
+                            }
+
+                            if (shouldInclude) {
                                 listCounts[title] = (listCounts[title] ?: 0) + count
                             }
                         }
@@ -1244,7 +1398,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
         )
     }
 
-    private fun loadTagsData(context: Context): MandalaWidgetRenderer.MandalaRenderData {
+    private fun loadTagsData(context: Context, appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID): MandalaWidgetRenderer.MandalaRenderData {
         val tagCounts = mutableMapOf<String, Int>()
         var total = 0
         var completed = 0
@@ -1253,7 +1407,7 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             val dbFile = context.getDatabasePath("gtasks_local.db")
             if (dbFile.exists()) {
                 SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                    val filter = getActiveTabFilter(context)
+                    val filter = getActiveTabFilter(context, appWidgetId)
                     val qb = StringBuilder("SELECT tags, status FROM tasks WHERE sync_status != 'pending_delete'")
                     val args = mutableListOf<String>()
                     applyFilterToQuery(filter, qb, args)
@@ -1262,21 +1416,25 @@ class MandalaWidgetProvider : AppWidgetProvider() {
                         while (it.moveToNext()) {
                             val tagsJson = it.getString(0) ?: ""
                             val status = it.getString(1) ?: "pending"
-                            if (status == "completed") {
-                                completed++
-                            } else {
-                                total++
-                                if (tagsJson.isNotBlank() && tagsJson != "[]") {
-                                    try {
-                                        val arr = JSONArray(tagsJson)
-                                        for (i in 0 until arr.length()) {
-                                            val t = arr.getString(i).trim()
-                                            if (t.isNotEmpty()) {
-                                                tagCounts[t] = (tagCounts[t] ?: 0) + 1
-                                            }
+                            val isDone = (status == "completed")
+                            if (isDone) completed++ else total++
+
+                            val shouldInclude = when (filter.statusFilter) {
+                                "completed" -> isDone
+                                "all" -> true
+                                else -> !isDone
+                            }
+
+                            if (shouldInclude && tagsJson.isNotBlank() && tagsJson != "[]") {
+                                try {
+                                    val arr = JSONArray(tagsJson)
+                                    for (i in 0 until arr.length()) {
+                                        val t = arr.getString(i).trim()
+                                        if (t.isNotEmpty()) {
+                                            tagCounts[t] = (tagCounts[t] ?: 0) + 1
                                         }
-                                    } catch (e: Exception) {}
-                                }
+                                    }
+                                } catch (e: Exception) {}
                             }
                         }
                     }

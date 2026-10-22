@@ -72,7 +72,8 @@ class _MandalaScreenState extends State<MandalaScreen> {
   void initState() {
     super.initState();
     final p = context.read<TaskProvider>();
-    _mandalaTab = (widget.initialTab ?? p.activeTab ?? TaskTab(id: 'mandala', title: widget.title ?? 'Mandala')).copyWith(
+    final baseTab = widget.initialTab ?? p.activeTab ?? TaskTab(id: 'mandala', title: widget.title ?? 'Mandala');
+    _mandalaTab = widget.isEmbedded ? baseTab : baseTab.copyWith(
       id: 'mandala_${DateTime.now().millisecondsSinceEpoch}',
     );
     if (widget.initialGrouping != null) {
@@ -105,6 +106,17 @@ class _MandalaScreenState extends State<MandalaScreen> {
       }
     });
     _rebuildEngine();
+  }
+
+  @override
+  void didUpdateWidget(covariant MandalaScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isEmbedded && widget.initialTab != null && widget.initialTab != _mandalaTab) {
+      setState(() {
+        _mandalaTab = widget.initialTab!;
+        _rebuildEngine(targetMandalaId: _currentMandalaId);
+      });
+    }
   }
 
   Future<void> _loadTheme() async {
@@ -803,6 +815,16 @@ class _MandalaScreenState extends State<MandalaScreen> {
     return Colors.cyan;
   }
 
+  void _updateMandalaTab(TaskTab newTab) {
+    setState(() {
+      _mandalaTab = newTab;
+      _rebuildEngine(targetMandalaId: _currentMandalaId);
+    });
+    if (widget.isEmbedded) {
+      context.read<TaskProvider>().updateActiveTab(newTab);
+    }
+  }
+
   void _openFilterModal() {
     showModalBottomSheet(
       context: context,
@@ -811,10 +833,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
       builder: (_) => TaskFilterModal(
         initialTab: _mandalaTab,
         onApplyTab: (newTab) {
-          setState(() {
-            _mandalaTab = newTab;
-            _rebuildEngine(targetMandalaId: _currentMandalaId);
-          });
+          _updateMandalaTab(newTab);
         },
       ),
     );
@@ -872,10 +891,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
                   icon: Icons.folder,
                   onDeleted: () {
                     final next = Set<String>.from(_mandalaTab.selectedLists)..remove(l);
-                    setState(() {
-                      _mandalaTab = _mandalaTab.copyWith(selectedLists: next);
-                      _rebuildEngine(targetMandalaId: _currentMandalaId);
-                    });
+                    _updateMandalaTab(_mandalaTab.copyWith(selectedLists: next));
                   },
                   color: Colors.blueAccent,
                 )),
@@ -884,10 +900,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
                   icon: Icons.tag,
                   onDeleted: () {
                     final next = Set<String>.from(_mandalaTab.selectedTags)..remove(t);
-                    setState(() {
-                      _mandalaTab = _mandalaTab.copyWith(selectedTags: next);
-                      _rebuildEngine(targetMandalaId: _currentMandalaId);
-                    });
+                    _updateMandalaTab(_mandalaTab.copyWith(selectedTags: next));
                   },
                   color: Colors.teal,
                 )),
@@ -898,10 +911,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
                     : _mandalaTab.selectedSpace!,
                 icon: Icons.rocket_launch,
                 onDeleted: () {
-                  setState(() {
-                    _mandalaTab = _mandalaTab.copyWith(clearSpace: true);
-                    _rebuildEngine(targetMandalaId: _currentMandalaId);
-                  });
+                  _updateMandalaTab(_mandalaTab.copyWith(clearSpace: true));
                 },
                 color: Colors.deepPurpleAccent,
               ),
@@ -910,10 +920,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
                 label: 'Priority: ${_mandalaTab.selectedPriority}',
                 icon: Icons.flag,
                 onDeleted: () {
-                  setState(() {
-                    _mandalaTab = _mandalaTab.copyWith(clearPriority: true);
-                    _rebuildEngine(targetMandalaId: _currentMandalaId);
-                  });
+                  _updateMandalaTab(_mandalaTab.copyWith(clearPriority: true));
                 },
                 color: Colors.deepOrangeAccent,
               ),
@@ -922,10 +929,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
                 label: 'Status: ${_mandalaTab.statusFilter}',
                 icon: Icons.check_circle_outline,
                 onDeleted: () {
-                  setState(() {
-                    _mandalaTab = _mandalaTab.copyWith(statusFilter: 'pending');
-                    _rebuildEngine(targetMandalaId: _currentMandalaId);
-                  });
+                  _updateMandalaTab(_mandalaTab.copyWith(statusFilter: 'pending'));
                 },
                 color: Colors.indigoAccent,
               ),
@@ -934,10 +938,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
                 label: 'Hide Recurring',
                 icon: Icons.redo_outlined,
                 onDeleted: () {
-                  setState(() {
-                    _mandalaTab = _mandalaTab.copyWith(hideRecurring: false);
-                    _rebuildEngine(targetMandalaId: _currentMandalaId);
-                  });
+                  _updateMandalaTab(_mandalaTab.copyWith(hideRecurring: false));
                 },
                 color: Colors.orange,
               ),
@@ -946,10 +947,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
                   icon: Icons.visibility_off,
                   onDeleted: () {
                     final next = Set<String>.from(_mandalaTab.hiddenLists)..remove(hl);
-                    setState(() {
-                      _mandalaTab = _mandalaTab.copyWith(hiddenLists: next);
-                      _rebuildEngine(targetMandalaId: _currentMandalaId);
-                    });
+                    _updateMandalaTab(_mandalaTab.copyWith(hiddenLists: next));
                   },
                   color: Colors.redAccent,
                 )),
@@ -958,10 +956,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
                   icon: Icons.visibility_off,
                   onDeleted: () {
                     final next = Set<String>.from(_mandalaTab.hiddenTags)..remove(ht);
-                    setState(() {
-                      _mandalaTab = _mandalaTab.copyWith(hiddenTags: next);
-                      _rebuildEngine(targetMandalaId: _currentMandalaId);
-                    });
+                    _updateMandalaTab(_mandalaTab.copyWith(hiddenTags: next));
                   },
                   color: Colors.redAccent,
                 )),
@@ -970,30 +965,24 @@ class _MandalaScreenState extends State<MandalaScreen> {
                 label: '${_mandalaTab.dateField}: ${_mandalaTab.dateRange!.start.month}/${_mandalaTab.dateRange!.start.day} - ${_mandalaTab.dateRange!.end.month}/${_mandalaTab.dateRange!.end.day}',
                 icon: Icons.date_range,
                 onDeleted: () {
-                  setState(() {
-                    _mandalaTab = _mandalaTab.copyWith(clearDateRange: true);
-                    _rebuildEngine(targetMandalaId: _currentMandalaId);
-                  });
+                  _updateMandalaTab(_mandalaTab.copyWith(clearDateRange: true));
                 },
                 color: Colors.indigoAccent,
               ),
             InkWell(
               borderRadius: BorderRadius.circular(10),
               onTap: () {
-                setState(() {
-                  _mandalaTab = _mandalaTab.copyWith(
-                    selectedLists: {},
-                    selectedTags: {},
-                    clearSpace: true,
-                    clearPriority: true,
-                    statusFilter: 'pending',
-                    hideRecurring: false,
-                    hiddenLists: {},
-                    hiddenTags: {},
-                    clearDateRange: true,
-                  );
-                  _rebuildEngine(targetMandalaId: _currentMandalaId);
-                });
+                _updateMandalaTab(_mandalaTab.copyWith(
+                  selectedLists: {},
+                  selectedTags: {},
+                  clearSpace: true,
+                  clearPriority: true,
+                  statusFilter: 'pending',
+                  hideRecurring: false,
+                  hiddenLists: {},
+                  hiddenTags: {},
+                  clearDateRange: true,
+                ));
               },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1411,10 +1400,16 @@ class _MandalaScreenState extends State<MandalaScreen> {
           IconButton(
             icon: const Icon(Icons.list_alt_rounded, size: 20),
             visualDensity: VisualDensity.compact,
-            tooltip: 'Switch back to List View',
+            tooltip: 'Switch to Task List View',
             onPressed: () {
               final p = context.read<TaskProvider>();
-              p.setTabViewMode(p.activeTabIndex, null);
+              if (widget.isEmbedded) {
+                p.setTabViewMode(p.activeTabIndex, null);
+              } else if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              } else {
+                p.setTabViewMode(p.activeTabIndex, null);
+              }
             },
           ),
         ],

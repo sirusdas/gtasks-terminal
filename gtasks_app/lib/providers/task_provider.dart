@@ -437,8 +437,25 @@ class TaskProvider with ChangeNotifier {
     _saveTabs();
   }
 
+  void updateActiveTab(TaskTab updatedTab) {
+    updateTab(_activeTabIndex, updatedTab);
+  }
+
+  void updateTab(int index, TaskTab updatedTab) {
+    if (index < 0 || index >= _tabs.length) return;
+    _tabs[index] = updatedTab;
+    if (index == _activeTabIndex) {
+      _applyTabFilters(updatedTab);
+    }
+    _saveTabs();
+    notifyListeners();
+  }
+
   void setTabViewMode(int index, String? viewMode) {
     if (index < 0 || index >= _tabs.length) return;
+    if (index == _activeTabIndex) {
+      _syncActiveTabFromCurrentFilters();
+    }
     _tabs[index] = _tabs[index].copyWith(
       viewMode: viewMode,
       clearViewMode: viewMode == null,

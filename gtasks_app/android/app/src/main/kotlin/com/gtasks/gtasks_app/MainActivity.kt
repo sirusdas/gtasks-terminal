@@ -64,7 +64,8 @@ class MainActivity : FlutterActivity() {
             val focusedItem = intent.getStringExtra("focused_item") ?: ""
             val mandalaId = intent.getStringExtra("mandala_id") ?: ""
             val theme = intent.getStringExtra("mandala_theme") ?: "CYBERPUNK"
-            val action = "open_mandala:$mode:$geom:$focusedItem:$mandalaId:$theme"
+            val tabId = intent.getStringExtra("open_tab_id") ?: ""
+            val action = "open_mandala:$mode:$geom:$focusedItem:$mandalaId:$theme:$tabId"
             pendingAction = action
             methodChannel?.invokeMethod("onActionReceived", action)
         }

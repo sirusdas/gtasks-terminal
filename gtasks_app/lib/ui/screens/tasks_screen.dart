@@ -136,6 +136,15 @@ class _TasksScreenState extends State<TasksScreen> {
       final focusedItem = parts.length > 3 ? parts[3] : '';
       final customMandalaId = parts.length > 4 ? parts[4] : '';
       final themeStr = parts.length > 5 ? parts[5] : '';
+      final tabId = parts.length > 6 ? parts[6] : '';
+
+      final provider = context.read<TaskProvider>();
+      if (tabId.isNotEmpty) {
+        final tabIdx = provider.tabs.indexWhere((t) => t.id == tabId);
+        if (tabIdx != -1) {
+          provider.switchToTab(tabIdx);
+        }
+      }
 
       MandalaGrouping grouping = MandalaGrouping.spaces;
       if (modeStr == 'harada_9x9') {
@@ -954,6 +963,7 @@ class _TasksScreenState extends State<TasksScreen> {
     final provider = context.watch<TaskProvider>();
     final theme = Theme.of(context);
     final hasViewFilters = provider.hasActiveFilters || provider.searchQuery.isNotEmpty;
+    final isMandala = provider.activeTab?.viewMode == 'mandala';
 
     return Scaffold(
       drawer: const TasksSidebarDrawer(),
@@ -1005,9 +1015,15 @@ class _TasksScreenState extends State<TasksScreen> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.hub_outlined),
-            tooltip: 'Mandala Radial View',
+            icon: Icon(
+              isMandala ? Icons.list_alt_rounded : Icons.hub_outlined,
+              color: isMandala ? Colors.purpleAccent : null,
+            ),
+            tooltip: isMandala ? 'Switch to Task List View' : 'Switch to Mandala Radial View',
             onPressed: () {
+              provider.setTabViewMode(provider.activeTabIndex, isMandala ? null : 'mandala');
+            },
+            onLongPress: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -1087,19 +1103,42 @@ class _TasksScreenState extends State<TasksScreen> {
           ),
           Consumer<SettingsProvider>(
             builder: (context, settings, _) {
+              final isMandala = provider.activeTab?.viewMode == 'mandala';
               final mode = settings.taskViewMode;
-              final icon = mode == 'two_column_compact'
-                  ? Icons.view_compact
-                  : mode == 'two_column'
-                      ? Icons.grid_view
-                      : mode == 'compact'
-                          ? Icons.view_headline
-                          : Icons.view_agenda;
+              final icon = isMandala
+                  ? Icons.hub_outlined
+                  : mode == 'two_column_compact'
+                      ? Icons.view_compact
+                      : mode == 'two_column'
+                          ? Icons.grid_view
+                          : mode == 'compact'
+                              ? Icons.view_headline
+                              : Icons.view_agenda;
               return PopupMenuButton<String>(
-                icon: Icon(icon),
-                tooltip: 'Switch View (Detailed, Compact, 2-Column, 2-Col Compact)',
-                onSelected: (newMode) => settings.setTaskViewMode(newMode),
+                icon: Icon(icon, color: isMandala ? Colors.purpleAccent : null),
+                tooltip: 'Switch View (Mandala, Detailed, Compact, 2-Column)',
+                onSelected: (newMode) {
+                  if (newMode == 'mandala') {
+                    provider.setTabViewMode(provider.activeTabIndex, 'mandala');
+                  } else {
+                    if (isMandala) {
+                      provider.setTabViewMode(provider.activeTabIndex, null);
+                    }
+                    settings.setTaskViewMode(newMode);
+                  }
+                },
                 itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'mandala',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.hub_outlined, color: Colors.purpleAccent),
+                      title: Text('Mandala Radial View', style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Sacred radial geometry view of tasks'),
+                    ),
+                  ),
+                  const PopupMenuDivider(),
                   const PopupMenuItem(
                     value: 'detailed',
                     child: ListTile(
