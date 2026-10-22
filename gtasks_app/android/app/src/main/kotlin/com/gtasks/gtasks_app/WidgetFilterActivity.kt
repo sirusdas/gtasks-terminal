@@ -30,6 +30,7 @@ class WidgetFilterActivity : Activity() {
 
     private var appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
     private var filterType: String = "space"
+    private var isMenuFlow: Boolean = false
     private val allOptions = mutableListOf<FilterOption>()
     private val filteredOptions = mutableListOf<FilterOption>()
     private lateinit var adapter: FilterAdapter
@@ -49,6 +50,7 @@ class WidgetFilterActivity : Activity() {
 
         appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
         filterType = intent.getStringExtra("filter_type") ?: "space"
+        isMenuFlow = (filterType == "menu")
 
         tvTitle = findViewById(R.id.tv_filter_title)
         tvSubtitle = findViewById(R.id.tv_filter_subtitle)
@@ -80,6 +82,9 @@ class WidgetFilterActivity : Activity() {
             if (filterType == "hide_list" || filterType == "hide_tag") {
                 filterType = "hide"
                 setupForFilterType()
+            } else if (isMenuFlow && filterType != "menu") {
+                filterType = "menu"
+                setupForFilterType()
             } else {
                 finish()
             }
@@ -89,6 +94,9 @@ class WidgetFilterActivity : Activity() {
         btnClose.setOnClickListener {
             if (filterType == "hide_list" || filterType == "hide_tag") {
                 filterType = "hide"
+                setupForFilterType()
+            } else if (isMenuFlow && filterType != "menu") {
+                filterType = "menu"
                 setupForFilterType()
             } else {
                 finish()
@@ -109,6 +117,11 @@ class WidgetFilterActivity : Activity() {
             setupForFilterType()
             return
         }
+        if (isMenuFlow && filterType != "menu") {
+            filterType = "menu"
+            setupForFilterType()
+            return
+        }
         super.onBackPressed()
     }
 
@@ -117,6 +130,25 @@ class WidgetFilterActivity : Activity() {
         val prefs = getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
 
         when (filterType) {
+            "menu" -> {
+                tvTitle.text = "Select Widget Filter"
+                tvSubtitle.text = "Choose a criteria to filter widget tasks"
+                tvSubtitle.visibility = View.VISIBLE
+                ivIcon.setImageResource(R.drawable.ic_widget_filter)
+                tvAll.text = "★ Reset All Filters (Clear)"
+                tvAll.visibility = View.VISIBLE
+                btnDone.visibility = View.GONE
+                etSearch.visibility = View.GONE
+            }
+            "priority" -> {
+                tvTitle.text = "Filter by Priority"
+                tvSubtitle.visibility = View.GONE
+                ivIcon.setImageResource(R.drawable.ic_widget_priority)
+                tvAll.text = "★ All Priorities (Clear Filter)"
+                tvAll.visibility = View.VISIBLE
+                btnDone.visibility = View.GONE
+                etSearch.visibility = View.GONE
+            }
             "list" -> {
                 tvTitle.text = "Filter by List"
                 tvSubtitle.visibility = View.GONE
@@ -249,10 +281,40 @@ class WidgetFilterActivity : Activity() {
         val prefs = getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
 
         when (filterType) {
+            "menu" -> {
+                prefs.edit()
+                    .remove("filter_type_$appWidgetId")
+                    .remove("filter_val_$appWidgetId")
+                    .remove("sort_by_$appWidgetId")
+                    .remove("hide_recurring_$appWidgetId")
+                    .remove("hidden_lists_$appWidgetId")
+                    .remove("hidden_tags_$appWidgetId")
+                    .apply()
+                notifyAllWidgets()
+                finish()
+            }
+            "priority" -> {
+                prefs.edit()
+                    .remove("filter_type_$appWidgetId")
+                    .remove("filter_val_$appWidgetId")
+                    .apply()
+                notifyAllWidgets()
+                if (isMenuFlow) {
+                    filterType = "menu"
+                    setupForFilterType()
+                } else {
+                    finish()
+                }
+            }
             "recurring" -> {
                 prefs.edit().remove("hide_recurring_$appWidgetId").apply()
                 notifyAllWidgets()
-                finish()
+                if (isMenuFlow) {
+                    filterType = "menu"
+                    setupForFilterType()
+                } else {
+                    finish()
+                }
             }
             "hide" -> {
                 prefs.edit()
@@ -276,7 +338,12 @@ class WidgetFilterActivity : Activity() {
             "sort" -> {
                 prefs.edit().remove("sort_by_$appWidgetId").apply()
                 notifyAllWidgets()
-                finish()
+                if (isMenuFlow) {
+                    filterType = "menu"
+                    setupForFilterType()
+                } else {
+                    finish()
+                }
             }
             else -> {
                 prefs.edit()
@@ -284,7 +351,12 @@ class WidgetFilterActivity : Activity() {
                     .remove("filter_val_$appWidgetId")
                     .apply()
                 notifyAllWidgets()
-                finish()
+                if (isMenuFlow) {
+                    filterType = "menu"
+                    setupForFilterType()
+                } else {
+                    finish()
+                }
             }
         }
     }
@@ -295,6 +367,28 @@ class WidgetFilterActivity : Activity() {
         val prefs = getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
 
         when (filterType) {
+            "menu" -> {
+                when (position) {
+                    0 -> { filterType = "list"; setupForFilterType() }
+                    1 -> { filterType = "tag"; setupForFilterType() }
+                    2 -> { filterType = "space"; setupForFilterType() }
+                    3 -> { filterType = "subspace"; setupForFilterType() }
+                    4 -> { filterType = "priority"; setupForFilterType() }
+                    5 -> { filterType = "account"; setupForFilterType() }
+                    6 -> { filterType = "date"; setupForFilterType() }
+                    7 -> { filterType = "recurring"; setupForFilterType() }
+                    8 -> { filterType = "sort"; setupForFilterType() }
+                    9 -> { filterType = "hide"; setupForFilterType() }
+                }
+            }
+            "priority" -> {
+                prefs.edit()
+                    .putString("filter_type_$appWidgetId", "priority")
+                    .putString("filter_val_$appWidgetId", selected.name)
+                    .apply()
+                notifyAllWidgets()
+                finish()
+            }
             "recurring" -> {
                 val hideRecurring = selected.name.startsWith("Hide")
                 prefs.edit().putBoolean("hide_recurring_$appWidgetId", hideRecurring).apply()
@@ -374,13 +468,18 @@ class WidgetFilterActivity : Activity() {
 
     private fun getHiddenLists(): MutableSet<String> {
         val prefs = getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-        val json = prefs.getString("hidden_lists_$appWidgetId", null) ?: return mutableSetOf()
         val set = mutableSetOf<String>()
         try {
-            val arr = JSONArray(json)
-            for (i in 0 until arr.length()) {
-                val s = arr.getString(i).trim()
-                if (s.isNotEmpty()) set.add(s)
+            val json = prefs.getString("hidden_lists_$appWidgetId", null)
+            if (!json.isNullOrEmpty()) {
+                val arr = JSONArray(json)
+                for (i in 0 until arr.length()) {
+                    val s = arr.getString(i).trim()
+                    if (s.isNotEmpty()) set.add(s)
+                }
+            } else {
+                val sSet = prefs.getStringSet("hidden_lists_$appWidgetId", null)
+                if (sSet != null) set.addAll(sSet)
             }
         } catch (_: Exception) {}
         return set
@@ -397,13 +496,18 @@ class WidgetFilterActivity : Activity() {
 
     private fun getHiddenTags(): MutableSet<String> {
         val prefs = getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-        val json = prefs.getString("hidden_tags_$appWidgetId", null) ?: return mutableSetOf()
         val set = mutableSetOf<String>()
         try {
-            val arr = JSONArray(json)
-            for (i in 0 until arr.length()) {
-                val s = arr.getString(i).trim()
-                if (s.isNotEmpty()) set.add(s)
+            val json = prefs.getString("hidden_tags_$appWidgetId", null)
+            if (!json.isNullOrEmpty()) {
+                val arr = JSONArray(json)
+                for (i in 0 until arr.length()) {
+                    val s = arr.getString(i).trim()
+                    if (s.isNotEmpty()) set.add(s)
+                }
+            } else {
+                val sSet = prefs.getStringSet("hidden_tags_$appWidgetId", null)
+                if (sSet != null) set.addAll(sSet)
             }
         } catch (_: Exception) {}
         return set
@@ -433,6 +537,73 @@ class WidgetFilterActivity : Activity() {
                 if (!exists) return
 
                 when (filterType) {
+                    "menu" -> {
+                        // 1. Lists count
+                        val lCursor = db.rawQuery("SELECT COUNT(DISTINCT list_title) FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete' AND list_title IS NOT NULL AND list_title != ''", null)
+                        val lCount = lCursor.use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+                        // 2. Tags count
+                        val tCursor = db.rawQuery("SELECT tags FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete' AND tags IS NOT NULL AND tags != '' AND tags != '[]'", null)
+                        val tagSet = mutableSetOf<String>()
+                        tCursor.use {
+                            while (it.moveToNext()) {
+                                try {
+                                    val arr = JSONArray(it.getString(0))
+                                    for (k in 0 until arr.length()) tagSet.add(arr.getString(k).trim())
+                                } catch (_: Exception) {}
+                            }
+                        }
+
+                        // 3. Spaces count
+                        val sCursor = db.rawQuery("SELECT spaces FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete' AND spaces IS NOT NULL AND spaces != '' AND spaces != '{}'", null)
+                        val spaceSet = mutableSetOf<String>()
+                        var subCount = 0
+                        sCursor.use {
+                            while (it.moveToNext()) {
+                                try {
+                                    val obj = JSONObject(it.getString(0))
+                                    val keys = obj.keys()
+                                    while (keys.hasNext()) {
+                                        val sp = keys.next()
+                                        spaceSet.add(sp)
+                                        val subs = obj.optJSONArray(sp)
+                                        if (subs != null) subCount += subs.length()
+                                    }
+                                } catch (_: Exception) {}
+                            }
+                        }
+
+                        // 4. Accounts count
+                        val aCursor = db.rawQuery("SELECT COUNT(DISTINCT account) FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete' AND account IS NOT NULL AND account != ''", null)
+                        val aCount = aCursor.use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+                        val hiddenLists = getHiddenLists()
+                        val hiddenTags = getHiddenTags()
+
+                        allOptions.add(FilterOption("📋 Filter by List", lCount, extra = "$lCount lists"))
+                        allOptions.add(FilterOption("🏷️ Filter by Tag", tagSet.size, extra = "${tagSet.size} tags"))
+                        allOptions.add(FilterOption("🚀 Filter by Workspace", spaceSet.size, extra = "${spaceSet.size} workspaces"))
+                        allOptions.add(FilterOption("📁 Filter by Sub-workspace", subCount, extra = "$subCount sub-workspaces"))
+                        allOptions.add(FilterOption("🎯 Filter by Priority", 4, extra = "Critical, High, Med, Low"))
+                        allOptions.add(FilterOption("👤 Filter by Account", aCount, extra = "$aCount accounts"))
+                        allOptions.add(FilterOption("📅 Filter by Date Window", 6, extra = "Today, Overdue, Next 7d"))
+                        allOptions.add(FilterOption("🔄 Recurring Tasks", 0, extra = if (hideRecurring) "Hidden" else "Included"))
+                        allOptions.add(FilterOption("↕️ Sort Tasks By", 6, extra = "Priority, Due date, Title"))
+                        allOptions.add(FilterOption("👁️ Exclusions & Hidden", hiddenLists.size + hiddenTags.size, extra = "${hiddenLists.size} lists, ${hiddenTags.size} tags"))
+                    }
+                    "priority" -> {
+                        fun countFor(prio: String): Int {
+                            val c = db.rawQuery(
+                                "SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND sync_status != 'pending_delete' AND lower(priority) = ?",
+                                arrayOf(prio)
+                            )
+                            return c.use { if (it.moveToFirst()) it.getInt(0) else 0 }
+                        }
+                        allOptions.add(FilterOption("Critical", countFor("critical")))
+                        allOptions.add(FilterOption("High", countFor("high")))
+                        allOptions.add(FilterOption("Medium", countFor("medium")))
+                        allOptions.add(FilterOption("Low", countFor("low")))
+                    }
                     "list" -> {
                         val cursor = db.rawQuery(
                             """

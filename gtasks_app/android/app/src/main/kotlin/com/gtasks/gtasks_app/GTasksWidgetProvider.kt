@@ -547,6 +547,19 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.widget_btn_clear_filter, clearFilterPendingIntent)
 
+        val menuFilterIntent = Intent(context, WidgetFilterActivity::class.java).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            putExtra("filter_type", "menu")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val menuFilterPendingIntent = PendingIntent.getActivity(
+            context,
+            appWidgetId * 100 + 9,
+            menuFilterIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_active_filter_container, menuFilterPendingIntent)
+
         // Filter Buttons -> Open WidgetFilterActivity
         fun setupFilterButton(viewId: Int, filterTypeStr: String, reqCodeOffset: Int) {
             val filterIntent = Intent(context, WidgetFilterActivity::class.java).apply {
@@ -567,6 +580,7 @@ class GTasksWidgetProvider : AppWidgetProvider() {
         setupFilterButton(R.id.widget_filter_tag, "tag", 11)
         setupFilterButton(R.id.widget_filter_space, "space", 12)
         setupFilterButton(R.id.widget_filter_subspace, "subspace", 13)
+        setupFilterButton(R.id.widget_filter_priority, "priority", 19)
         setupFilterButton(R.id.widget_filter_account, "account", 14)
         setupFilterButton(R.id.widget_filter_date, "date", 15)
         setupFilterButton(R.id.widget_filter_recurring, "recurring", 16)

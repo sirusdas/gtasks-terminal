@@ -167,8 +167,128 @@
             android:layout_height="26dp"
             android:layout_marginStart="4dp"
             android:background="@drawable/mandala_btn_bg"
-            android:src="@drawable/ic_widget_visibility_off"
+            android:src="@drawable/ic_widget_filter"
             android:contentDescription="Filters &amp; Exclusions"
+            android:clickable="true"
+            android:padding="5dp" />
+    </LinearLayout>
+
+    <!-- Filter Icons Strip -->
+    <LinearLayout
+        android:id="@+id/mandala_filter_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp">
+
+        <ImageView
+            android:id="@+id/mandala_filter_list"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_list"
+            android:contentDescription="Filter by List"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/mandala_filter_tag"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="3dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_tag"
+            android:contentDescription="Filter by Tag"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/mandala_filter_space"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="3dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_space"
+            android:contentDescription="Filter by Workspace"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/mandala_filter_subspace"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="3dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_subspace"
+            android:contentDescription="Filter by Sub-workspace"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/mandala_filter_priority"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="3dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_priority"
+            android:contentDescription="Filter by Priority"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/mandala_filter_account"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="3dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_account"
+            android:contentDescription="Filter by Account"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/mandala_filter_date"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="3dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_calendar"
+            android:contentDescription="Filter by Date Window"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/mandala_filter_recurring"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="3dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_recurring"
+            android:contentDescription="Recurring Tasks Filter"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/mandala_filter_sort"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="3dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_sort"
+            android:contentDescription="Sort by"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
+            android:id="@+id/mandala_filter_hide"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="3dp"
+            android:background="@drawable/mandala_btn_bg"
+            android:src="@drawable/ic_widget_visibility_off"
+            android:contentDescription="Hide &amp; Exclusions"
             android:clickable="true"
             android:padding="5dp" />
     </LinearLayout>

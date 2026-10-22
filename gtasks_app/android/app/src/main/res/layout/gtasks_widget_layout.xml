@@ -221,6 +221,17 @@
             android:padding="5dp" />
 
         <ImageView
+            android:id="@+id/widget_filter_priority"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/widget_btn_bg"
+            android:src="@drawable/ic_widget_priority"
+            android:contentDescription="Filter by Priority"
+            android:clickable="true"
+            android:padding="5dp" />
+
+        <ImageView
             android:id="@+id/widget_filter_account"
             android:layout_width="30dp"
             android:layout_height="30dp"

@@ -40,6 +40,25 @@ data class WidgetTabFilter(
             return if (v.isEmpty() || v.equals("null", ignoreCase = true)) null else v
         }
 
+        private fun getSafeStringSet(prefs: android.content.SharedPreferences, key: String): Set<String>? {
+            return try {
+                prefs.getStringSet(key, null)?.toSet()
+            } catch (_: Exception) {
+                val json = prefs.getString(key, null) ?: return null
+                try {
+                    val arr = JSONArray(json)
+                    val set = mutableSetOf<String>()
+                    for (i in 0 until arr.length()) {
+                        val s = arr.getString(i).trim()
+                        if (s.isNotEmpty() && !s.equals("null", ignoreCase = true)) set.add(s)
+                    }
+                    set
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+
         fun getActiveTabFilter(
             context: Context,
             appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID,
@@ -59,8 +78,8 @@ data class WidgetTabFilter(
                 val widgetHideRecurring = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID && prefs.contains("hide_recurring_$appWidgetId")) {
                     prefs.getBoolean("hide_recurring_$appWidgetId", false)
                 } else null
-                val widgetHiddenLists = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) prefs.getStringSet("hidden_lists_$appWidgetId", null) else null
-                val widgetHiddenTags = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) prefs.getStringSet("hidden_tags_$appWidgetId", null) else null
+                val widgetHiddenLists = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) getSafeStringSet(prefs, "hidden_lists_$appWidgetId") else null
+                val widgetHiddenTags = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) getSafeStringSet(prefs, "hidden_tags_$appWidgetId") else null
                 val widgetSortBy = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) prefs.getString("sort_by_$appWidgetId", null) else null
 
                 if (!tabsJson.isNullOrEmpty()) {
@@ -490,6 +509,7 @@ data class WidgetTabFilter(
                 "list" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "List: ${filter.filterVal}" else null
                 "account" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "@${filter.filterVal}" else null
                 "date" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "📅 ${filter.filterVal}" else null
+                "priority" -> if (!filter.filterVal.isNullOrBlank() && !filter.filterVal.equals("null", ignoreCase = true)) "Priority: ${filter.filterVal}" else null
                 else -> if (!filter.selectedSpace.isNullOrBlank() && !filter.selectedSpace.equals("null", ignoreCase = true)) {
                     if (!filter.selectedSubspace.isNullOrBlank() && !filter.selectedSubspace.equals("null", ignoreCase = true)) {
                         "Space: ${filter.selectedSpace} › ${filter.selectedSubspace}"

@@ -386,10 +386,10 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             createBroadcastPendingIntent(context, ACTION_TOGGLE_STATUS, appWidgetId, 24)
         )
 
-        // Filter button intent -> Opens WidgetFilterActivity to set filter for this mandala widget
+        // Master Filter button intent -> Opens WidgetFilterActivity to set filter for this mandala widget
         val filterIntent = Intent(context, WidgetFilterActivity::class.java).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            putExtra("filter_type", "hide")
+            putExtra("filter_type", "menu")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val filterPendingIntent = PendingIntent.getActivity(
@@ -399,6 +399,33 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         views.setOnClickPendingIntent(R.id.mandala_btn_filter, filterPendingIntent)
+
+        // Filter Buttons Strip -> Direct access to each filter category
+        fun setupFilterButton(viewId: Int, filterTypeStr: String, reqCodeOffset: Int) {
+            val fIntent = Intent(context, WidgetFilterActivity::class.java).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                putExtra("filter_type", filterTypeStr)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val fPendingIntent = PendingIntent.getActivity(
+                context,
+                appWidgetId * 100 + reqCodeOffset,
+                fIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(viewId, fPendingIntent)
+        }
+
+        setupFilterButton(R.id.mandala_filter_list, "list", 30)
+        setupFilterButton(R.id.mandala_filter_tag, "tag", 31)
+        setupFilterButton(R.id.mandala_filter_space, "space", 32)
+        setupFilterButton(R.id.mandala_filter_subspace, "subspace", 33)
+        setupFilterButton(R.id.mandala_filter_priority, "priority", 34)
+        setupFilterButton(R.id.mandala_filter_account, "account", 35)
+        setupFilterButton(R.id.mandala_filter_date, "date", 36)
+        setupFilterButton(R.id.mandala_filter_recurring, "recurring", 37)
+        setupFilterButton(R.id.mandala_filter_sort, "sort", 38)
+        setupFilterButton(R.id.mandala_filter_hide, "hide", 39)
 
         // Active Filter Pill Container
         val pillText = WidgetTabFilter.formatFilterPill(filter)
