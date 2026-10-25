@@ -271,15 +271,21 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                     val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                     if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                         val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-                        val tabs = WidgetTabFilter.getAvailableTabs(context)
+                        val tabs = WidgetTabFilter.getAllViewItems(context, isMandala = false)
                         val currentIndex = prefs.getInt("tab_index_$appWidgetId", 0)
                         val newIndex = (currentIndex - 1 + tabs.size) % tabs.size
                         val tab = tabs[newIndex]
-                        prefs.edit()
+                        val editor = prefs.edit()
                             .putInt("tab_index_$appWidgetId", newIndex)
                             .remove("filter_type_$appWidgetId")
                             .remove("filter_val_$appWidgetId")
-                            .apply()
+                        if (tab.isSavedView) {
+                            editor.putString("active_view_title_$appWidgetId", tab.title)
+                            if (!tab.viewMode.isNullOrBlank()) editor.putString("view_mode_$appWidgetId", tab.viewMode)
+                        } else {
+                            editor.remove("active_view_title_$appWidgetId")
+                        }
+                        editor.apply()
                         Toast.makeText(context, "${tab.title} (${newIndex + 1}/${tabs.size})", Toast.LENGTH_SHORT).show()
                         updateAllWidgets(context)
                     }
@@ -288,15 +294,21 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                     val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                     if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                         val prefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-                        val tabs = WidgetTabFilter.getAvailableTabs(context)
+                        val tabs = WidgetTabFilter.getAllViewItems(context, isMandala = false)
                         val currentIndex = prefs.getInt("tab_index_$appWidgetId", 0)
                         val newIndex = (currentIndex + 1) % tabs.size
                         val tab = tabs[newIndex]
-                        prefs.edit()
+                        val editor = prefs.edit()
                             .putInt("tab_index_$appWidgetId", newIndex)
                             .remove("filter_type_$appWidgetId")
                             .remove("filter_val_$appWidgetId")
-                            .apply()
+                        if (tab.isSavedView) {
+                            editor.putString("active_view_title_$appWidgetId", tab.title)
+                            if (!tab.viewMode.isNullOrBlank()) editor.putString("view_mode_$appWidgetId", tab.viewMode)
+                        } else {
+                            editor.remove("active_view_title_$appWidgetId")
+                        }
+                        editor.apply()
                         Toast.makeText(context, "${tab.title} (${newIndex + 1}/${tabs.size})", Toast.LENGTH_SHORT).show()
                         updateAllWidgets(context)
                     }

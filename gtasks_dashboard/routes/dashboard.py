@@ -61,6 +61,12 @@ def reports_page():
     return render_dashboard(view='reports')
 
 
+@dashboard.route(f'{BASE_PATH}/mandala')
+def mandala_page():
+    """Mandala page - shows interactive sacred geometry mandala view"""
+    return render_dashboard(view='mandala')
+
+
 @dashboard.route(f'{BASE_PATH}/favicon.ico')
 def favicon():
     """Serve favicon as SVG data URI"""

@@ -487,6 +487,17 @@ def interactive(ctx, command):
             if cmd in ['quit', 'exit']:
                 click.echo("Exiting interactive mode.")
                 break
+            elif cmd in ['mandala', 'm']:
+                from gtasks_cli.commands.mandala import MandalaApp
+                try:
+                    mandala_app = MandalaApp(account_name=account_name)
+                    mandala_app.run()
+                except Exception as e:
+                    click.echo(f"Error running Mandala TUI: {e}")
+                tasks = task_state.get_default_tasks()
+                if tasks:
+                    _display_tasks_grouped_by_list(tasks)
+                    task_state.set_tasks(tasks, is_default=True)
             elif cmd == 'back':
                 # Go back to previous command results
                 previous_command = task_state.pop_command()

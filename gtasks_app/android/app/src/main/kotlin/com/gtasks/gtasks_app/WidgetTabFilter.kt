@@ -28,7 +28,12 @@ data class WidgetTabFilter(
     val sortAscending: Boolean = true,
     val dateField: String? = null,
     val dateRangeStart: String? = null,
-    val dateRangeEnd: String? = null
+    val dateRangeEnd: String? = null,
+    val isSavedView: Boolean = false,
+    val viewMode: String? = null,
+    val mandalaGrouping: String? = null,
+    val mandalaGeometry: String? = null,
+    val mandalaTheme: String? = null
 ) {
     companion object {
         private const val TAG = "WidgetTabFilter"
@@ -66,7 +71,6 @@ data class WidgetTabFilter(
         ): WidgetTabFilter {
             try {
                 val prefs = context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
-                val tabsJson = prefs.getString("tabs_json", null)
                 val tabIndexKey = "tab_index_$appWidgetId"
                 val statusOverrideKey = if (isMandala) "mandala_status_$appWidgetId" else "widget_status_$appWidgetId"
                 val widgetStatus = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
@@ -81,125 +85,33 @@ data class WidgetTabFilter(
                 val widgetHiddenLists = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) getSafeStringSet(prefs, "hidden_lists_$appWidgetId") else null
                 val widgetHiddenTags = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) getSafeStringSet(prefs, "hidden_tags_$appWidgetId") else null
                 val widgetSortBy = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) prefs.getString("sort_by_$appWidgetId", null) else null
+                val customTitle = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) prefs.getString("active_view_title_$appWidgetId", null) else null
 
-                if (!tabsJson.isNullOrEmpty()) {
-                    val arr = JSONArray(tabsJson)
-                    if (arr.length() > 0) {
-                        val defaultActive = prefs.getInt("active_tab_index", 0)
-                        var tabIndex = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                            prefs.getInt(tabIndexKey, defaultActive)
-                        } else {
-                            defaultActive
-                        }
-                        if (tabIndex < 0 || tabIndex >= arr.length()) {
-                            tabIndex = 0
-                        }
-                        val obj = arr.getJSONObject(tabIndex)
-
-                        val id = obj.optNullableString("id") ?: "tab_$tabIndex"
-                        val title = obj.optNullableString("title") ?: "✦ Tab ${tabIndex + 1}"
-
-                        val accs = mutableSetOf<String>()
-                        val accsArr = obj.optJSONArray("accounts")
-                        if (accsArr != null) {
-                            for (i in 0 until accsArr.length()) {
-                                if (!accsArr.isNull(i)) {
-                                    val a = accsArr.getString(i).trim()
-                                    if (a.isNotEmpty() && a != "all" && !a.equals("null", ignoreCase = true)) {
-                                        accs.add(a)
-                                    }
-                                }
-                            }
-                        } else {
-                            val acc = obj.optNullableString("account")
-                            if (acc != null && acc != "all") accs.add(acc)
-                        }
-
-                        val status = widgetStatus ?: obj.optNullableString("statusFilter") ?: "pending"
-                        val hideRec = widgetHideRecurring ?: obj.optBoolean("hideRecurring", false)
-
-                        val hLists = widgetHiddenLists?.toSet() ?: mutableSetOf<String>().apply {
-                            val hlArr = obj.optJSONArray("hiddenLists")
-                            if (hlArr != null) {
-                                for (i in 0 until hlArr.length()) {
-                                    if (!hlArr.isNull(i)) {
-                                        val l = hlArr.getString(i).trim()
-                                        if (l.isNotEmpty() && !l.equals("null", ignoreCase = true)) add(l)
-                                    }
-                                }
-                            }
-                        }
-
-                        val hTags = widgetHiddenTags?.toSet() ?: mutableSetOf<String>().apply {
-                            val htArr = obj.optJSONArray("hiddenTags")
-                            if (htArr != null) {
-                                for (i in 0 until htArr.length()) {
-                                    if (!htArr.isNull(i)) {
-                                        val t = htArr.getString(i).trim()
-                                        if (t.isNotEmpty() && !t.equals("null", ignoreCase = true)) add(t)
-                                    }
-                                }
-                            }
-                        }
-
-                        val sLists = mutableSetOf<String>()
-                        val slArr = obj.optJSONArray("selectedLists")
-                        if (slArr != null) {
-                            for (i in 0 until slArr.length()) {
-                                if (!slArr.isNull(i)) {
-                                    val l = slArr.getString(i).trim()
-                                    if (l.isNotEmpty() && !l.equals("null", ignoreCase = true)) sLists.add(l)
-                                }
-                            }
-                        }
-
-                        val sTags = mutableSetOf<String>()
-                        val stArr = obj.optJSONArray("selectedTags")
-                        if (stArr != null) {
-                            for (i in 0 until stArr.length()) {
-                                if (!stArr.isNull(i)) {
-                                    val t = stArr.getString(i).trim()
-                                    if (t.isNotEmpty() && !t.equals("null", ignoreCase = true)) sTags.add(t)
-                                }
-                            }
-                        }
-
-                        val sp = obj.optNullableString("selectedSpace")
-                        val sub = obj.optNullableString("selectedSubspace")
-                        val prio = obj.optNullableString("selectedPriority")
-                        val fType = widgetFilterType ?: obj.optNullableString("filterType")
-                        val fVal = widgetFilterVal ?: obj.optNullableString("filterVal")
-                        val sortF = widgetSortBy ?: obj.optNullableString("sortField") ?: "priority"
-                        val sortAsc = obj.optBoolean("sortAscending", true)
-
-                        val dField = obj.optNullableString("dateField")
-                        val dStart = obj.optNullableString("dateRangeStart")
-                        val dEnd = obj.optNullableString("dateRangeEnd")
-
-                        return WidgetTabFilter(
-                            id = id,
-                            title = title,
-                            tabIndex = tabIndex,
-                            totalTabs = arr.length(),
-                            accounts = accs,
-                            statusFilter = status,
-                            hideRecurring = hideRec,
-                            hiddenLists = hLists,
-                            hiddenTags = hTags,
-                            selectedLists = sLists,
-                            selectedTags = sTags,
-                            selectedSpace = sp,
-                            selectedSubspace = sub,
-                            selectedPriority = prio,
-                            filterType = fType,
-                            filterVal = fVal,
-                            sortBy = sortF,
-                            sortAscending = sortAsc,
-                            dateField = dField,
-                            dateRangeStart = dStart,
-                            dateRangeEnd = dEnd
-                        )
+                val allItems = getAllViewItems(context, isMandala = isMandala)
+                if (allItems.isNotEmpty()) {
+                    val defaultActive = prefs.getInt("active_tab_index", 0)
+                    var tabIndex = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                        prefs.getInt(tabIndexKey, defaultActive)
+                    } else {
+                        defaultActive
                     }
+                    if (tabIndex < 0 || tabIndex >= allItems.size) {
+                        tabIndex = 0
+                    }
+                    val base = allItems[tabIndex]
+
+                    return base.copy(
+                        title = customTitle ?: base.title,
+                        tabIndex = tabIndex,
+                        totalTabs = allItems.size,
+                        statusFilter = widgetStatus ?: base.statusFilter,
+                        filterType = widgetFilterType ?: base.filterType,
+                        filterVal = widgetFilterVal ?: base.filterVal,
+                        hideRecurring = widgetHideRecurring ?: base.hideRecurring,
+                        hiddenLists = widgetHiddenLists?.toSet() ?: base.hiddenLists,
+                        hiddenTags = widgetHiddenTags?.toSet() ?: base.hiddenTags,
+                        sortBy = widgetSortBy ?: base.sortBy
+                    )
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing active tab filter", e)
@@ -306,6 +218,11 @@ data class WidgetTabFilter(
                         val dStart = obj.optNullableString("dateRangeStart")
                         val dEnd = obj.optNullableString("dateRangeEnd")
 
+                        val vMode = obj.optNullableString("viewMode")
+                        val mGrouping = obj.optNullableString("mandalaGrouping")
+                        val mGeometry = obj.optNullableString("mandalaGeometry")
+                        val mTheme = obj.optNullableString("mandalaTheme")
+
                         tabs.add(
                             WidgetTabFilter(
                                 id = id,
@@ -328,7 +245,12 @@ data class WidgetTabFilter(
                                 sortAscending = sortAsc,
                                 dateField = dField,
                                 dateRangeStart = dStart,
-                                dateRangeEnd = dEnd
+                                dateRangeEnd = dEnd,
+                                isSavedView = false,
+                                viewMode = vMode,
+                                mandalaGrouping = mGrouping,
+                                mandalaGeometry = mGeometry,
+                                mandalaTheme = mTheme
                             )
                         )
                     }
@@ -347,6 +269,153 @@ data class WidgetTabFilter(
             tabs.add(WidgetTabFilter("priority", "🔥 High Priority", 2, 3, emptySet(), "pending", selectedPriority = "high"))
 
             return tabs
+        }
+
+        fun getAvailableSavedViews(context: Context): List<WidgetTabFilter> {
+            val views = mutableListOf<WidgetTabFilter>()
+            try {
+                val prefs = context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
+                val viewsJson = prefs.getString("saved_views_json", null)
+                if (!viewsJson.isNullOrEmpty()) {
+                    val arr = JSONArray(viewsJson)
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        val id = obj.optNullableString("id") ?: "saved_$i"
+                        val title = obj.optNullableString("title") ?: "Saved View ${i + 1}"
+
+                        val accs = mutableSetOf<String>()
+                        val accsArr = obj.optJSONArray("accounts")
+                        if (accsArr != null) {
+                            for (j in 0 until accsArr.length()) {
+                                if (!accsArr.isNull(j)) {
+                                    val a = accsArr.getString(j).trim()
+                                    if (a.isNotEmpty() && a != "all" && !a.equals("null", ignoreCase = true)) accs.add(a)
+                                }
+                            }
+                        } else {
+                            val acc = obj.optNullableString("account")
+                            if (acc != null && acc != "all") accs.add(acc)
+                        }
+
+                        val status = obj.optNullableString("statusFilter") ?: "pending"
+                        val hideRec = obj.optBoolean("hideRecurring", false)
+
+                        val hLists = mutableSetOf<String>()
+                        val hlArr = obj.optJSONArray("hiddenLists")
+                        if (hlArr != null) {
+                            for (j in 0 until hlArr.length()) {
+                                if (!hlArr.isNull(j)) {
+                                    val l = hlArr.getString(j).trim()
+                                    if (l.isNotEmpty() && !l.equals("null", ignoreCase = true)) hLists.add(l)
+                                }
+                            }
+                        }
+
+                        val hTags = mutableSetOf<String>()
+                        val htArr = obj.optJSONArray("hiddenTags")
+                        if (htArr != null) {
+                            for (j in 0 until htArr.length()) {
+                                if (!htArr.isNull(j)) {
+                                    val t = htArr.getString(j).trim()
+                                    if (t.isNotEmpty() && !t.equals("null", ignoreCase = true)) hTags.add(t)
+                                }
+                            }
+                        }
+
+                        val sLists = mutableSetOf<String>()
+                        val slArr = obj.optJSONArray("selectedLists")
+                        if (slArr != null) {
+                            for (j in 0 until slArr.length()) {
+                                if (!slArr.isNull(j)) {
+                                    val l = slArr.getString(j).trim()
+                                    if (l.isNotEmpty() && !l.equals("null", ignoreCase = true)) sLists.add(l)
+                                }
+                            }
+                        }
+
+                        val sTags = mutableSetOf<String>()
+                        val stArr = obj.optJSONArray("selectedTags")
+                        if (stArr != null) {
+                            for (j in 0 until stArr.length()) {
+                                if (!stArr.isNull(j)) {
+                                    val t = stArr.getString(j).trim()
+                                    if (t.isNotEmpty() && !t.equals("null", ignoreCase = true)) sTags.add(t)
+                                }
+                            }
+                        }
+
+                        val sp = obj.optNullableString("selectedSpace")
+                        val sub = obj.optNullableString("selectedSubspace")
+                        val prio = obj.optNullableString("selectedPriority")
+                        val fType = obj.optNullableString("filterType")
+                        val fVal = obj.optNullableString("filterVal")
+                        val sortF = obj.optNullableString("sortField") ?: "priority"
+                        val sortAsc = obj.optBoolean("sortAscending", true)
+
+                        val dField = obj.optNullableString("dateField")
+                        val dStart = obj.optNullableString("dateRangeStart")
+                        val dEnd = obj.optNullableString("dateRangeEnd")
+
+                        val vMode = obj.optNullableString("viewMode")
+                        val mGrouping = obj.optNullableString("mandalaGrouping")
+                        val mGeometry = obj.optNullableString("mandalaGeometry")
+                        val mTheme = obj.optNullableString("mandalaTheme")
+
+                        views.add(
+                            WidgetTabFilter(
+                                id = id,
+                                title = title,
+                                tabIndex = i,
+                                totalTabs = arr.length(),
+                                accounts = accs,
+                                statusFilter = status,
+                                hideRecurring = hideRec,
+                                hiddenLists = hLists,
+                                hiddenTags = hTags,
+                                selectedLists = sLists,
+                                selectedTags = sTags,
+                                selectedSpace = sp,
+                                selectedSubspace = sub,
+                                selectedPriority = prio,
+                                filterType = fType,
+                                filterVal = fVal,
+                                sortBy = sortF,
+                                sortAscending = sortAsc,
+                                dateField = dField,
+                                dateRangeStart = dStart,
+                                dateRangeEnd = dEnd,
+                                isSavedView = true,
+                                viewMode = vMode,
+                                mandalaGrouping = mGrouping,
+                                mandalaGeometry = mGeometry,
+                                mandalaTheme = mTheme
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting saved views", e)
+            }
+            return views
+        }
+
+        fun getAllViewItems(context: Context, isMandala: Boolean = false): List<WidgetTabFilter> {
+            val tabs = getAvailableTabs(context)
+            val savedViews = getAvailableSavedViews(context)
+            val combined = mutableListOf<WidgetTabFilter>()
+            combined.addAll(tabs)
+            for (i in savedViews.indices) {
+                val sv = savedViews[i]
+                val icon = if (sv.mandalaGrouping != null || sv.viewMode == "mandala") "🕉️" else "🔖"
+                combined.add(
+                    sv.copy(
+                        title = "$icon ${sv.title}",
+                        tabIndex = tabs.size + i,
+                        totalTabs = tabs.size + savedViews.size
+                    )
+                )
+            }
+            return combined
         }
 
         fun applyFilterToQuery(

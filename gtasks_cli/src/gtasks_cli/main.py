@@ -29,6 +29,7 @@ from gtasks_cli.commands.spaces import spaces
 from gtasks_cli.commands.tags import tags
 from gtasks_cli.commands.remote import remote_commands
 from gtasks_cli.commands.backup import backup_group
+from gtasks_cli.commands.mandala import mandala
 from gtasks_cli.utils.logger import setup_logger
 
 # Set up logger
@@ -109,6 +110,7 @@ cli.add_command(spaces)
 cli.add_command(tags)
 cli.add_command(remote_commands)
 cli.add_command(backup_group)
+cli.add_command(mandala)
 
 
 def main():

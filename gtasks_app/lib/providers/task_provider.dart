@@ -290,6 +290,7 @@ class TaskProvider with ChangeNotifier {
       WidgetService.updateWidget(
         tabsJson: _tabsToJsonString(),
         activeTabIndex: _activeTabIndex,
+        savedViewsJson: _savedViewsToJsonString(),
       );
     } catch (e) {
       debugPrint('[TaskProvider] Error saving tabs: $e');
@@ -298,6 +299,10 @@ class TaskProvider with ChangeNotifier {
 
   String _tabsToJsonString() {
     return jsonEncode(_tabs.asMap().entries.map((e) => e.value.toWidgetJson(isActive: e.key == _activeTabIndex)).toList());
+  }
+
+  String _savedViewsToJsonString() {
+    return jsonEncode(_savedViews.map((e) => e.toWidgetJson()).toList());
   }
 
   void _applyTabFilters(TaskTab tab, {bool shouldNotify = true}) {
@@ -561,6 +566,11 @@ class TaskProvider with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final raw = jsonEncode(_savedViews.map((t) => t.toJson()).toList());
       await prefs.setString(_keySavedViews, raw);
+      WidgetService.updateWidget(
+        tabsJson: _tabsToJsonString(),
+        activeTabIndex: _activeTabIndex,
+        savedViewsJson: _savedViewsToJsonString(),
+      );
     } catch (e) {
       debugPrint('[TaskProvider] Error saving saved views: $e');
     }
@@ -657,7 +667,11 @@ class TaskProvider with ChangeNotifier {
   void _recomputeAllCaches() {
     _recomputeAggregates();
     _recomputeFilteredTasks();
-    WidgetService.updateWidget(tabsJson: _tabsToJsonString());
+    WidgetService.updateWidget(
+      tabsJson: _tabsToJsonString(),
+      activeTabIndex: _activeTabIndex,
+      savedViewsJson: _savedViewsToJsonString(),
+    );
   }
 
   void _recomputeAggregates() {

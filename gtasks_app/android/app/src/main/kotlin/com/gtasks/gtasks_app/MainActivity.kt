@@ -81,6 +81,7 @@ class MainActivity : FlutterActivity() {
                 "updateWidget" -> {
                     val tabsJson = call.argument<String>("tabsJson")
                     val activeTabIndex = call.argument<Int>("activeTabIndex")
+                    val savedViewsJson = call.argument<String>("savedViewsJson")
                     val prefs = applicationContext.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
                     val editor = prefs.edit()
                     if (!tabsJson.isNullOrEmpty()) {
@@ -88,6 +89,9 @@ class MainActivity : FlutterActivity() {
                     }
                     if (activeTabIndex != null) {
                         editor.putInt("active_tab_index", activeTabIndex)
+                    }
+                    if (!savedViewsJson.isNullOrEmpty()) {
+                        editor.putString("saved_views_json", savedViewsJson)
                     }
                     editor.apply()
                     GTasksWidgetProvider.updateAllWidgets(applicationContext)

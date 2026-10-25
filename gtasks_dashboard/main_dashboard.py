@@ -106,6 +106,13 @@ def reports_page_local():
     return render_dashboard(view='reports', base_path='')
 
 
+@app.route('/mandala')
+def mandala_page_local():
+    """Mandala page - shows interactive sacred geometry mandala view (local development)"""
+    from routes.dashboard import render_dashboard
+    return render_dashboard(view='mandala', base_path='')
+
+
 @app.route('/favicon.ico')
 def favicon_local():
     """Serve favicon as SVG data URI (local development)"""
@@ -191,6 +198,25 @@ def api_hierarchy_filtered_local():
 @app.route(f'{BASE_PATH}/api/tasks/<task_id>', methods=['GET', 'PUT'])
 def get_or_update_task(task_id):
     """Get or update a specific task"""
+    from routes.api import api_get_or_update_task
+    return api_get_or_update_task(task_id)
+
+
+@app.route(f'{BASE_PATH}/api/saved-views', methods=['GET', 'POST'])
+@app.route('/api/saved-views', methods=['GET', 'POST'])
+def api_saved_views_local():
+    from routes.api import get_saved_views, save_view
+    if request.method == 'POST':
+        return save_view()
+    return get_saved_views()
+
+
+@app.route(f'{BASE_PATH}/api/saved-views/<view_id>', methods=['DELETE'])
+@app.route('/api/saved-views/<view_id>', methods=['DELETE'])
+def api_saved_views_delete_local(view_id):
+    from routes.api import delete_saved_view
+    return delete_saved_view(view_id)
+
     from routes.api import get_task, update_task
     if request.method == 'PUT':
         return update_task(task_id)

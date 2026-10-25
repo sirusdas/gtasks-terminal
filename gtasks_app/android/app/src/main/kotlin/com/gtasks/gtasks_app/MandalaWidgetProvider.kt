@@ -10,6 +10,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.graphics.Color
 import android.util.Log
 import android.widget.RemoteViews
+import android.widget.Toast
 import kotlin.math.max
 import kotlin.math.min
 import org.json.JSONArray
@@ -229,20 +230,30 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             ACTION_PREV_TAB -> {
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     val wPrefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-                    val tabs = WidgetTabFilter.getAvailableTabs(context)
+                    val tabs = WidgetTabFilter.getAllViewItems(context, isMandala = true)
                     if (tabs.isNotEmpty()) {
                         val currentIndex = wPrefs.getInt("tab_index_$appWidgetId", 0)
                         val newIndex = (currentIndex - 1 + tabs.size) % tabs.size
-                        wPrefs.edit()
+                        val tab = tabs[newIndex]
+                        val wEditor = wPrefs.edit()
                             .putInt("tab_index_$appWidgetId", newIndex)
                             .remove("filter_type_$appWidgetId")
                             .remove("filter_val_$appWidgetId")
-                            .apply()
-                        prefs.edit()
+                        val mEditor = prefs.edit()
                             .remove("drill_path_$appWidgetId")
                             .remove("drill_parent_$appWidgetId")
                             .putInt("focus_$appWidgetId", -1)
-                            .apply()
+                        if (tab.isSavedView) {
+                            wEditor.putString("active_view_title_$appWidgetId", tab.title)
+                            if (!tab.mandalaGrouping.isNullOrBlank()) mEditor.putString("mode_$appWidgetId", tab.mandalaGrouping.lowercase())
+                            if (!tab.mandalaGeometry.isNullOrBlank()) mEditor.putString("geometry_$appWidgetId", tab.mandalaGeometry)
+                            if (!tab.mandalaTheme.isNullOrBlank()) mEditor.putString("theme_$appWidgetId", tab.mandalaTheme)
+                        } else {
+                            wEditor.remove("active_view_title_$appWidgetId")
+                        }
+                        wEditor.apply()
+                        mEditor.apply()
+                        Toast.makeText(context, "${tab.title} (${newIndex + 1}/${tabs.size})", Toast.LENGTH_SHORT).show()
                         updateWidgetById(context, appWidgetId)
                     }
                 }
@@ -250,20 +261,30 @@ class MandalaWidgetProvider : AppWidgetProvider() {
             ACTION_NEXT_TAB -> {
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     val wPrefs = context.getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
-                    val tabs = WidgetTabFilter.getAvailableTabs(context)
+                    val tabs = WidgetTabFilter.getAllViewItems(context, isMandala = true)
                     if (tabs.isNotEmpty()) {
                         val currentIndex = wPrefs.getInt("tab_index_$appWidgetId", 0)
                         val newIndex = (currentIndex + 1) % tabs.size
-                        wPrefs.edit()
+                        val tab = tabs[newIndex]
+                        val wEditor = wPrefs.edit()
                             .putInt("tab_index_$appWidgetId", newIndex)
                             .remove("filter_type_$appWidgetId")
                             .remove("filter_val_$appWidgetId")
-                            .apply()
-                        prefs.edit()
+                        val mEditor = prefs.edit()
                             .remove("drill_path_$appWidgetId")
                             .remove("drill_parent_$appWidgetId")
                             .putInt("focus_$appWidgetId", -1)
-                            .apply()
+                        if (tab.isSavedView) {
+                            wEditor.putString("active_view_title_$appWidgetId", tab.title)
+                            if (!tab.mandalaGrouping.isNullOrBlank()) mEditor.putString("mode_$appWidgetId", tab.mandalaGrouping.lowercase())
+                            if (!tab.mandalaGeometry.isNullOrBlank()) mEditor.putString("geometry_$appWidgetId", tab.mandalaGeometry)
+                            if (!tab.mandalaTheme.isNullOrBlank()) mEditor.putString("theme_$appWidgetId", tab.mandalaTheme)
+                        } else {
+                            wEditor.remove("active_view_title_$appWidgetId")
+                        }
+                        wEditor.apply()
+                        mEditor.apply()
+                        Toast.makeText(context, "${tab.title} (${newIndex + 1}/${tabs.size})", Toast.LENGTH_SHORT).show()
                         updateWidgetById(context, appWidgetId)
                     }
                 }

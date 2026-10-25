@@ -185,6 +185,10 @@ export function showSection(section, updateUrl = true) {
         if (window.initReportsView) {
             window.initReportsView();
         }
+    } else if (section === 'mandala') {
+        if (window.initMandalaView) {
+            window.initMandalaView();
+        }
     }
 }
 

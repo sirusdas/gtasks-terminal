@@ -16,6 +16,9 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ListView
 import android.widget.TextView
+import android.app.AlertDialog
+import android.util.Log
+import android.widget.Toast
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -139,6 +142,16 @@ class WidgetFilterActivity : Activity() {
                 tvAll.visibility = View.VISIBLE
                 btnDone.visibility = View.GONE
                 etSearch.visibility = View.GONE
+            }
+            "saved_views" -> {
+                tvTitle.text = "Saved Views"
+                tvSubtitle.text = "Apply a saved mandala or task view to this widget"
+                tvSubtitle.visibility = View.VISIBLE
+                ivIcon.setImageResource(R.drawable.ic_widget_filter)
+                tvAll.text = "★ Clear Active Saved View"
+                tvAll.visibility = View.VISIBLE
+                btnDone.visibility = View.GONE
+                etSearch.visibility = View.VISIBLE
             }
             "priority" -> {
                 tvTitle.text = "Filter by Priority"
@@ -289,9 +302,21 @@ class WidgetFilterActivity : Activity() {
                     .remove("hide_recurring_$appWidgetId")
                     .remove("hidden_lists_$appWidgetId")
                     .remove("hidden_tags_$appWidgetId")
+                    .remove("active_view_title_$appWidgetId")
                     .apply()
                 notifyAllWidgets()
                 finish()
+            }
+            "saved_views" -> {
+                prefs.edit().remove("active_view_title_$appWidgetId").apply()
+                notifyAllWidgets()
+                Toast.makeText(this, "Cleared active saved view", Toast.LENGTH_SHORT).show()
+                if (isMenuFlow) {
+                    filterType = "menu"
+                    setupForFilterType()
+                } else {
+                    finish()
+                }
             }
             "priority" -> {
                 prefs.edit()
@@ -369,16 +394,30 @@ class WidgetFilterActivity : Activity() {
         when (filterType) {
             "menu" -> {
                 when (position) {
-                    0 -> { filterType = "list"; setupForFilterType() }
-                    1 -> { filterType = "tag"; setupForFilterType() }
-                    2 -> { filterType = "space"; setupForFilterType() }
-                    3 -> { filterType = "subspace"; setupForFilterType() }
-                    4 -> { filterType = "priority"; setupForFilterType() }
-                    5 -> { filterType = "account"; setupForFilterType() }
-                    6 -> { filterType = "date"; setupForFilterType() }
-                    7 -> { filterType = "recurring"; setupForFilterType() }
-                    8 -> { filterType = "sort"; setupForFilterType() }
-                    9 -> { filterType = "hide"; setupForFilterType() }
+                    0 -> { filterType = "saved_views"; setupForFilterType() }
+                    1 -> { showSaveCurrentViewDialog() }
+                    2 -> { filterType = "list"; setupForFilterType() }
+                    3 -> { filterType = "tag"; setupForFilterType() }
+                    4 -> { filterType = "space"; setupForFilterType() }
+                    5 -> { filterType = "subspace"; setupForFilterType() }
+                    6 -> { filterType = "priority"; setupForFilterType() }
+                    7 -> { filterType = "account"; setupForFilterType() }
+                    8 -> { filterType = "date"; setupForFilterType() }
+                    9 -> { filterType = "recurring"; setupForFilterType() }
+                    10 -> { filterType = "sort"; setupForFilterType() }
+                    11 -> { filterType = "hide"; setupForFilterType() }
+                }
+            }
+            "saved_views" -> {
+                val savedViews = WidgetTabFilter.getAvailableSavedViews(this)
+                val chosenIndex = savedViews.indexOfFirst { sv ->
+                    val icon = if (sv.mandalaGrouping != null || sv.viewMode == "mandala") "🕉️" else "📋"
+                    "$icon ${sv.title}" == selected.name
+                }
+                if (chosenIndex != -1) {
+                    val view = savedViews[chosenIndex]
+                    applySavedViewToWidget(view)
+                    finish()
                 }
             }
             "priority" -> {
@@ -580,6 +619,9 @@ class WidgetFilterActivity : Activity() {
                         val hiddenLists = getHiddenLists()
                         val hiddenTags = getHiddenTags()
 
+                        val savedViews = WidgetTabFilter.getAvailableSavedViews(this)
+                        allOptions.add(FilterOption("🔖 Saved Views", savedViews.size, extra = "${savedViews.size} views available"))
+                        allOptions.add(FilterOption("💾 Save Current View", 0, extra = "Save active widget filters"))
                         allOptions.add(FilterOption("📋 Filter by List", lCount, extra = "$lCount lists"))
                         allOptions.add(FilterOption("🏷️ Filter by Tag", tagSet.size, extra = "${tagSet.size} tags"))
                         allOptions.add(FilterOption("🚀 Filter by Workspace", spaceSet.size, extra = "${spaceSet.size} workspaces"))
@@ -590,6 +632,22 @@ class WidgetFilterActivity : Activity() {
                         allOptions.add(FilterOption("🔄 Recurring Tasks", 0, extra = if (hideRecurring) "Hidden" else "Included"))
                         allOptions.add(FilterOption("↕️ Sort Tasks By", 6, extra = "Priority, Due date, Title"))
                         allOptions.add(FilterOption("👁️ Exclusions & Hidden", hiddenLists.size + hiddenTags.size, extra = "${hiddenLists.size} lists, ${hiddenTags.size} tags"))
+                    }
+                    "saved_views" -> {
+                        val savedViews = WidgetTabFilter.getAvailableSavedViews(this)
+                        for (sv in savedViews) {
+                            val icon = if (sv.mandalaGrouping != null || sv.viewMode == "mandala") "🕉️" else "📋"
+                            val descParts = mutableListOf<String>()
+                            if (sv.mandalaGrouping != null) descParts.add("Mandala: ${sv.mandalaGrouping.uppercase()}")
+                            if (sv.selectedSpace != null) descParts.add("Space: ${sv.selectedSpace}")
+                            if (sv.statusFilter != "pending") descParts.add(sv.statusFilter.replaceFirstChar { it.uppercase() })
+                            if (sv.selectedPriority != null) descParts.add("Prio: ${sv.selectedPriority}")
+                            val extraStr = if (descParts.isNotEmpty()) descParts.joinToString(" • ") else "Saved View"
+                            allOptions.add(FilterOption("$icon ${sv.title}", 0, extra = extraStr))
+                        }
+                        if (allOptions.isEmpty()) {
+                            allOptions.add(FilterOption("No Saved Views Yet", 0, extra = "Save current filters from menu"))
+                        }
                     }
                     "priority" -> {
                         fun countFor(prio: String): Int {
@@ -863,6 +921,126 @@ class WidgetFilterActivity : Activity() {
             }
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    private fun applySavedViewToWidget(view: WidgetTabFilter) {
+        val prefs = getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+
+        editor.putString("active_view_title_$appWidgetId", view.title)
+        if (!view.filterType.isNullOrBlank()) {
+            editor.putString("filter_type_$appWidgetId", view.filterType)
+            editor.putString("filter_val_$appWidgetId", view.filterVal)
+        } else {
+            editor.remove("filter_type_$appWidgetId")
+            editor.remove("filter_val_$appWidgetId")
+        }
+
+        editor.putString("widget_status_$appWidgetId", view.statusFilter)
+        editor.putString("mandala_status_$appWidgetId", view.statusFilter)
+        editor.putBoolean("hide_recurring_$appWidgetId", view.hideRecurring)
+        editor.putString("sort_by_$appWidgetId", view.sortBy)
+
+        if (view.hiddenLists.isNotEmpty()) {
+            editor.putString("hidden_lists_$appWidgetId", JSONArray(view.hiddenLists).toString())
+        } else {
+            editor.remove("hidden_lists_$appWidgetId")
+        }
+
+        if (view.hiddenTags.isNotEmpty()) {
+            editor.putString("hidden_tags_$appWidgetId", JSONArray(view.hiddenTags).toString())
+        } else {
+            editor.remove("hidden_tags_$appWidgetId")
+        }
+
+        if (!view.viewMode.isNullOrBlank()) {
+            editor.putString("view_mode_$appWidgetId", view.viewMode)
+        }
+        editor.apply()
+
+        // Set mandala-specific prefs if configured
+        val mandalaPrefs = getSharedPreferences("mandala_widget_prefs", Context.MODE_PRIVATE)
+        val mEditor = mandalaPrefs.edit()
+        if (!view.mandalaGrouping.isNullOrBlank()) {
+            mEditor.putString("mode_$appWidgetId", view.mandalaGrouping.lowercase())
+        }
+        if (!view.mandalaGeometry.isNullOrBlank()) {
+            mEditor.putString("geometry_$appWidgetId", view.mandalaGeometry)
+        }
+        if (!view.mandalaTheme.isNullOrBlank()) {
+            mEditor.putString("theme_$appWidgetId", view.mandalaTheme)
+        }
+        mEditor.remove("drill_path_$appWidgetId")
+        mEditor.remove("drill_parent_$appWidgetId")
+        mEditor.putInt("focus_$appWidgetId", -1)
+        mEditor.apply()
+
+        notifyAllWidgets()
+        Toast.makeText(this, "Applied: ${view.title} 🔖", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showSaveCurrentViewDialog() {
+        val input = EditText(this).apply {
+            hint = "e.g. Work Sprint or Focused Mandala"
+            setSingleLine()
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Save Current View")
+            .setMessage("Enter a title for this saved view:")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                val title = input.text.toString().trim().ifEmpty { "Widget View" }
+                saveCurrentWidgetView(title)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun saveCurrentWidgetView(title: String) {
+        try {
+            val prefs = getSharedPreferences("gtasks_widget_prefs", Context.MODE_PRIVATE)
+            val mandalaPrefs = getSharedPreferences("mandala_widget_prefs", Context.MODE_PRIVATE)
+            val currentTab = WidgetTabFilter.getActiveTabFilter(this, appWidgetId)
+
+            val mode = mandalaPrefs.getString("mode_$appWidgetId", null)
+            val geom = mandalaPrefs.getString("geometry_$appWidgetId", null)
+            val theme = mandalaPrefs.getString("theme_$appWidgetId", null)
+            val viewMode = prefs.getString("view_mode_$appWidgetId", null)
+
+            val obj = JSONObject().apply {
+                put("id", "saved_view_${System.currentTimeMillis()}")
+                put("title", title)
+                put("statusFilter", currentTab.statusFilter)
+                put("hideRecurring", currentTab.hideRecurring)
+                put("sortField", currentTab.sortBy)
+                if (!currentTab.filterType.isNullOrBlank()) put("filterType", currentTab.filterType)
+                if (!currentTab.filterVal.isNullOrBlank()) put("filterVal", currentTab.filterVal)
+                if (currentTab.selectedSpace != null) put("selectedSpace", currentTab.selectedSpace)
+                if (currentTab.selectedSubspace != null) put("selectedSubspace", currentTab.selectedSubspace)
+                if (currentTab.selectedPriority != null) put("selectedPriority", currentTab.selectedPriority)
+                if (currentTab.accounts.isNotEmpty()) put("accounts", JSONArray(currentTab.accounts))
+                if (currentTab.selectedLists.isNotEmpty()) put("selectedLists", JSONArray(currentTab.selectedLists))
+                if (currentTab.selectedTags.isNotEmpty()) put("selectedTags", JSONArray(currentTab.selectedTags))
+                if (currentTab.hiddenLists.isNotEmpty()) put("hiddenLists", JSONArray(currentTab.hiddenLists))
+                if (currentTab.hiddenTags.isNotEmpty()) put("hiddenTags", JSONArray(currentTab.hiddenTags))
+                if (!viewMode.isNullOrBlank()) put("viewMode", viewMode)
+                if (!mode.isNullOrBlank()) put("mandalaGrouping", mode)
+                if (!geom.isNullOrBlank()) put("mandalaGeometry", geom)
+                if (!theme.isNullOrBlank()) put("mandalaTheme", theme)
+            }
+
+            val existingRaw = prefs.getString("saved_views_json", "[]")
+            val arr = try { JSONArray(existingRaw) } catch (_: Exception) { JSONArray() }
+            arr.put(obj)
+            prefs.edit().putString("saved_views_json", arr.toString()).apply()
+
+            prefs.edit().putString("active_view_title_$appWidgetId", title).apply()
+            notifyAllWidgets()
+            Toast.makeText(this, "Saved view: $title 🔖", Toast.LENGTH_SHORT).show()
+            if (isMenuFlow) finish()
+        } catch (e: Exception) {
+            Log.e("WidgetFilterActivity", "Error saving current widget view", e)
         }
     }
 

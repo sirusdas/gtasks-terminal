@@ -3831,3 +3831,84 @@ def swagger_ui():
 </body>
 </html>"""
     return Response(swagger_html, mimetype='text/html')
+
+
+def _get_saved_views_file() -> Path:
+    config_dir = os.environ.get('GTASKS_CONFIG_DIR')
+    if config_dir:
+        base = Path(config_dir)
+    else:
+        base = Path.home() / '.gtasks'
+    base.mkdir(parents=True, exist_ok=True)
+    return base / 'saved_views.json'
+
+
+@api.route('/saved-views', methods=['GET'])
+def get_saved_views():
+    """Get all saved views"""
+    import json
+    file_path = _get_saved_views_file()
+    if not file_path.exists():
+        return jsonify([])
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return jsonify(data if isinstance(data, list) else [])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@api.route('/saved-views', methods=['POST'])
+def save_view():
+    """Create or update a saved view"""
+    import json
+    from datetime import datetime
+    payload = request.get_json(silent=True) or {}
+    title = str(payload.get('title', '')).strip()
+    if not title:
+        return jsonify({'error': 'Title is required'}), 400
+    
+    file_path = _get_saved_views_file()
+    views = []
+    if file_path.exists():
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                views = json.load(f)
+                if not isinstance(views, list):
+                    views = []
+        except Exception:
+            views = []
+
+    view_id = payload.get('id') or f"saved_view_{int(datetime.utcnow().timestamp() * 1000)}"
+    payload['id'] = view_id
+    payload['title'] = title
+
+    idx = next((i for i, v in enumerate(views) if v.get('id') == view_id or v.get('title') == title), -1)
+    if idx != -1:
+        views[idx] = payload
+    else:
+        views.append(payload)
+
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(views, f, indent=2)
+
+    return jsonify({'success': True, 'view': payload})
+
+
+@api.route('/saved-views/<view_id>', methods=['DELETE'])
+def delete_saved_view(view_id):
+    """Delete a saved view by id"""
+    import json
+    file_path = _get_saved_views_file()
+    if not file_path.exists():
+        return jsonify({'success': True})
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            views = json.load(f)
+        views = [v for v in views if v.get('id') != view_id]
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(views, f, indent=2)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
