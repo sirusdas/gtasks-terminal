@@ -608,6 +608,23 @@ class _TasksScreenState extends State<TasksScreen> {
                   },
                 ),
                 ListTile(
+                  leading: Icon(
+                    provider.isTabSaved(tab) ? Icons.bookmark_added_rounded : Icons.bookmark_add_outlined,
+                    color: Colors.amber,
+                  ),
+                  title: Text(provider.isTabSaved(tab) ? 'Saved in Sidebar Views' : 'Save View to Sidebar'),
+                  subtitle: const Text('Access this view anytime from the sidebar menu'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await provider.saveView(tab);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Saved "${tab.title}" to Sidebar Views!')),
+                      );
+                    }
+                  },
+                ),
+                ListTile(
                   leading: const Icon(Icons.copy_rounded),
                   title: const Text('Duplicate Tab'),
                   subtitle: const Text('Clone this tab and its filters'),
@@ -1507,7 +1524,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                     physics: const AlwaysScrollableScrollPhysics(
                                       parent: BouncingScrollPhysics(),
                                     ),
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 84),
                                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                                       crossAxisCount: 2,
                                       crossAxisSpacing: 6,
@@ -1535,7 +1552,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                     physics: const AlwaysScrollableScrollPhysics(
                                       parent: BouncingScrollPhysics(),
                                     ),
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    padding: const EdgeInsets.fromLTRB(10, 6, 10, 84),
                                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                                       crossAxisCount: 2,
                                       crossAxisSpacing: 8,
@@ -1563,7 +1580,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                     physics: const AlwaysScrollableScrollPhysics(
                                       parent: BouncingScrollPhysics(),
                                     ),
-                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    padding: const EdgeInsets.fromLTRB(0, 4, 0, 84),
                                     addRepaintBoundaries: true,
                                     itemCount: provider.tasks.length,
                                     itemBuilder: (ctx, index) {
@@ -1585,6 +1602,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                     physics: const AlwaysScrollableScrollPhysics(
                                       parent: BouncingScrollPhysics(),
                                     ),
+                                    padding: const EdgeInsets.fromLTRB(0, 0, 0, 84),
                                     addRepaintBoundaries: true,
                                     itemCount: provider.tasks.length,
                                     itemBuilder: (ctx, index) {
@@ -1605,11 +1623,13 @@ class _TasksScreenState extends State<TasksScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(Icons.add),
-        label: const Text('New Task'),
-        onPressed: () => _showAddTaskSheet(context),
-      ),
+      floatingActionButton: isMandala
+          ? null
+          : FloatingActionButton.extended(
+              icon: const Icon(Icons.add),
+              label: const Text('New Task'),
+              onPressed: () => _showAddTaskSheet(context),
+            ),
     );
   }
 

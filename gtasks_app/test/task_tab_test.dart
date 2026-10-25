@@ -209,5 +209,41 @@ void main() {
       expect(restored.selectedAccounts, {'work_acc', 'side_acc'});
       expect(restored.effectiveAccounts, {'work_acc', 'side_acc'});
     });
+
+    test('TaskTab stores and serializes mandalaGrouping, mandalaGeometry, mandalaTheme', () {
+      final mandalaTab = TaskTab(
+        id: 'tab_mandala_1',
+        title: 'Sacred Mandala Space',
+        viewMode: 'mandala',
+        mandalaGrouping: 'spaces',
+        mandalaGeometry: 'padma',
+        mandalaTheme: 'cyberpunk',
+      );
+
+      final json = mandalaTab.toJson();
+      expect(json['viewMode'], 'mandala');
+      expect(json['mandalaGrouping'], 'spaces');
+      expect(json['mandalaGeometry'], 'padma');
+      expect(json['mandalaTheme'], 'cyberpunk');
+
+      final restored = TaskTab.fromJson(json);
+      expect(restored.viewMode, 'mandala');
+      expect(restored.mandalaGrouping, 'spaces');
+      expect(restored.mandalaGeometry, 'padma');
+      expect(restored.mandalaTheme, 'cyberpunk');
+
+      final copied = restored.copyWith(
+        mandalaGeometry: 'chakra',
+        mandalaTheme: 'vedic',
+      );
+      expect(copied.mandalaGeometry, 'chakra');
+      expect(copied.mandalaTheme, 'vedic');
+      expect(copied.mandalaGrouping, 'spaces');
+
+      final cleared = copied.copyWith(
+        clearMandalaGeometry: true,
+      );
+      expect(cleared.mandalaGeometry, isNull);
+    });
   });
 }

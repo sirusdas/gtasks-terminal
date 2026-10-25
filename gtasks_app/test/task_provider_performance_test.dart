@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gtasks_app/models/task_item.dart';
+import 'package:gtasks_app/models/task_tab.dart';
 import 'package:gtasks_app/providers/task_provider.dart';
 import 'package:gtasks_app/api/api_client.dart';
 
@@ -104,6 +105,49 @@ void main() {
       expect(provider.selectedAccount, 'work_acc');
       expect(provider.selectedSpace, 'Backend');
       expect(provider.selectedTags, contains('urgent'));
+    });
+
+    test('TaskProvider Saved Views CRUD operations work properly', () async {
+      final provider = TaskProvider(
+        apiClient: ApiClient(baseUrl: 'http://localhost:48275'),
+        isStandalone: true,
+      );
+
+      final mandalaTab = TaskTab(
+        id: 'tab_mandala_view',
+        title: 'Project Mandala',
+        viewMode: 'mandala',
+        selectedSpace: 'Engineering',
+        mandalaGrouping: 'spaces',
+        mandalaGeometry: 'padma',
+        mandalaTheme: 'cyberpunk',
+      );
+
+      // Save view
+      await provider.saveView(mandalaTab);
+      expect(provider.savedViews.length, 1);
+      expect(provider.savedViews.first.title, 'Project Mandala');
+      expect(provider.savedViews.first.viewMode, 'mandala');
+      expect(provider.savedViews.first.mandalaGeometry, 'padma');
+      expect(provider.isTabSaved(mandalaTab), isTrue);
+
+      final savedViewId = provider.savedViews.first.id;
+
+      // Rename saved view
+      await provider.renameSavedView(savedViewId, 'Engineering Mandala Atlas');
+      expect(provider.savedViews.first.title, 'Engineering Mandala Atlas');
+
+      // Open saved view
+      final initialTabCount = provider.tabs.length;
+      provider.openSavedView(provider.savedViews.first, forceNewTab: true);
+      expect(provider.tabs.length, initialTabCount + 1);
+      expect(provider.activeTab?.title, 'Engineering Mandala Atlas');
+      expect(provider.activeTab?.viewMode, 'mandala');
+      expect(provider.activeTab?.mandalaGeometry, 'padma');
+
+      // Delete saved view
+      await provider.deleteSavedView(savedViewId);
+      expect(provider.savedViews, isEmpty);
     });
   });
 }

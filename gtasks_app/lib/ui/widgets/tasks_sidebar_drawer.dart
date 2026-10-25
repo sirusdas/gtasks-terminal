@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../models/task_tab.dart';
 import 'settings_modal.dart';
 import '../screens/ai_chat_screen.dart';
 import '../../mandala/mandala_screen.dart';
@@ -17,6 +18,7 @@ class TasksSidebarDrawer extends StatefulWidget {
 class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
+  bool _savedViewsExpanded = true;
   bool _listsExpanded = true;
   bool _spacesExpanded = true;
   bool _tagsExpanded = true;
@@ -26,6 +28,76 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
     _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _showRenameSavedViewDialog(BuildContext context, TaskProvider provider, TaskTab view) {
+    final controller = TextEditingController(text: view.title);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.edit_outlined, color: Colors.blueAccent),
+            SizedBox(width: 8),
+            Text('Rename View'),
+          ],
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'View Title',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final newTitle = controller.text.trim();
+              if (newTitle.isNotEmpty) {
+                await provider.renameSavedView(view.id, newTitle);
+                if (mounted) Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteSavedView(BuildContext context, TaskProvider provider, TaskTab view) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Delete Saved View'),
+          ],
+        ),
+        content: Text('Are you sure you want to remove "${view.title}" from your saved views?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () async {
+              await provider.deleteSavedView(view.id);
+              if (mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSidebarItemOptions(
@@ -423,6 +495,147 @@ class _TasksSidebarDrawerState extends State<TasksSidebarDrawer> {
                       );
                     },
                   ),
+
+                  const Divider(height: 16),
+
+                  // Collapsible Saved Views Section
+                  InkWell(
+                    onTap: () => setState(() => _savedViewsExpanded = !_savedViewsExpanded),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.bookmark_rounded, size: 18, color: Colors.amber),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Saved Views (${provider.savedViews.length})',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const Spacer(),
+                          if (provider.activeTab != null)
+                            IconButton(
+                              icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+                              tooltip: 'Save Active Tab as View',
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                              onPressed: () async {
+                                final tab = provider.activeTab!;
+                                await provider.saveView(tab);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Saved "${tab.title}" to Saved Views!'),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          Icon(
+                            _savedViewsExpanded ? Icons.expand_less : Icons.expand_more,
+                            size: 20,
+                            color: theme.disabledColor,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_savedViewsExpanded) ...[
+                    if (provider.savedViews.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+                        child: Text(
+                          'No saved views yet. Save any tab or Mandala view to access it here anytime.',
+                          style: TextStyle(fontSize: 11, color: theme.disabledColor, fontStyle: FontStyle.italic),
+                        ),
+                      )
+                    else
+                      ...provider.savedViews
+                          .where((v) => query.isEmpty || v.title.toLowerCase().contains(query))
+                          .map((view) {
+                        final isMandala = view.viewMode == 'mandala';
+                        final icon = isMandala ? Icons.hub_outlined : view.icon;
+                        final color = isMandala ? Colors.purpleAccent : (view.accentColor ?? theme.colorScheme.primary);
+                        final subtitle = isMandala
+                            ? 'Mandala Radial View'
+                            : (view.selectedSpace != null
+                                ? 'Space: ${view.selectedSpace}'
+                                : (view.selectedPriority != null
+                                    ? 'Priority: ${view.selectedPriority}'
+                                    : (view.selectedLists.isNotEmpty
+                                        ? 'List: ${view.selectedLists.first}'
+                                        : 'Task View')));
+
+                        return ListTile(
+                          dense: true,
+                          contentPadding: const EdgeInsets.only(left: 28, right: 8),
+                          leading: Icon(icon, size: 18, color: color),
+                          title: Text(
+                            view.title,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            subtitle,
+                            style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert_rounded, size: 16),
+                            padding: EdgeInsets.zero,
+                            onSelected: (action) {
+                              if (action == 'open_new') {
+                                Navigator.pop(context);
+                                provider.openSavedView(view, forceNewTab: true);
+                              } else if (action == 'rename') {
+                                _showRenameSavedViewDialog(context, provider, view);
+                              } else if (action == 'delete') {
+                                _confirmDeleteSavedView(context, provider, view);
+                              }
+                            },
+                            itemBuilder: (ctx) => [
+                              const PopupMenuItem(
+                                value: 'open_new',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.tab_outlined, size: 16, color: Colors.blueAccent),
+                                    SizedBox(width: 8),
+                                    Text('Open in New Tab', style: TextStyle(fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'rename',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.edit_outlined, size: 16),
+                                    SizedBox(width: 8),
+                                    Text('Rename View', style: TextStyle(fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+                                    SizedBox(width: 8),
+                                    Text('Delete View', style: TextStyle(fontSize: 13, color: Colors.redAccent)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          onTap: () {
+                            Navigator.pop(context);
+                            provider.openSavedView(view);
+                          },
+                        );
+                      }),
+                  ],
 
                   const Divider(height: 16),
 

@@ -207,10 +207,14 @@ class TaskProvider with ChangeNotifier {
 
   static const String _keyBrowserTabs = 'gtasks_browser_tabs_v2';
   static const String _keyActiveTabIndex = 'gtasks_browser_active_tab_index_v2';
+  static const String _keySavedViews = 'gtasks_saved_views_v1';
 
   List<TaskTab> _tabs = _generateDefaultTabs();
   int _activeTabIndex = 0;
   bool _isApplyingTab = false;
+
+  List<TaskTab> _savedViews = [];
+  List<TaskTab> get savedViews => List.unmodifiable(_savedViews);
 
   List<TaskTab> get tabs => List.unmodifiable(_tabs);
   int get activeTabIndex => _activeTabIndex;
@@ -225,6 +229,12 @@ class TaskProvider with ChangeNotifier {
       if (tabsRaw != null && tabsRaw.isNotEmpty) {
         final List decoded = jsonDecode(tabsRaw);
         _tabs = decoded.map((item) => TaskTab.fromJson(item as Map<String, dynamic>)).toList();
+      }
+
+      final savedViewsRaw = prefs.getString(_keySavedViews);
+      if (savedViewsRaw != null && savedViewsRaw.isNotEmpty) {
+        final List decodedViews = jsonDecode(savedViewsRaw);
+        _savedViews = decodedViews.map((item) => TaskTab.fromJson(item as Map<String, dynamic>)).toList();
       }
 
       if (_tabs.isEmpty) {
@@ -542,6 +552,72 @@ class TaskProvider with ChangeNotifier {
     if (_activeTabIndex == -1) _activeTabIndex = 0;
     _saveTabs();
     notifyListeners();
+  }
+
+  // --- Saved Views Management ---
+
+  Future<void> _saveSavedViews() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = jsonEncode(_savedViews.map((t) => t.toJson()).toList());
+      await prefs.setString(_keySavedViews, raw);
+    } catch (e) {
+      debugPrint('[TaskProvider] Error saving saved views: $e');
+    }
+  }
+
+  Future<void> saveView(TaskTab tab, {String? customTitle}) async {
+    final title = (customTitle != null && customTitle.trim().isNotEmpty)
+        ? customTitle.trim()
+        : tab.title;
+    final newId = 'saved_view_${DateTime.now().millisecondsSinceEpoch}';
+    final savedView = tab.copyWith(
+      id: newId,
+      title: title,
+    );
+    final existingIdx = _savedViews.indexWhere((v) => v.id == tab.id || v.title == title);
+    if (existingIdx != -1) {
+      _savedViews[existingIdx] = savedView;
+    } else {
+      _savedViews.add(savedView);
+    }
+    await _saveSavedViews();
+    notifyListeners();
+  }
+
+  Future<void> renameSavedView(String viewId, String newTitle) async {
+    final idx = _savedViews.indexWhere((v) => v.id == viewId);
+    if (idx != -1 && newTitle.trim().isNotEmpty) {
+      _savedViews[idx].title = newTitle.trim();
+      await _saveSavedViews();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteSavedView(String viewId) async {
+    _savedViews.removeWhere((v) => v.id == viewId);
+    await _saveSavedViews();
+    notifyListeners();
+  }
+
+  void openSavedView(TaskTab view, {bool forceNewTab = false}) {
+    if (!forceNewTab) {
+      final existingIdx = _tabs.indexWhere(
+        (t) => t.id == view.id || (t.title == view.title && t.viewMode == view.viewMode && t.selectedSpace == view.selectedSpace),
+      );
+      if (existingIdx != -1) {
+        switchToTab(existingIdx);
+        return;
+      }
+    }
+    final newTab = view.copyWith(
+      id: 'tab_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    addTab(newTab);
+  }
+
+  bool isTabSaved(TaskTab tab) {
+    return _savedViews.any((v) => v.id == tab.id || (v.title == tab.title && v.viewMode == tab.viewMode));
   }
 
   bool get hasActiveFilters {

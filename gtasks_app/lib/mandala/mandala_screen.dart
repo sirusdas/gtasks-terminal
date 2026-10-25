@@ -28,6 +28,7 @@ class MandalaScreen extends StatefulWidget {
   final String? initialThemeName;
   final TaskTab? initialTab;
   final bool isEmbedded;
+  final bool startFullscreen;
 
   const MandalaScreen({
     super.key,
@@ -40,6 +41,7 @@ class MandalaScreen extends StatefulWidget {
     this.initialThemeName,
     this.initialTab,
     this.isEmbedded = false,
+    this.startFullscreen = false,
   });
 
   @override
@@ -47,6 +49,7 @@ class MandalaScreen extends StatefulWidget {
 }
 
 class _MandalaScreenState extends State<MandalaScreen> {
+  bool _isFullscreen = false;
   MandalaGrouping _grouping = MandalaGrouping.spaces;
   MandalaNestingMode _nestingMode = MandalaNestingMode.hierarchicalPortals;
   GeometryId? _forcedGeometry;
@@ -71,6 +74,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
   @override
   void initState() {
     super.initState();
+    _isFullscreen = widget.startFullscreen;
     final p = context.read<TaskProvider>();
     final baseTab = widget.initialTab ?? p.activeTab ?? TaskTab(id: 'mandala', title: widget.title ?? 'Mandala');
     _mandalaTab = widget.isEmbedded ? baseTab : baseTab.copyWith(
@@ -78,12 +82,24 @@ class _MandalaScreenState extends State<MandalaScreen> {
     );
     if (widget.initialGrouping != null) {
       _grouping = widget.initialGrouping!;
+    } else if (_mandalaTab.mandalaGrouping != null) {
+      _grouping = MandalaGrouping.values.firstWhere(
+        (g) => g.name == _mandalaTab.mandalaGrouping,
+        orElse: () => _grouping,
+      );
     }
     if (widget.initialGeometry != null) {
       _forcedGeometry = widget.initialGeometry!;
+    } else if (_mandalaTab.mandalaGeometry != null) {
+      _forcedGeometry = GeometryId.values.firstWhere(
+        (g) => g.name == _mandalaTab.mandalaGeometry,
+        orElse: () => GeometryId.padma,
+      );
     }
     if (widget.initialThemeName != null && widget.initialThemeName!.isNotEmpty) {
       _activeTheme = MandalaThemePalette.getById(widget.initialThemeName!);
+    } else if (_mandalaTab.mandalaTheme != null && _mandalaTab.mandalaTheme!.isNotEmpty) {
+      _activeTheme = MandalaThemePalette.getById(_mandalaTab.mandalaTheme!);
     } else {
       _loadTheme();
     }
@@ -848,6 +864,9 @@ class _MandalaScreenState extends State<MandalaScreen> {
       id: 'tab_${DateTime.now().millisecondsSinceEpoch}',
       title: tabTitle,
       viewMode: 'mandala',
+      mandalaGrouping: _grouping.name,
+      mandalaGeometry: _forcedGeometry?.name,
+      mandalaTheme: _activeTheme.id.name,
       iconCodePoint: Icons.hub_outlined.codePoint,
     );
     provider.addTab(newTab);
@@ -864,6 +883,105 @@ class _MandalaScreenState extends State<MandalaScreen> {
             provider.switchToTab(provider.tabs.length - 1);
           },
         ),
+      ),
+    );
+  }
+
+  void _openFullscreen() {
+    if (widget.isEmbedded) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => MandalaScreen(
+            initialTab: _mandalaTab,
+            initialGrouping: _grouping,
+            initialGeometry: _forcedGeometry,
+            initialThemeName: _activeTheme.id.name,
+            initialFocusItem: _currentMandalaId,
+            startFullscreen: true,
+          ),
+        ),
+      ).then((result) {
+        if (result is String && mounted) {
+          _switchMandala(result);
+        }
+      });
+    } else {
+      setState(() {
+        _isFullscreen = true;
+      });
+    }
+  }
+
+  void _showSaveViewDialog() {
+    final defaultTitle = _mandalaTab.title.isNotEmpty && _mandalaTab.title != 'Mandala' && _mandalaTab.title != 'All Tasks'
+        ? _mandalaTab.title
+        : (_layout.title.isNotEmpty ? _layout.title : 'Mandala View');
+    final controller = TextEditingController(text: defaultTitle);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.bookmark_add_rounded, color: Colors.purpleAccent),
+            SizedBox(width: 8),
+            Text('Save Mandala View'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Save this sacred radial view configuration to your Sidebar for fast 1-tap access anytime.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'View Title',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.hub_outlined),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            icon: const Icon(Icons.save_rounded, size: 18),
+            label: const Text('Save to Sidebar'),
+            onPressed: () async {
+              final newTitle = controller.text.trim();
+              if (newTitle.isNotEmpty) {
+                final provider = context.read<TaskProvider>();
+                final tabToSave = _mandalaTab.copyWith(
+                  title: newTitle,
+                  viewMode: 'mandala',
+                  mandalaGrouping: _grouping.name,
+                  mandalaGeometry: _forcedGeometry?.name,
+                  mandalaTheme: _activeTheme.id.name,
+                  iconCodePoint: Icons.hub_outlined.codePoint,
+                );
+                await provider.saveView(tabToSave);
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Saved "$newTitle" to Sidebar Saved Views!'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
+            },
+          ),
+        ],
       ),
     );
   }
@@ -1398,6 +1516,18 @@ class _MandalaScreenState extends State<MandalaScreen> {
           _buildGeometryButton(),
           _buildThemeButton(),
           IconButton(
+            icon: const Icon(Icons.fullscreen_rounded, size: 22),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Fullscreen Mandala',
+            onPressed: _openFullscreen,
+          ),
+          IconButton(
+            icon: const Icon(Icons.bookmark_add_outlined, size: 20),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Save View to Sidebar',
+            onPressed: _showSaveViewDialog,
+          ),
+          IconButton(
             icon: const Icon(Icons.list_alt_rounded, size: 20),
             visualDensity: VisualDensity.compact,
             tooltip: 'Switch to Task List View',
@@ -1468,6 +1598,157 @@ class _MandalaScreenState extends State<MandalaScreen> {
     final isDark = theme.brightness == Brightness.dark;
     final List<String> crumbs = _layout.breadcrumb;
 
+    if (_isFullscreen) {
+      return Scaffold(
+        backgroundColor: isDark ? _activeTheme.background : const Color(0xFFF8FAFC),
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final canvasSize = Size(
+                constraints.maxWidth,
+                constraints.maxHeight,
+              );
+
+              return Stack(
+                children: [
+                  InteractiveViewer(
+                    transformationController: _transformController,
+                    minScale: 0.5,
+                    maxScale: 6.0,
+                    boundaryMargin: const EdgeInsets.all(300),
+                    child: GestureDetector(
+                      onTapUp: (details) => _handleTapUp(details, canvasSize),
+                      child: CustomPaint(
+                        size: canvasSize,
+                        painter: MandalaPainter(
+                          layout: _layout,
+                          selectedCellId: _selectedCellId,
+                          isDark: isDark,
+                          primaryColor: _activeTheme.primary,
+                          palette: _activeTheme,
+                          pathCache: _pathCache,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Top-Left: Navigation Breadcrumbs Pill
+                  if (crumbs.length > 1)
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      right: 72,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.9) : Colors.white.withValues(alpha: 0.92),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (int i = 0; i < crumbs.length; i++) ...[
+                                if (i > 0)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 4),
+                                    child: Icon(Icons.chevron_right, size: 14, color: Colors.grey),
+                                  ),
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: () => _switchMandala(crumbs[i]),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    child: Text(
+                                      _atlas.mandalas[crumbs[i]]?.title ?? crumbs[i],
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: crumbs[i] == _currentMandalaId ? FontWeight.bold : FontWeight.normal,
+                                        color: crumbs[i] == _currentMandalaId
+                                            ? _activeTheme.primary
+                                            : (isDark ? Colors.white70 : Colors.black87),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // Top-Right: Exit Fullscreen Button
+                  Positioned(
+                    top: 16,
+                    right: 16,
+                    child: FloatingActionButton.small(
+                      heroTag: 'mandala_exit_fullscreen',
+                      tooltip: 'Exit Fullscreen',
+                      backgroundColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFFFFFFF),
+                      child: const Icon(Icons.fullscreen_exit_rounded, size: 22),
+                      onPressed: () {
+                        if (Navigator.canPop(context)) {
+                          Navigator.pop(context, _currentMandalaId);
+                        } else {
+                          setState(() {
+                            _isFullscreen = false;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+
+                  // Bottom-Right: Reset Zoom & Center
+                  Positioned(
+                    bottom: 16,
+                    right: 16,
+                    child: FloatingActionButton.small(
+                      heroTag: 'mandala_reset_zoom_fullscreen',
+                      tooltip: 'Reset Zoom & Center',
+                      backgroundColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFFFFFFF),
+                      child: const Icon(Icons.center_focus_strong, size: 18),
+                      onPressed: () {
+                        _transformController.value = Matrix4.identity();
+                      },
+                    ),
+                  ),
+
+                  // Bottom-Left: Up Level Navigation Button
+                  if (crumbs.length > 1)
+                    Positioned(
+                      bottom: 16,
+                      left: 16,
+                      child: FloatingActionButton.extended(
+                        heroTag: 'mandala_up_fullscreen',
+                        icon: const Icon(Icons.arrow_upward, size: 18),
+                        label: const Text('Up Level'),
+                        onPressed: () {
+                          final parentId = _atlas.mandalas[_currentMandalaId]?.parentMandala;
+                          if (parentId != null) _switchMandala(parentId);
+                        },
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      );
+    }
+
     final content = Column(
       children: [
         if (widget.isEmbedded)
@@ -1513,7 +1794,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
                     bottom: 16,
                     right: 16,
                     child: FloatingActionButton.small(
-                      heroTag: 'mandala_reset_zoom',
+                      heroTag: 'mandala_reset_zoom_${widget.isEmbedded ? "embed" : "page"}',
                       tooltip: 'Reset Zoom & Center',
                       backgroundColor: isDark
                           ? const Color(0xFF1E293B)
@@ -1531,7 +1812,7 @@ class _MandalaScreenState extends State<MandalaScreen> {
                       bottom: 16,
                       left: 16,
                       child: FloatingActionButton.extended(
-                        heroTag: 'mandala_up',
+                        heroTag: 'mandala_up_${widget.isEmbedded ? "embed" : "page"}',
                         icon: const Icon(Icons.arrow_upward, size: 18),
                         label: const Text('Up Level'),
                         onPressed: () {
@@ -1610,6 +1891,16 @@ class _MandalaScreenState extends State<MandalaScreen> {
             icon: const Icon(Icons.tab_outlined),
             tooltip: 'Open as Tab',
             onPressed: _openAsBrowserTab,
+          ),
+          IconButton(
+            icon: const Icon(Icons.fullscreen_rounded),
+            tooltip: 'Fullscreen Mandala',
+            onPressed: _openFullscreen,
+          ),
+          IconButton(
+            icon: const Icon(Icons.bookmark_add_outlined),
+            tooltip: 'Save View to Sidebar',
+            onPressed: _showSaveViewDialog,
           ),
           _buildGroupingButton(),
           _buildNestingButton(),

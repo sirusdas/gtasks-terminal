@@ -26,6 +26,9 @@ class TaskTab {
   String sortField;
   bool sortAscending;
   String? viewMode; // optional override: 'detailed', 'compact', 'two_column', 'two_column_compact'
+  String? mandalaGrouping;
+  String? mandalaGeometry;
+  String? mandalaTheme;
 
   TaskTab({
     required this.id,
@@ -49,6 +52,9 @@ class TaskTab {
     this.sortField = 'priority',
     this.sortAscending = true,
     this.viewMode,
+    this.mandalaGrouping,
+    this.mandalaGeometry,
+    this.mandalaTheme,
   })  : selectedAccounts = selectedAccounts != null
             ? Set.from(selectedAccounts)
             : (selectedAccount != null && selectedAccount != 'all' ? {selectedAccount} : {}),
@@ -147,6 +153,12 @@ class TaskTab {
     bool? sortAscending,
     String? viewMode,
     bool clearViewMode = false,
+    String? mandalaGrouping,
+    bool clearMandalaGrouping = false,
+    String? mandalaGeometry,
+    bool clearMandalaGeometry = false,
+    String? mandalaTheme,
+    bool clearMandalaTheme = false,
   }) {
     return TaskTab(
       id: id ?? this.id,
@@ -170,6 +182,9 @@ class TaskTab {
       sortField: sortField ?? this.sortField,
       sortAscending: sortAscending ?? this.sortAscending,
       viewMode: clearViewMode ? null : (viewMode ?? this.viewMode),
+      mandalaGrouping: clearMandalaGrouping ? null : (mandalaGrouping ?? this.mandalaGrouping),
+      mandalaGeometry: clearMandalaGeometry ? null : (mandalaGeometry ?? this.mandalaGeometry),
+      mandalaTheme: clearMandalaTheme ? null : (mandalaTheme ?? this.mandalaTheme),
     );
   }
 
@@ -267,6 +282,9 @@ class TaskTab {
       'sortField': sortField,
       'sortAscending': sortAscending,
       'viewMode': viewMode,
+      'mandalaGrouping': mandalaGrouping,
+      'mandalaGeometry': mandalaGeometry,
+      'mandalaTheme': mandalaTheme,
     };
   }
 
@@ -310,6 +328,9 @@ class TaskTab {
       sortField: json['sortField'] as String? ?? 'priority',
       sortAscending: json['sortAscending'] as bool? ?? true,
       viewMode: json['viewMode'] as String?,
+      mandalaGrouping: json['mandalaGrouping'] as String?,
+      mandalaGeometry: json['mandalaGeometry'] as String?,
+      mandalaTheme: json['mandalaTheme'] as String?,
     );
   }
 
@@ -389,6 +410,15 @@ class TaskTab {
     }
     if (viewMode != null && viewMode!.isNotEmpty) {
       data['viewMode'] = viewMode;
+    }
+    if (mandalaGrouping != null && mandalaGrouping!.isNotEmpty) {
+      data['mandalaGrouping'] = mandalaGrouping;
+    }
+    if (mandalaGeometry != null && mandalaGeometry!.isNotEmpty) {
+      data['mandalaGeometry'] = mandalaGeometry;
+    }
+    if (mandalaTheme != null && mandalaTheme!.isNotEmpty) {
+      data['mandalaTheme'] = mandalaTheme;
     }
 
     return data;
