@@ -34,6 +34,9 @@ class GTasksApp extends StatelessWidget {
               onTokenRefreshed: (newTok) {
                 settings.setGoogleTokens(accessToken: newTok);
               },
+              onAccountTokenRefreshed: (accId, newTok) {
+                settings.updateAccountTokens(id: accId, accessToken: newTok);
+              },
             );
             provider.updateConfig(
               newUrl: settings.baseUrl,
@@ -42,6 +45,9 @@ class GTasksApp extends StatelessWidget {
               googleRefreshToken: settings.googleRefreshToken,
               onTokenRefreshed: (newTok) {
                 settings.setGoogleTokens(accessToken: newTok);
+              },
+              onAccountTokenRefreshed: (accId, newTok) {
+                settings.updateAccountTokens(id: accId, accessToken: newTok);
               },
               standaloneAccounts: settings.storedAccounts,
               deletedAccounts: settings.deletedAccounts,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../models/account.dart';
 import '../../providers/task_provider.dart';
+import 'add_account_modal.dart';
 import 'settings_modal.dart';
 
 class SyncProgressDialog extends StatefulWidget {
@@ -168,12 +170,83 @@ class _SyncProgressDialogState extends State<SyncProgressDialog> {
                 textAlign: TextAlign.center,
               ),
             ),
+            if (_errorDetail != null && (
+              _errorDetail!.contains('401') ||
+              _errorDetail!.toLowerCase().contains('unauthenticated') ||
+              _errorDetail!.toLowerCase().contains('invalid credentials') ||
+              _errorDetail!.toLowerCase().contains('invalid_grant') ||
+              _errorDetail!.toLowerCase().contains('auth')
+            )) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.vpn_key_off_outlined, color: Colors.amber, size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Authentication expired (401). Local tasks are safely preserved. Tap "Re-authenticate" below to sign in again and continue syncing.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ],
       ),
       actions: [
         if (!_isRunning) ...[
           if (!_success) ...[
+            if (_errorDetail != null && (
+              _errorDetail!.contains('401') ||
+              _errorDetail!.toLowerCase().contains('unauthenticated') ||
+              _errorDetail!.toLowerCase().contains('invalid credentials') ||
+              _errorDetail!.toLowerCase().contains('invalid_grant') ||
+              _errorDetail!.toLowerCase().contains('auth')
+            )) ...[
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: theme.colorScheme.onPrimary,
+                ),
+                icon: const Icon(Icons.sync_lock, size: 16),
+                label: const Text('Re-authenticate'),
+                onPressed: () async {
+                  final provider = context.read<TaskProvider>();
+                  final targetAccId = widget.account ?? provider.selectedAccount;
+                  GTasksAccount? targetAcc;
+                  if (provider.accounts.isNotEmpty) {
+                    targetAcc = provider.accounts.firstWhere(
+                      (a) => a.id == targetAccId,
+                      orElse: () => provider.accounts.first,
+                    );
+                  }
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AddAccountModal(existingAccount: targetAcc),
+                  );
+                  if (ok == true && mounted) {
+                    setState(() {
+                      _isRunning = true;
+                      _errorDetail = null;
+                    });
+                    _startSync();
+                  }
+                },
+              ),
+            ],
             TextButton.icon(
               icon: const Icon(Icons.settings, size: 16),
               label: const Text('Settings'),

@@ -67,6 +67,21 @@ class _TasksScreenState extends State<TasksScreen> {
     if (!mounted) return;
     if (action == 'open_task_editor') {
       _showAddTaskSheet(context, isFromWidget: true);
+    } else if (action == 'quick_sync') {
+      final provider = context.read<TaskProvider>();
+      provider.syncGoogleTasks(syncAll: false).then((ok) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(ok
+                  ? 'Tasks synchronized successfully!'
+                  : (provider.errorMessage ?? 'Sync failed.')),
+              duration: const Duration(seconds: 3),
+              backgroundColor: ok ? Colors.green : Colors.redAccent,
+            ),
+          );
+        }
+      });
     } else if (action.startsWith('open_ai_chat')) {
       final provider = context.read<TaskProvider>();
       TaskViewContext viewCtx;
@@ -793,17 +808,24 @@ class _TasksScreenState extends State<TasksScreen> {
 
   void _checkAccountStatusAtStartup(TaskProvider provider) {
     if (provider.errorMessage != null) {
+      final isAuth = provider.errorMessage!.contains('401') ||
+          provider.errorMessage!.contains('UNAUTHENTICATED') ||
+          provider.errorMessage!.contains('invalid_grant') ||
+          provider.errorMessage!.contains('Invalid Credentials');
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.red.shade800,
-          duration: const Duration(seconds: 5),
+          backgroundColor: isAuth ? Colors.amber.shade900 : Colors.red.shade800,
+          duration: const Duration(seconds: 7),
           content: Row(
             children: [
-              const Icon(Icons.error_outline, color: Colors.white, size: 20),
+              Icon(isAuth ? Icons.vpn_key_off_outlined : Icons.error_outline, color: Colors.white, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Connection error: ${provider.errorMessage}',
+                  isAuth
+                      ? 'Google authorization expired. Re-authenticate to resume syncing (local tasks safe).'
+                      : 'Connection error: ${provider.errorMessage}',
                   style: const TextStyle(fontSize: 12),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -812,13 +834,21 @@ class _TasksScreenState extends State<TasksScreen> {
             ],
           ),
           action: SnackBarAction(
-            label: 'Settings',
+            label: isAuth ? 'Re-login' : 'Settings',
             textColor: Colors.amberAccent,
             onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => const SettingsModal(),
-              );
+              if (isAuth) {
+                final targetAcc = provider.accounts.isNotEmpty ? provider.accounts.first : null;
+                showDialog(
+                  context: context,
+                  builder: (_) => AddGoogleAccountModal(existingAccount: targetAcc),
+                );
+              } else {
+                showDialog(
+                  context: context,
+                  builder: (_) => const SettingsModal(),
+                );
+              }
             },
           ),
         ),

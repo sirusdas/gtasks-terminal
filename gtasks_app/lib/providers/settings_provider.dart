@@ -133,9 +133,46 @@ class SettingsProvider with ChangeNotifier {
     await prefs.setStringList(_keyDeletedAccounts, _deletedAccounts.toList());
     // If it's a Google account and the first or active, update current tokens
     if (provider == 'google' && accessToken != null && accessToken.isNotEmpty) {
-      if (_googleAccessToken == null || id == 'default') {
+      if (_googleAccessToken == null || id == 'default' || id == 'personal') {
         await setGoogleTokens(accessToken: accessToken, refreshToken: refreshToken);
       }
+    }
+    notifyListeners();
+  }
+
+  Future<void> updateAccountTokens({
+    required String id,
+    required String accessToken,
+    String? refreshToken,
+  }) async {
+    if (_storedAccounts.containsKey(id)) {
+      _storedAccounts[id]!['access_token'] = accessToken;
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        _storedAccounts[id]!['refresh_token'] = refreshToken;
+      }
+    } else {
+      _storedAccounts[id] = {
+        'id': id,
+        'name': id,
+        'provider': 'google',
+        'access_token': accessToken,
+        if (refreshToken != null && refreshToken.isNotEmpty) 'refresh_token': refreshToken,
+      };
+    }
+    final isGoogle = (_storedAccounts[id]?['provider']?.toString() ?? 'google').toLowerCase() != 'microsoft';
+    if (isGoogle && (id == 'default' || id == 'personal' || _googleAccessToken == null)) {
+      _googleAccessToken = accessToken;
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        _googleRefreshToken = refreshToken;
+      }
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyAccounts, json.encode(_storedAccounts));
+    if (_googleAccessToken != null) {
+      await prefs.setString(_keyGoogleAccessToken, _googleAccessToken!);
+    }
+    if (_googleRefreshToken != null) {
+      await prefs.setString(_keyGoogleRefreshToken, _googleRefreshToken!);
     }
     notifyListeners();
   }

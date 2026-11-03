@@ -15,6 +15,9 @@ class MainActivity : FlutterActivity() {
         const val ACTION_OPEN_TASK_PREVIEW = "com.gtasks.gtasks_app.ACTION_OPEN_TASK_PREVIEW"
         const val ACTION_OPEN_TAB = "com.gtasks.gtasks_app.ACTION_OPEN_TAB"
         const val ACTION_OPEN_MANDALA = "com.gtasks.gtasks_app.ACTION_OPEN_MANDALA"
+        const val ACTION_QUICK_SYNC = "com.gtasks.gtasks_app.ACTION_QUICK_SYNC_WIDGET"
+
+        var activeMethodChannel: MethodChannel? = null
     }
 
     private var pendingAction: String? = null
@@ -33,7 +36,10 @@ class MainActivity : FlutterActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
-        if (intent.action == ACTION_NEW_TASK || intent.getBooleanExtra("open_task_editor", false)) {
+        if (intent.action == ACTION_QUICK_SYNC || intent.getBooleanExtra("quick_sync", false)) {
+            pendingAction = "quick_sync"
+            methodChannel?.invokeMethod("onActionReceived", "quick_sync")
+        } else if (intent.action == ACTION_NEW_TASK || intent.getBooleanExtra("open_task_editor", false)) {
             pendingAction = "open_task_editor"
             methodChannel?.invokeMethod("onActionReceived", "open_task_editor")
         } else if (intent.action == ACTION_OPEN_AI || intent.getBooleanExtra("open_ai_chat", false)) {
@@ -75,6 +81,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         methodChannel = channel
+        activeMethodChannel = channel
 
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -115,5 +122,12 @@ class MainActivity : FlutterActivity() {
             channel.invokeMethod("onActionReceived", pendingAction)
             pendingAction = null
         }
+    }
+
+    override fun onDestroy() {
+        if (activeMethodChannel == methodChannel) {
+            activeMethodChannel = null
+        }
+        super.onDestroy()
     }
 }

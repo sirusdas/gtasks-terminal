@@ -212,16 +212,30 @@ class GTasksWidgetProvider : AppWidgetProvider() {
                 }
                 ACTION_QUICK_SYNC -> {
                     val now = System.currentTimeMillis()
-                    if (isSyncing || (now - lastSyncTimestamp < 4000L)) {
+                    if (isSyncing || (now - lastSyncTimestamp < 3000L)) {
                         Toast.makeText(context, "Sync is already in progress...", Toast.LENGTH_SHORT).show()
                     } else {
                         isSyncing = true
                         lastSyncTimestamp = now
-                        Toast.makeText(context, "Syncing tasks...", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Syncing tasks with cloud...", Toast.LENGTH_SHORT).show()
+
+                        val channel = MainActivity.activeMethodChannel
+                        if (channel != null) {
+                            channel.invokeMethod("onActionReceived", "quick_sync")
+                        } else {
+                            val syncIntent = Intent(context, MainActivity::class.java).apply {
+                                action = ACTION_QUICK_SYNC
+                                putExtra("quick_sync", true)
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            }
+                            context.startActivity(syncIntent)
+                        }
+
                         updateAllWidgets(context)
                         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                             isSyncing = false
-                        }, 3500L)
+                            updateAllWidgets(context)
+                        }, 4000L)
                     }
                 }
                 ACTION_COMPLETE_TASK -> {

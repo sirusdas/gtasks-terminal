@@ -14,8 +14,9 @@ logger = setup_logger(__name__)
 @click.command()
 @click.option('--account', '-a', help='Account name for multi-account support')
 @click.option('--credentials', '-c', help='Path to credentials file')
+@click.option('--force', '-f', is_flag=True, help='Force a fresh re-authentication flow (re-login)')
 @click.pass_context
-def auth(ctx, account, credentials):
+def auth(ctx, account, credentials, force):
     """Authenticate with Google Tasks API"""
     logger.info("Starting Google authentication flow")
     
@@ -26,7 +27,7 @@ def auth(ctx, account, credentials):
     # Create auth manager with account-specific settings
     auth_manager = GoogleAuthManager(credentials_file=credentials, account_name=account)
     
-    if auth_manager.authenticate():
+    if auth_manager.authenticate(force_refresh=force):
         # Register the account in the configuration if it's a named account
         if account:
             config = ConfigManager()

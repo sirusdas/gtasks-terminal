@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../../api/microsoft_todo_direct_client.dart';
+import '../../models/account.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/settings_provider.dart';
 
@@ -13,7 +14,12 @@ typedef AddAccountModal = AddGoogleAccountModal;
 
 class AddGoogleAccountModal extends StatefulWidget {
   final String initialProvider; // 'google' or 'microsoft'
-  const AddGoogleAccountModal({super.key, this.initialProvider = 'google'});
+  final GTasksAccount? existingAccount;
+  const AddGoogleAccountModal({
+    super.key,
+    this.initialProvider = 'google',
+    this.existingAccount,
+  });
 
   @override
   State<AddGoogleAccountModal> createState() => _AddGoogleAccountModalState();
@@ -24,6 +30,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
   final TextEditingController _authCodeController = TextEditingController();
 
   late String _selectedProvider; // 'google' or 'microsoft'
+  bool get isReconnect => widget.existingAccount != null;
   bool _loading = false;
   bool _syncing = false;
   bool _syncCompleted = false;
@@ -48,10 +55,15 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
   @override
   void initState() {
     super.initState();
-    _selectedProvider = widget.initialProvider;
-    _accountNameController = TextEditingController(
-      text: _selectedProvider == 'microsoft' ? 'Outlook' : 'Work',
-    );
+    if (widget.existingAccount != null) {
+      _selectedProvider = widget.existingAccount!.provider;
+      _accountNameController = TextEditingController(text: widget.existingAccount!.name);
+    } else {
+      _selectedProvider = widget.initialProvider;
+      _accountNameController = TextEditingController(
+        text: _selectedProvider == 'microsoft' ? 'Outlook' : 'Work',
+      );
+    }
   }
 
   @override
@@ -267,8 +279,8 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
       final taskProvider = context.read<TaskProvider>();
       final settings = context.read<SettingsProvider>();
 
-      final accName = _accountNameController.text.trim().isEmpty ? 'Personal' : _accountNameController.text.trim();
-      final accId = accName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
+      final accName = widget.existingAccount?.name ?? (_accountNameController.text.trim().isEmpty ? 'Personal' : _accountNameController.text.trim());
+      final accId = widget.existingAccount?.id ?? accName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
 
       if (taskProvider.isStandalone) {
         final tokenUri = Uri.parse('https://oauth2.googleapis.com/token');
@@ -332,6 +344,11 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             id: accId,
             name: accName,
             provider: 'google',
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+          );
+          await settings.updateAccountTokens(
+            id: accId,
             accessToken: accessToken,
             refreshToken: refreshToken,
           );
@@ -671,8 +688,8 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
       final taskProvider = context.read<TaskProvider>();
       final settings = context.read<SettingsProvider>();
 
-      final accName = _accountNameController.text.trim().isEmpty ? 'Outlook' : _accountNameController.text.trim();
-      final accId = accName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
+      final accName = widget.existingAccount?.name ?? (_accountNameController.text.trim().isEmpty ? 'Outlook' : _accountNameController.text.trim());
+      final accId = widget.existingAccount?.id ?? accName.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
       final clientId = settings.microsoftClientId ?? MicrosoftTodoDirectClient.defaultMicrosoftClientId;
 
       if (taskProvider.isStandalone) {
@@ -744,6 +761,11 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             name: accName,
             email: email,
             provider: 'microsoft',
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+          );
+          await settings.updateAccountTokens(
+            id: accId,
             accessToken: accessToken,
             refreshToken: refreshToken,
           );
@@ -920,11 +942,18 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
       title: Row(
         children: [
           Icon(
-            isMicrosoft ? Icons.task_alt : Icons.account_circle,
+            isMicrosoft ? Icons.task_alt : (isReconnect ? Icons.sync_lock : Icons.account_circle),
             color: isMicrosoft ? const Color(0xFF0078D4) : Colors.blueAccent,
           ),
           const SizedBox(width: 8),
-          Text(isMicrosoft ? 'Add Microsoft To Do' : 'Add Google Account'),
+          Expanded(
+            child: Text(
+              isReconnect
+                  ? 'Reconnect ${widget.existingAccount!.name}'
+                  : (isMicrosoft ? 'Add Microsoft To Do' : 'Add Google Account'),
+              style: const TextStyle(fontSize: 18),
+            ),
+          ),
         ],
       ),
       content: SingleChildScrollView(
@@ -932,6 +961,29 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (isReconnect) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.shield_outlined, color: Colors.green, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Reconnecting will renew your authorization credentials. All existing local tasks, spaces, and tags are safely kept intact.',
+                        style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (_syncing) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
@@ -1020,48 +1072,52 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
                 ),
               ),
             ] else ...[
-              const Text('Provider:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: 'google',
-                    icon: Icon(Icons.g_mobiledata, size: 20),
-                    label: Text('Google Tasks'),
-                  ),
-                  ButtonSegment(
-                    value: 'microsoft',
-                    icon: Icon(Icons.task_alt, size: 16, color: Color(0xFF0078D4)),
-                    label: Text('Microsoft To Do'),
-                  ),
-                ],
-                selected: {_selectedProvider},
-                onSelectionChanged: (set) {
-                  setState(() {
-                    _selectedProvider = set.first;
-                    if (_selectedProvider == 'microsoft' && _accountNameController.text == 'Work') {
-                      _accountNameController.text = 'Outlook';
-                    } else if (_selectedProvider == 'google' && _accountNameController.text == 'Outlook') {
-                      _accountNameController.text = 'Work';
-                    }
-                    _error = null;
-                    _authUrl = null;
-                  });
-                },
-              ),
-              const SizedBox(height: 14),
-              Text(
-                isMicrosoft
-                    ? 'Connect Microsoft To Do (Office 365 / Outlook / Live accounts).'
-                    : 'Connect a Google Account without touching terminals or token files.',
-                style: const TextStyle(fontSize: 12),
-              ),
-              const SizedBox(height: 12),
+              if (!isReconnect) ...[
+                const Text('Provider:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'google',
+                      icon: Icon(Icons.g_mobiledata, size: 20),
+                      label: Text('Google Tasks'),
+                    ),
+                    ButtonSegment(
+                      value: 'microsoft',
+                      icon: Icon(Icons.task_alt, size: 16, color: Color(0xFF0078D4)),
+                      label: Text('Microsoft To Do'),
+                    ),
+                  ],
+                  selected: {_selectedProvider},
+                  onSelectionChanged: (set) {
+                    setState(() {
+                      _selectedProvider = set.first;
+                      if (_selectedProvider == 'microsoft' && _accountNameController.text == 'Work') {
+                        _accountNameController.text = 'Outlook';
+                      } else if (_selectedProvider == 'google' && _accountNameController.text == 'Outlook') {
+                        _accountNameController.text = 'Work';
+                      }
+                      _error = null;
+                      _authUrl = null;
+                    });
+                  },
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  isMicrosoft
+                      ? 'Connect Microsoft To Do (Office 365 / Outlook / Live accounts).'
+                      : 'Connect a Google Account without touching terminals or token files.',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+              ],
               TextField(
                 controller: _accountNameController,
+                enabled: !isReconnect,
                 decoration: InputDecoration(
                   labelText: 'Account Nickname',
                   hintText: isMicrosoft ? 'e.g. Outlook, Work, MS-Personal' : 'e.g. Work, School, Personal',
+                  helperText: isReconnect ? 'Account name is locked during reconnection.' : null,
                   border: const OutlineInputBorder(),
                   isDense: true,
                 ),

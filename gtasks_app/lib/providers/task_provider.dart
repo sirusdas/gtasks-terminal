@@ -46,9 +46,11 @@ class TaskProvider with ChangeNotifier {
     String? googleAccessToken,
     String? googleRefreshToken,
     void Function(String)? onTokenRefreshed,
+    void Function(String accountId, String newAccessToken)? onAccountTokenRefreshed,
   }) {
     _isStandalone = isStandalone;
     _onTokenRefreshed = onTokenRefreshed;
+    _onAccountTokenRefreshed = onAccountTokenRefreshed;
     if (googleAccessToken != null && googleAccessToken.isNotEmpty) {
       _googleClient = GoogleTasksDirectClient(
         accessToken: googleAccessToken,
@@ -61,6 +63,7 @@ class TaskProvider with ChangeNotifier {
   Map<String, Map<String, dynamic>> _standaloneAccounts = {};
   Set<String> _deletedAccounts = {};
   void Function(String)? _onTokenRefreshed;
+  void Function(String accountId, String newAccessToken)? _onAccountTokenRefreshed;
 
   void updateConfig({
     required String newUrl,
@@ -68,11 +71,15 @@ class TaskProvider with ChangeNotifier {
     String? googleAccessToken,
     String? googleRefreshToken,
     void Function(String)? onTokenRefreshed,
+    void Function(String accountId, String newAccessToken)? onAccountTokenRefreshed,
     Map<String, Map<String, dynamic>>? standaloneAccounts,
     Set<String>? deletedAccounts,
   }) {
     if (onTokenRefreshed != null) {
       _onTokenRefreshed = onTokenRefreshed;
+    }
+    if (onAccountTokenRefreshed != null) {
+      _onAccountTokenRefreshed = onAccountTokenRefreshed;
     }
     bool needsReload = false;
     if (apiClient.baseUrl != newUrl) {
@@ -943,6 +950,11 @@ class TaskProvider with ChangeNotifier {
       _errorMessage = e.toString();
     }
     _recomputeAllCaches();
+    WidgetService.updateWidget(
+      tabsJson: _tabsToJsonString(),
+      activeTabIndex: _activeTabIndex,
+    );
+    WidgetService.updateMandalaWidget();
     notifyListeners();
     NotificationService().syncAllTaskReminders(_tasks);
   }
@@ -1029,6 +1041,7 @@ class TaskProvider with ChangeNotifier {
                   _standaloneAccounts[acc.id]!['refresh_token'] = newRefresh;
                 }
               }
+              _onAccountTokenRefreshed?.call(acc.id, newTok);
             },
           );
 
@@ -1143,6 +1156,7 @@ class TaskProvider with ChangeNotifier {
             if (_standaloneAccounts.containsKey(acc.id)) {
               _standaloneAccounts[acc.id]!['access_token'] = newTok;
             }
+            _onAccountTokenRefreshed?.call(acc.id, newTok);
             _onTokenRefreshed?.call(newTok);
           },
         );
@@ -1226,9 +1240,19 @@ class TaskProvider with ChangeNotifier {
       }
 
       await refreshTasks();
+      WidgetService.updateWidget(
+        tabsJson: _tabsToJsonString(),
+        activeTabIndex: _activeTabIndex,
+      );
+      WidgetService.updateMandalaWidget();
       return anySynced;
     } catch (e) {
-      _errorMessage = 'Sync failed: $e';
+      final errStr = e.toString();
+      if (errStr.contains('401') || errStr.contains('UNAUTHENTICATED') || errStr.contains('invalid_grant') || errStr.contains('Invalid Credentials')) {
+        _errorMessage = 'Sync failed: 401 UNAUTHENTICATED. Google OAuth session has expired or is invalid. Please re-authenticate the account in Settings or tap Re-login. All your local tasks remain safely preserved.\n\n$e';
+      } else {
+        _errorMessage = 'Sync failed: $e';
+      }
       return false;
     } finally {
       _isLoading = false;

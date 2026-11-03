@@ -100,6 +100,8 @@ class GoogleTasksDirectClient {
         final items = (data['items'] as List?) ?? [];
         allLists.addAll(items.map((e) => Map<String, dynamic>.from(e as Map)));
         pageToken = data['nextPageToken']?.toString();
+      } else if (response.statusCode == 401) {
+        throw Exception('Failed to fetch task lists: 401 - Google authorization expired or invalid. Please re-authenticate the account in Settings to resume syncing (all local tasks remain safe).\n${response.body}');
       } else {
         throw Exception('Failed to fetch task lists: ${response.statusCode} - ${response.body}');
       }
@@ -178,6 +180,8 @@ class GoogleTasksDirectClient {
         }
 
         pageToken = data['nextPageToken']?.toString();
+      } else if (response.statusCode == 401) {
+        throw Exception('Failed to fetch tasks from list $listId: 401 - Google authorization expired or invalid. Please re-authenticate the account in Settings to resume syncing (all local tasks remain safe).\n${response.body}');
       } else {
         throw Exception('Failed to fetch tasks from list $listId: ${response.statusCode} - ${response.body}');
       }

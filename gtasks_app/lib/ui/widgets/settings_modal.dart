@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../models/account.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../services/notification_service.dart';
@@ -109,6 +110,60 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: Colors.green.withValues(alpha: 0.3)),
+              ),
+              color: Colors.green.withValues(alpha: 0.08),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.sync_lock, size: 18, color: Colors.green),
+                        SizedBox(width: 6),
+                        Text('Just need to Re-login / Fix Sync?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'If authentication expired (401 error), do NOT delete! Reconnect instead to renew credentials without deleting any of your local tasks.',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.sync_lock, size: 14),
+                        label: const Text('Reconnect Instead'),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          final taskProvider = context.read<TaskProvider>();
+                          final acc = taskProvider.accounts.firstWhere(
+                            (a) => a.id == accountId,
+                            orElse: () => GTasksAccount(id: accountId, name: accountName),
+                          );
+                          showDialog(
+                            context: context,
+                            builder: (_) => AddAccountModal(existingAccount: acc),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
             const Text(
               'Select how you want to delete this account:',
               style: TextStyle(fontSize: 13),
@@ -502,6 +557,16 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    IconButton(
+                      icon: const Icon(Icons.sync_lock, size: 20, color: Colors.blueAccent),
+                      tooltip: 'Reconnect / Re-authenticate (Keep local data)',
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (_) => AddAccountModal(existingAccount: acc),
+                        );
+                      },
+                    ),
                     if (!isCurrent)
                       IconButton(
                         icon: const Icon(Icons.check_circle_outline, size: 20),
