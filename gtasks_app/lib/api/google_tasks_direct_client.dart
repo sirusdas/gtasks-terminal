@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/task_item.dart';
 import '../utils/notes_parser.dart';
@@ -17,17 +19,24 @@ class GoogleTasksDirectClient {
   }
 
   String accessToken;
-  final String? refreshToken;
+  String? refreshToken;
+  DateTime? accessTokenExpiresAt;
   final String? clientId;
   final String? clientSecret;
   final void Function(String newAccessToken)? onTokenRefreshed;
+  final void Function(String newAccessToken, String? newRefreshToken, DateTime? expiresAt)? onTokenDetailsRefreshed;
+
+  Future<bool>? _refreshInFlight;
+  String? lastAuthError;
 
   GoogleTasksDirectClient({
     required this.accessToken,
     this.refreshToken,
+    this.accessTokenExpiresAt,
     this.clientId,
     this.clientSecret,
     this.onTokenRefreshed,
+    this.onTokenDetailsRefreshed,
   });
 
   Map<String, String> get _headers => {
@@ -35,40 +44,97 @@ class GoogleTasksDirectClient {
         'Content-Type': 'application/json',
       };
 
-  Future<bool> refreshAccessToken() async {
+  bool get _isTokenExpiringSoon {
+    if (accessTokenExpiresAt == null) return false;
+    return DateTime.now().toUtc().isAfter(
+      accessTokenExpiresAt!.toUtc().subtract(const Duration(minutes: 5)),
+    );
+  }
+
+  Future<void> _ensureValidToken() async {
+    if (_isTokenExpiringSoon && refreshToken != null && refreshToken!.isNotEmpty) {
+      await refreshAccessToken();
+    }
+  }
+
+  Future<bool> refreshAccessToken() {
+    if (_refreshInFlight != null) {
+      return _refreshInFlight!;
+    }
+    _refreshInFlight = _performTokenRefresh().whenComplete(() {
+      _refreshInFlight = null;
+    });
+    return _refreshInFlight!;
+  }
+
+  Future<bool> _performTokenRefresh() async {
     final rToken = refreshToken;
-    final cId = clientId ?? defaultGoogleClientId;
-    final cSecret = clientSecret ?? defaultGoogleClientSecret;
-    if (rToken == null || rToken.isEmpty) return false;
+    final cId = (clientId != null && clientId!.isNotEmpty) ? clientId! : defaultGoogleClientId;
+    final cSecret = (clientSecret != null && clientSecret!.isNotEmpty) ? clientSecret! : defaultGoogleClientSecret;
+    if (rToken == null || rToken.isEmpty) {
+      lastAuthError = 'No refresh token stored for this account. Please reconnect in Settings.';
+      return false;
+    }
 
-    try {
-      final response = await http.post(
-        Uri.parse('https://oauth2.googleapis.com/token'),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
-          'client_id': cId,
-          'client_secret': cSecret,
-          'refresh_token': rToken,
-          'grant_type': 'refresh_token',
-        },
-      ).timeout(const Duration(seconds: 12));
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        final response = await http.post(
+          Uri.parse('https://oauth2.googleapis.com/token'),
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: {
+            'client_id': cId,
+            'client_secret': cSecret,
+            'refresh_token': rToken,
+            'grant_type': 'refresh_token',
+          },
+        ).timeout(const Duration(seconds: 12));
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final newTok = data['access_token']?.toString();
-        if (newTok != null && newTok.isNotEmpty) {
-          accessToken = newTok;
-          if (onTokenRefreshed != null) {
-            onTokenRefreshed!(newTok);
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final newTok = data['access_token']?.toString();
+          final newRefresh = data['refresh_token']?.toString();
+          final expiresIn = int.tryParse(data['expires_in']?.toString() ?? '') ?? 3600;
+          if (newTok != null && newTok.isNotEmpty) {
+            accessToken = newTok;
+            if (newRefresh != null && newRefresh.isNotEmpty) {
+              refreshToken = newRefresh;
+            }
+            accessTokenExpiresAt = DateTime.now().toUtc().add(Duration(seconds: expiresIn));
+            lastAuthError = null;
+            onTokenRefreshed?.call(newTok);
+            onTokenDetailsRefreshed?.call(newTok, newRefresh, accessTokenExpiresAt);
+            return true;
           }
-          return true;
+        } else if (response.statusCode == 400 || response.statusCode == 401) {
+          final body = response.body;
+          if (body.contains('invalid_grant')) {
+            lastAuthError =
+                'invalid_grant: Google revoked or expired the refresh token (OAuth apps in "Testing" mode expire tokens every 7 days). Please reconnect or use a Production OAuth Client ID in Settings.';
+          } else {
+            lastAuthError = 'Token refresh rejected (${response.statusCode}): $body';
+          }
+          debugPrint('[GoogleTasksDirectClient] $lastAuthError');
+          return false;
+        } else if (attempt == 0 && response.statusCode >= 500) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          continue;
+        } else {
+          lastAuthError = 'Token refresh failed (${response.statusCode}): ${response.body}';
+          return false;
+        }
+      } catch (e) {
+        lastAuthError = 'Network error refreshing token: $e';
+        if (attempt == 0) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          continue;
         }
       }
-    } catch (_) {}
+    }
     return false;
   }
 
   Future<http.Response> _sendWithAuthRetry(Future<http.Response> Function() requestFn) async {
+    await _ensureValidToken();
     http.Response response = await requestFn().timeout(const Duration(seconds: 12));
     if (response.statusCode == 401 && refreshToken != null && refreshToken!.isNotEmpty) {
       final refreshed = await refreshAccessToken();
@@ -101,7 +167,8 @@ class GoogleTasksDirectClient {
         allLists.addAll(items.map((e) => Map<String, dynamic>.from(e as Map)));
         pageToken = data['nextPageToken']?.toString();
       } else if (response.statusCode == 401) {
-        throw Exception('Failed to fetch task lists: 401 - Google authorization expired or invalid. Please re-authenticate the account in Settings to resume syncing (all local tasks remain safe).\n${response.body}');
+        final detail = lastAuthError ?? 'Google authorization expired or invalid. Please re-authenticate the account in Settings to resume syncing (all local tasks remain safe).';
+        throw Exception('Failed to fetch task lists: 401 - $detail\n${response.body}');
       } else {
         throw Exception('Failed to fetch task lists: ${response.statusCode} - ${response.body}');
       }
@@ -181,7 +248,8 @@ class GoogleTasksDirectClient {
 
         pageToken = data['nextPageToken']?.toString();
       } else if (response.statusCode == 401) {
-        throw Exception('Failed to fetch tasks from list $listId: 401 - Google authorization expired or invalid. Please re-authenticate the account in Settings to resume syncing (all local tasks remain safe).\n${response.body}');
+        final detail = lastAuthError ?? 'Google authorization expired or invalid. Please re-authenticate the account in Settings to resume syncing (all local tasks remain safe).';
+        throw Exception('Failed to fetch tasks from list $listId: 401 - $detail\n${response.body}');
       } else {
         throw Exception('Failed to fetch tasks from list $listId: ${response.statusCode} - ${response.body}');
       }

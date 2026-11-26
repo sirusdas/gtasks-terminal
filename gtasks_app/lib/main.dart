@@ -49,8 +49,26 @@ class GTasksApp extends StatelessWidget {
               onAccountTokenRefreshed: (accId, newTok) {
                 settings.updateAccountTokens(id: accId, accessToken: newTok);
               },
+              onAccountTokenDetailsRefreshed: (accId, newTok, newRefresh, expiresAt) {
+                settings.updateAccountTokens(
+                  id: accId,
+                  accessToken: newTok,
+                  refreshToken: newRefresh,
+                  expiresAt: expiresAt,
+                );
+              },
+              onSyncCompleted: (success, statusMessage) {
+                settings.recordSyncResult(success: success, message: statusMessage);
+              },
               standaloneAccounts: settings.storedAccounts,
               deletedAccounts: settings.deletedAccounts,
+              autoSyncEnabled: settings.autoSyncEnabled,
+              autoSyncIntervalMinutes: settings.autoSyncIntervalMinutes,
+              autoSyncFull: settings.autoSyncFull,
+              lastSyncAt: settings.lastSyncAt,
+              lastSyncStatus: settings.lastSyncStatus,
+              googleClientId: settings.googleClientId,
+              googleClientSecret: settings.googleClientSecret,
             );
             return provider;
           },

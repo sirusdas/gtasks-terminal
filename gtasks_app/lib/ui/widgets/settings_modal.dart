@@ -21,6 +21,8 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
   late TextEditingController _urlController;
   late TextEditingController _backupNoteController;
   late TextEditingController _subscriberApiUrlController;
+  late TextEditingController _googleClientIdController;
+  late TextEditingController _googleClientSecretController;
   bool _testingConnection = false;
   String? _testResult;
 
@@ -38,6 +40,8 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
     _urlController = TextEditingController(text: settings.baseUrl);
     _backupNoteController = TextEditingController();
     _subscriberApiUrlController = TextEditingController();
+    _googleClientIdController = TextEditingController(text: settings.googleClientId ?? '');
+    _googleClientSecretController = TextEditingController(text: settings.googleClientSecret ?? '');
     _loadBackupAndSubscriberData();
   }
 
@@ -64,7 +68,17 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
     _urlController.dispose();
     _backupNoteController.dispose();
     _subscriberApiUrlController.dispose();
+    _googleClientIdController.dispose();
+    _googleClientSecretController.dispose();
     super.dispose();
+  }
+
+  String _formatRelativeSyncTime(DateTime dt) {
+    final diff = DateTime.now().toUtc().difference(dt.toUtc());
+    if (diff.inSeconds < 60) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 
   Future<void> _testConnection(String url) async {
@@ -548,11 +562,43 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
                     ],
                   ],
                 ),
-                subtitle: Text(
-                  acc.email != null && acc.email!.isNotEmpty
-                      ? '${acc.email} • ID: ${acc.id}'
-                      : 'ID: ${acc.id}',
-                  style: const TextStyle(fontSize: 11),
+                subtitle: Builder(
+                  builder: (_) {
+                    final stored = settings.storedAccounts[acc.id];
+                    final hasRefresh = (stored?['refresh_token']?.toString() ?? '').isNotEmpty ||
+                        (acc.id == 'default' && (settings.googleRefreshToken ?? '').isNotEmpty);
+                    final baseSub = acc.email != null && acc.email!.isNotEmpty
+                        ? '${acc.email} • ID: ${acc.id}'
+                        : 'ID: ${acc.id}';
+                    if (!settings.isStandalone) {
+                      return Text(baseSub, style: const TextStyle(fontSize: 11));
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(baseSub, style: const TextStyle(fontSize: 11)),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(
+                              hasRefresh ? Icons.verified_user_outlined : Icons.warning_amber_rounded,
+                              size: 12,
+                              color: hasRefresh ? Colors.green : Colors.amber,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              hasRefresh ? 'Auto-Refresh Ready' : 'No Refresh Token (Tap Reconnect)',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: hasRefresh ? Colors.green : Colors.amber,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -631,6 +677,93 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
             ),
           ),
         ],
+        const SizedBox(height: 20),
+        ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)),
+          ),
+          collapsedShape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)),
+          ),
+          leading: const Icon(Icons.vpn_key_outlined, color: Colors.amber, size: 20),
+          title: const Text(
+            'Google OAuth Session & 7-Day Expiry Fix',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+          subtitle: Text(
+            settings.googleClientId != null && settings.googleClientId!.isNotEmpty
+                ? 'Using custom Google OAuth Client ID'
+                : 'Optional: Use your own Production OAuth credentials',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor, fontSize: 11),
+          ),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          children: [
+            Text(
+              'Why does Google Auth expire every 7 days? Google Cloud OAuth apps in "Testing" mode automatically revoke refresh tokens after 7 days. To keep sessions valid indefinitely, publish your OAuth consent screen to "Production" in Google Cloud Console or enter your own Production Client ID & Secret below.',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor, fontSize: 11),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _googleClientIdController,
+              decoration: const InputDecoration(
+                labelText: 'Custom Google Client ID (Optional)',
+                hintText: 'xxxx.apps.googleusercontent.com',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              style: const TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _googleClientSecretController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Custom Google Client Secret (Optional)',
+                hintText: 'GOCSPX-...',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              style: const TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                ElevatedButton(
+                  onPressed: () async {
+                    await settings.setGoogleOAuthCredentials(
+                      clientId: _googleClientIdController.text,
+                      clientSecret: _googleClientSecretController.text,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Google OAuth credentials saved! Reconnect account to apply.')),
+                      );
+                    }
+                  },
+                  child: const Text('Save Credentials'),
+                ),
+                const SizedBox(width: 8),
+                if (settings.googleClientId != null && settings.googleClientId!.isNotEmpty)
+                  TextButton(
+                    onPressed: () async {
+                      _googleClientIdController.clear();
+                      _googleClientSecretController.clear();
+                      await settings.setGoogleOAuthCredentials(clientId: null, clientSecret: null);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Reset to default OAuth credentials.')),
+                        );
+                      }
+                    },
+                    child: const Text('Reset to Default'),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -837,6 +970,130 @@ class _SettingsModalState extends State<SettingsModal> with SingleTickerProvider
                     onPressed: () {
                       SyncProgressDialog.show(context, isFullSync: false);
                     },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Text('Auto Sync Controls', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                secondary: const Icon(Icons.autorenew, color: Colors.teal),
+                title: const Text('Enable Auto Sync', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                subtitle: Text(
+                  'Automatically sync tasks in the background while the app is open.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor, fontSize: 11),
+                ),
+                value: settings.autoSyncEnabled,
+                onChanged: (val) => settings.setAutoSyncEnabled(val),
+              ),
+              if (settings.autoSyncEnabled) ...[
+                const Divider(height: 16),
+                Row(
+                  children: [
+                    const Icon(Icons.timer_outlined, size: 18, color: Colors.blueAccent),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text('Sync Interval', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    ),
+                    DropdownButton<int>(
+                      value: const [5, 10, 15, 30, 60, 120].contains(settings.autoSyncIntervalMinutes)
+                          ? settings.autoSyncIntervalMinutes
+                          : 15,
+                      isDense: true,
+                      items: const [
+                        DropdownMenuItem(value: 5, child: Text('Every 5 min')),
+                        DropdownMenuItem(value: 10, child: Text('Every 10 min')),
+                        DropdownMenuItem(value: 15, child: Text('Every 15 min')),
+                        DropdownMenuItem(value: 30, child: Text('Every 30 min')),
+                        DropdownMenuItem(value: 60, child: Text('Every 1 hour')),
+                        DropdownMenuItem(value: 120, child: Text('Every 2 hours')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          settings.setAutoSyncIntervalMinutes(val);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Sync on App Launch', style: TextStyle(fontSize: 13)),
+                  subtitle: Text(
+                    'Run a background sync immediately when the app starts.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor, fontSize: 11),
+                  ),
+                  value: settings.syncOnAppStart,
+                  onChanged: (val) => settings.setSyncOnAppStart(val),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Sync on App Resume', style: TextStyle(fontSize: 13)),
+                  subtitle: Text(
+                    'Sync when returning from background (2-min cooldown).',
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor, fontSize: 11),
+                  ),
+                  value: settings.syncOnAppResume,
+                  onChanged: (val) => settings.setSyncOnAppResume(val),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('Auto Sync Scope', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    ),
+                    SegmentedButton<bool>(
+                      style: SegmentedButton.styleFrom(visualDensity: VisualDensity.compact),
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('Quick', style: TextStyle(fontSize: 11))),
+                        ButtonSegment(value: true, label: Text('Full (--all)', style: TextStyle(fontSize: 11))),
+                      ],
+                      selected: {settings.autoSyncFull},
+                      onSelectionChanged: (sel) => settings.setAutoSyncFull(sel.first),
+                    ),
+                  ],
+                ),
+              ],
+              const Divider(height: 16),
+              Row(
+                children: [
+                  Icon(
+                    settings.lastSyncStatus == 'Success'
+                        ? Icons.check_circle_outline
+                        : (settings.lastSyncAt == null ? Icons.schedule : Icons.error_outline),
+                    size: 16,
+                    color: settings.lastSyncStatus == 'Success'
+                        ? Colors.green
+                        : (settings.lastSyncAt == null ? theme.hintColor : Colors.orange),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      settings.lastSyncAt == null
+                          ? 'Last Sync: Never'
+                          : 'Last Sync: ${_formatRelativeSyncTime(settings.lastSyncAt!)} (${settings.lastSyncStatus ?? "Done"})',
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor, fontSize: 11),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),

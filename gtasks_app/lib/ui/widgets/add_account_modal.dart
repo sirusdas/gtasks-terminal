@@ -133,10 +133,14 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           'profile',
         ].join(' ');
 
+        final effectiveClientId = (settings.googleClientId != null && settings.googleClientId!.isNotEmpty)
+            ? settings.googleClientId!
+            : _defaultGoogleClientId;
+
         if (useOob) {
           _lastGeneratedRedirectUri = 'urn:ietf:wg:oauth:2.0:oob';
           final queryParams = {
-            'client_id': _defaultGoogleClientId,
+            'client_id': effectiveClientId,
             'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob',
             'response_type': 'code',
             'scope': scopes,
@@ -155,7 +159,7 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           _lastGeneratedRedirectUri = redirectUri;
 
           final queryParams = {
-            'client_id': _defaultGoogleClientId,
+            'client_id': effectiveClientId,
             'redirect_uri': redirectUri,
             'response_type': 'code',
             'scope': scopes,
@@ -298,6 +302,13 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           'urn:ietf:wg:oauth:2.0:oob',
         ];
 
+        final effectiveClientId = (settings.googleClientId != null && settings.googleClientId!.isNotEmpty)
+            ? settings.googleClientId!
+            : _defaultGoogleClientId;
+        final effectiveClientSecret = (settings.googleClientSecret != null && settings.googleClientSecret!.isNotEmpty)
+            ? settings.googleClientSecret!
+            : _defaultGoogleClientSecret;
+
         for (final candidateUri in candidates) {
           for (int attempt = 0; attempt < 3; attempt++) {
             try {
@@ -306,8 +317,8 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                 body: {
                   'code': code,
-                  'client_id': _defaultGoogleClientId,
-                  'client_secret': _defaultGoogleClientSecret,
+                  'client_id': effectiveClientId,
+                  'client_secret': effectiveClientSecret,
                   'redirect_uri': candidateUri,
                   'grant_type': 'authorization_code',
                 },
@@ -339,6 +350,8 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
           final data = jsonDecode(response.body);
           final accessToken = data['access_token'] as String;
           final refreshToken = data['refresh_token'] as String?;
+          final expiresIn = int.tryParse(data['expires_in']?.toString() ?? '') ?? 3600;
+          final expiresAt = DateTime.now().toUtc().add(Duration(seconds: expiresIn));
 
           await settings.saveAccount(
             id: accId,
@@ -346,11 +359,13 @@ class _AddGoogleAccountModalState extends State<AddGoogleAccountModal> {
             provider: 'google',
             accessToken: accessToken,
             refreshToken: refreshToken,
+            expiresAt: expiresAt,
           );
           await settings.updateAccountTokens(
             id: accId,
             accessToken: accessToken,
             refreshToken: refreshToken,
+            expiresAt: expiresAt,
           );
 
           taskProvider.updateConfig(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -64,6 +65,70 @@ class TaskProvider with ChangeNotifier {
   Set<String> _deletedAccounts = {};
   void Function(String)? _onTokenRefreshed;
   void Function(String accountId, String newAccessToken)? _onAccountTokenRefreshed;
+  void Function(String accountId, String newAccessToken, String? newRefreshToken, DateTime? expiresAt)? _onAccountTokenDetailsRefreshed;
+  void Function(bool success, String? statusMessage)? _onSyncCompleted;
+
+  bool _autoSyncEnabled = true;
+  int _autoSyncIntervalMinutes = 15;
+  bool _autoSyncFull = false;
+  DateTime? _lastSyncAt;
+  String? _lastSyncStatus;
+  String? _googleClientId;
+  String? _googleClientSecret;
+  Timer? _autoSyncTimer;
+
+  DateTime? get lastSyncAt => _lastSyncAt;
+  String? get lastSyncStatus => _lastSyncStatus;
+  bool get autoSyncEnabled => _autoSyncEnabled;
+
+  void _rescheduleAutoSyncTimer() {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = null;
+    if (!_autoSyncEnabled || _autoSyncIntervalMinutes <= 0) return;
+
+    _autoSyncTimer = Timer.periodic(
+      Duration(minutes: _autoSyncIntervalMinutes),
+      (_) {
+        triggerAutoSyncIfNeeded(reason: 'periodic', ignoreCooldown: true);
+      },
+    );
+  }
+
+  Future<bool> triggerAutoSyncIfNeeded({
+    required String reason,
+    bool ignoreCooldown = false,
+  }) async {
+    if (!_autoSyncEnabled && reason == 'periodic') return false;
+    if (_isSyncing || _accounts.isEmpty) return false;
+
+    if (!ignoreCooldown && _lastSyncAt != null) {
+      final elapsed = DateTime.now().toUtc().difference(_lastSyncAt!.toUtc());
+      if (elapsed < const Duration(minutes: 2)) {
+        return false;
+      }
+    }
+
+    if (_isStandalone) {
+      final hasAnyToken = _accounts.any((acc) {
+        final tok = _standaloneAccounts[acc.id]?['access_token']?.toString();
+        return tok != null && tok.isNotEmpty;
+      }) || (_googleClient != null && _googleClient!.accessToken.isNotEmpty);
+      if (!hasAnyToken) return false;
+    }
+
+    debugPrint('[TaskProvider] Auto-sync triggered ($reason, full=$_autoSyncFull)');
+    return syncGoogleTasks(
+      account: 'all',
+      syncAll: _autoSyncFull,
+      silent: true,
+    );
+  }
+
+  @override
+  void dispose() {
+    _autoSyncTimer?.cancel();
+    super.dispose();
+  }
 
   void updateConfig({
     required String newUrl,
@@ -72,8 +137,17 @@ class TaskProvider with ChangeNotifier {
     String? googleRefreshToken,
     void Function(String)? onTokenRefreshed,
     void Function(String accountId, String newAccessToken)? onAccountTokenRefreshed,
+    void Function(String accountId, String newAccessToken, String? newRefreshToken, DateTime? expiresAt)? onAccountTokenDetailsRefreshed,
+    void Function(bool success, String? statusMessage)? onSyncCompleted,
     Map<String, Map<String, dynamic>>? standaloneAccounts,
     Set<String>? deletedAccounts,
+    bool? autoSyncEnabled,
+    int? autoSyncIntervalMinutes,
+    bool? autoSyncFull,
+    DateTime? lastSyncAt,
+    String? lastSyncStatus,
+    String? googleClientId,
+    String? googleClientSecret,
   }) {
     if (onTokenRefreshed != null) {
       _onTokenRefreshed = onTokenRefreshed;
@@ -81,6 +155,33 @@ class TaskProvider with ChangeNotifier {
     if (onAccountTokenRefreshed != null) {
       _onAccountTokenRefreshed = onAccountTokenRefreshed;
     }
+    if (onAccountTokenDetailsRefreshed != null) {
+      _onAccountTokenDetailsRefreshed = onAccountTokenDetailsRefreshed;
+    }
+    if (onSyncCompleted != null) {
+      _onSyncCompleted = onSyncCompleted;
+    }
+    _googleClientId = googleClientId;
+    _googleClientSecret = googleClientSecret;
+    if (lastSyncAt != null) _lastSyncAt ??= lastSyncAt;
+    if (lastSyncStatus != null) _lastSyncStatus ??= lastSyncStatus;
+
+    bool rescheduleTimer = false;
+    if (autoSyncEnabled != null && _autoSyncEnabled != autoSyncEnabled) {
+      _autoSyncEnabled = autoSyncEnabled;
+      rescheduleTimer = true;
+    }
+    if (autoSyncIntervalMinutes != null && _autoSyncIntervalMinutes != autoSyncIntervalMinutes) {
+      _autoSyncIntervalMinutes = autoSyncIntervalMinutes;
+      rescheduleTimer = true;
+    }
+    if (autoSyncFull != null) {
+      _autoSyncFull = autoSyncFull;
+    }
+    if (rescheduleTimer || (_autoSyncEnabled && _autoSyncTimer == null)) {
+      _rescheduleAutoSyncTimer();
+    }
+
     bool needsReload = false;
     if (apiClient.baseUrl != newUrl) {
       apiClient.baseUrl = newUrl;
@@ -106,6 +207,8 @@ class TaskProvider with ChangeNotifier {
       _googleClient = GoogleTasksDirectClient(
         accessToken: googleAccessToken,
         refreshToken: googleRefreshToken,
+        clientId: _googleClientId,
+        clientSecret: _googleClientSecret,
         onTokenRefreshed: _onTokenRefreshed,
       );
     } else {
@@ -959,15 +1062,18 @@ class TaskProvider with ChangeNotifier {
     NotificationService().syncAllTaskReminders(_tasks);
   }
 
-  Future<bool> syncGoogleTasks({String? account, bool syncAll = false}) async {
+  Future<bool> syncGoogleTasks({String? account, bool syncAll = false, bool silent = false}) async {
     if (_isSyncing) {
       debugPrint('[TaskProvider] Sync already in progress, skipping duplicate request.');
       return true;
     }
     _isSyncing = true;
-    _isLoading = true;
+    if (!silent) {
+      _isLoading = true;
+    }
     notifyListeners();
 
+    bool syncResult = false;
     try {
       final targetAccount = account ?? _selectedAccount;
 
@@ -985,6 +1091,7 @@ class TaskProvider with ChangeNotifier {
             }
           }
           await refreshTasks();
+          syncResult = allSuccess;
           return allSuccess;
         } else {
           final res = await apiClient.triggerGoogleSync(account: targetAccount, syncAll: syncAll);
@@ -992,10 +1099,12 @@ class TaskProvider with ChangeNotifier {
           if (syncId != null) {
             final ok = await apiClient.waitForSyncCompletion(syncId);
             await refreshTasks();
+            syncResult = ok;
             return ok;
           }
           await refreshTasks();
-          return res['success'] == true;
+          syncResult = res['success'] == true;
+          return syncResult;
         }
       }
 
@@ -1149,13 +1258,26 @@ class TaskProvider with ChangeNotifier {
           continue;
         }
 
+        final rawExpiresAt = _standaloneAccounts[acc.id]?['expires_at']?.toString();
+        final expiresAt = rawExpiresAt != null ? DateTime.tryParse(rawExpiresAt) : null;
+
         final client = GoogleTasksDirectClient(
           accessToken: token,
           refreshToken: refreshToken,
-          onTokenRefreshed: (newTok) {
+          accessTokenExpiresAt: expiresAt,
+          clientId: _googleClientId,
+          clientSecret: _googleClientSecret,
+          onTokenDetailsRefreshed: (newTok, newRefresh, newExpiresAt) {
             if (_standaloneAccounts.containsKey(acc.id)) {
               _standaloneAccounts[acc.id]!['access_token'] = newTok;
+              if (newRefresh != null && newRefresh.isNotEmpty) {
+                _standaloneAccounts[acc.id]!['refresh_token'] = newRefresh;
+              }
+              if (newExpiresAt != null) {
+                _standaloneAccounts[acc.id]!['expires_at'] = newExpiresAt.toIso8601String();
+              }
             }
+            _onAccountTokenDetailsRefreshed?.call(acc.id, newTok, newRefresh, newExpiresAt);
             _onAccountTokenRefreshed?.call(acc.id, newTok);
             _onTokenRefreshed?.call(newTok);
           },
@@ -1245,6 +1367,7 @@ class TaskProvider with ChangeNotifier {
         activeTabIndex: _activeTabIndex,
       );
       WidgetService.updateMandalaWidget();
+      syncResult = anySynced;
       return anySynced;
     } catch (e) {
       final errStr = e.toString();
@@ -1253,8 +1376,12 @@ class TaskProvider with ChangeNotifier {
       } else {
         _errorMessage = 'Sync failed: $e';
       }
+      syncResult = false;
       return false;
     } finally {
+      _lastSyncAt = DateTime.now().toUtc();
+      _lastSyncStatus = syncResult ? 'Success' : (_errorMessage ?? 'Sync failed');
+      _onSyncCompleted?.call(syncResult, _lastSyncStatus);
       _isLoading = false;
       _isSyncing = false;
       notifyListeners();
@@ -1945,13 +2072,27 @@ class TaskProvider with ChangeNotifier {
         return;
       }
 
+      final rawExpiresAt = _standaloneAccounts[accId]?['expires_at']?.toString();
+      final expiresAt = rawExpiresAt != null ? DateTime.tryParse(rawExpiresAt) : null;
+
       final client = GoogleTasksDirectClient(
         accessToken: token,
         refreshToken: refreshToken,
-        onTokenRefreshed: (newTok) {
+        accessTokenExpiresAt: expiresAt,
+        clientId: _googleClientId,
+        clientSecret: _googleClientSecret,
+        onTokenDetailsRefreshed: (newTok, newRefresh, newExpiresAt) {
           if (_standaloneAccounts.containsKey(accId)) {
             _standaloneAccounts[accId]!['access_token'] = newTok;
+            if (newRefresh != null && newRefresh.isNotEmpty) {
+              _standaloneAccounts[accId]!['refresh_token'] = newRefresh;
+            }
+            if (newExpiresAt != null) {
+              _standaloneAccounts[accId]!['expires_at'] = newExpiresAt.toIso8601String();
+            }
           }
+          _onAccountTokenDetailsRefreshed?.call(accId, newTok, newRefresh, newExpiresAt);
+          _onAccountTokenRefreshed?.call(accId, newTok);
           _onTokenRefreshed?.call(newTok);
         },
       );

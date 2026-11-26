@@ -14,6 +14,15 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyGeminiApiKey = 'gtasks_gemini_api_key';
   static const String _keyAiProviderType = 'gtasks_ai_provider_type';
   static const String _keyAiModelName = 'gtasks_ai_model_name';
+  static const String _keyAutoSyncEnabled = 'gtasks_auto_sync_enabled';
+  static const String _keyAutoSyncIntervalMinutes = 'gtasks_auto_sync_interval_minutes';
+  static const String _keySyncOnAppStart = 'gtasks_sync_on_app_start';
+  static const String _keySyncOnAppResume = 'gtasks_sync_on_app_resume';
+  static const String _keyAutoSyncFull = 'gtasks_auto_sync_full';
+  static const String _keyLastSyncAt = 'gtasks_last_sync_at';
+  static const String _keyLastSyncStatus = 'gtasks_last_sync_status';
+  static const String _keyGoogleClientId = 'gtasks_google_client_id';
+  static const String _keyGoogleClientSecret = 'gtasks_google_client_secret';
 
   // Common quick presets
   static const List<String> presetUrls = [
@@ -36,6 +45,15 @@ class SettingsProvider with ChangeNotifier {
   String _aiProviderType = 'gemini';
   String _aiModelName = 'gemini-1.5-flash';
   String? _microsoftClientId;
+  bool _autoSyncEnabled = true;
+  int _autoSyncIntervalMinutes = 15;
+  bool _syncOnAppStart = true;
+  bool _syncOnAppResume = true;
+  bool _autoSyncFull = false;
+  DateTime? _lastSyncAt;
+  String? _lastSyncStatus;
+  String? _googleClientId;
+  String? _googleClientSecret;
 
   String get baseUrl => _baseUrl;
   bool get isDevMode => _isDevMode;
@@ -50,6 +68,15 @@ class SettingsProvider with ChangeNotifier {
   String? get geminiApiKey => _geminiApiKey;
   String get aiProviderType => _aiProviderType;
   String get aiModelName => _aiModelName;
+  bool get autoSyncEnabled => _autoSyncEnabled;
+  int get autoSyncIntervalMinutes => _autoSyncIntervalMinutes;
+  bool get syncOnAppStart => _syncOnAppStart;
+  bool get syncOnAppResume => _syncOnAppResume;
+  bool get autoSyncFull => _autoSyncFull;
+  DateTime? get lastSyncAt => _lastSyncAt;
+  String? get lastSyncStatus => _lastSyncStatus;
+  String? get googleClientId => _googleClientId;
+  String? get googleClientSecret => _googleClientSecret;
 
   SettingsProvider() {
     _loadSettings();
@@ -84,6 +111,16 @@ class SettingsProvider with ChangeNotifier {
     _aiProviderType = prefs.getString(_keyAiProviderType) ?? 'gemini';
     _aiModelName = prefs.getString(_keyAiModelName) ?? 'gemini-1.5-flash';
     _microsoftClientId = prefs.getString(_keyMicrosoftClientId);
+    _autoSyncEnabled = prefs.getBool(_keyAutoSyncEnabled) ?? true;
+    _autoSyncIntervalMinutes = prefs.getInt(_keyAutoSyncIntervalMinutes) ?? 15;
+    _syncOnAppStart = prefs.getBool(_keySyncOnAppStart) ?? true;
+    _syncOnAppResume = prefs.getBool(_keySyncOnAppResume) ?? true;
+    _autoSyncFull = prefs.getBool(_keyAutoSyncFull) ?? false;
+    final rawLastSync = prefs.getString(_keyLastSyncAt);
+    _lastSyncAt = rawLastSync != null ? DateTime.tryParse(rawLastSync) : null;
+    _lastSyncStatus = prefs.getString(_keyLastSyncStatus);
+    _googleClientId = prefs.getString(_keyGoogleClientId);
+    _googleClientSecret = prefs.getString(_keyGoogleClientSecret);
 
     final rawDeleted = prefs.getStringList(_keyDeletedAccounts);
     if (rawDeleted != null) {
@@ -118,15 +155,24 @@ class SettingsProvider with ChangeNotifier {
     String provider = 'google',
     String? accessToken,
     String? refreshToken,
+    DateTime? expiresAt,
   }) async {
     _deletedAccounts.remove(id);
+    final existing = _storedAccounts[id];
+    final effectiveRefreshToken = (refreshToken != null && refreshToken.isNotEmpty)
+        ? refreshToken
+        : existing?['refresh_token']?.toString();
+    final effectiveExpiresAt = expiresAt?.toIso8601String() ?? existing?['expires_at']?.toString();
+    final effectiveEmail = (email != null && email.isNotEmpty) ? email : existing?['email']?.toString();
+
     _storedAccounts[id] = {
       'id': id,
       'name': name,
       'provider': provider,
-      if (email != null) 'email': email,
-      if (accessToken != null) 'access_token': accessToken,
-      if (refreshToken != null) 'refresh_token': refreshToken,
+      if (effectiveEmail != null && effectiveEmail.isNotEmpty) 'email': effectiveEmail,
+      if (accessToken != null && accessToken.isNotEmpty) 'access_token': accessToken,
+      if (effectiveRefreshToken != null && effectiveRefreshToken.isNotEmpty) 'refresh_token': effectiveRefreshToken,
+      if (effectiveExpiresAt != null && effectiveExpiresAt.isNotEmpty) 'expires_at': effectiveExpiresAt,
     };
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAccounts, json.encode(_storedAccounts));
@@ -134,7 +180,7 @@ class SettingsProvider with ChangeNotifier {
     // If it's a Google account and the first or active, update current tokens
     if (provider == 'google' && accessToken != null && accessToken.isNotEmpty) {
       if (_googleAccessToken == null || id == 'default' || id == 'personal') {
-        await setGoogleTokens(accessToken: accessToken, refreshToken: refreshToken);
+        await setGoogleTokens(accessToken: accessToken, refreshToken: effectiveRefreshToken);
       }
     }
     notifyListeners();
@@ -144,11 +190,15 @@ class SettingsProvider with ChangeNotifier {
     required String id,
     required String accessToken,
     String? refreshToken,
+    DateTime? expiresAt,
   }) async {
     if (_storedAccounts.containsKey(id)) {
       _storedAccounts[id]!['access_token'] = accessToken;
       if (refreshToken != null && refreshToken.isNotEmpty) {
         _storedAccounts[id]!['refresh_token'] = refreshToken;
+      }
+      if (expiresAt != null) {
+        _storedAccounts[id]!['expires_at'] = expiresAt.toIso8601String();
       }
     } else {
       _storedAccounts[id] = {
@@ -157,6 +207,7 @@ class SettingsProvider with ChangeNotifier {
         'provider': 'google',
         'access_token': accessToken,
         if (refreshToken != null && refreshToken.isNotEmpty) 'refresh_token': refreshToken,
+        if (expiresAt != null) 'expires_at': expiresAt.toIso8601String(),
       };
     }
     final isGoogle = (_storedAccounts[id]?['provider']?.toString() ?? 'google').toLowerCase() != 'microsoft';
@@ -325,5 +376,68 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAiModelName, model);
+  }
+
+  Future<void> setAutoSyncEnabled(bool enabled) async {
+    _autoSyncEnabled = enabled;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyAutoSyncEnabled, enabled);
+  }
+
+  Future<void> setAutoSyncIntervalMinutes(int minutes) async {
+    _autoSyncIntervalMinutes = minutes;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyAutoSyncIntervalMinutes, minutes);
+  }
+
+  Future<void> setSyncOnAppStart(bool enabled) async {
+    _syncOnAppStart = enabled;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keySyncOnAppStart, enabled);
+  }
+
+  Future<void> setSyncOnAppResume(bool enabled) async {
+    _syncOnAppResume = enabled;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keySyncOnAppResume, enabled);
+  }
+
+  Future<void> setAutoSyncFull(bool fullSync) async {
+    _autoSyncFull = fullSync;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyAutoSyncFull, fullSync);
+  }
+
+  Future<void> recordSyncResult({required bool success, String? message}) async {
+    _lastSyncAt = DateTime.now().toUtc();
+    _lastSyncStatus = success ? 'Success' : (message ?? 'Sync failed');
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLastSyncAt, _lastSyncAt!.toIso8601String());
+    await prefs.setString(_keyLastSyncStatus, _lastSyncStatus!);
+  }
+
+  Future<void> setGoogleOAuthCredentials({String? clientId, String? clientSecret}) async {
+    final cleanId = clientId?.trim();
+    final cleanSecret = clientSecret?.trim();
+    _googleClientId = (cleanId != null && cleanId.isNotEmpty) ? cleanId : null;
+    _googleClientSecret = (cleanSecret != null && cleanSecret.isNotEmpty) ? cleanSecret : null;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (_googleClientId != null) {
+      await prefs.setString(_keyGoogleClientId, _googleClientId!);
+    } else {
+      await prefs.remove(_keyGoogleClientId);
+    }
+    if (_googleClientSecret != null) {
+      await prefs.setString(_keyGoogleClientSecret, _googleClientSecret!);
+    } else {
+      await prefs.remove(_keyGoogleClientSecret);
+    }
   }
 }

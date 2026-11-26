@@ -30,7 +30,7 @@ class TasksScreen extends StatefulWidget {
   State<TasksScreen> createState() => _TasksScreenState();
 }
 
-class _TasksScreenState extends State<TasksScreen> {
+class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _tabScrollController = ScrollController();
   Timer? _searchDebounce;
@@ -39,6 +39,7 @@ class _TasksScreenState extends State<TasksScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetService.init();
     WidgetService.setActionListener((action) {
       if (mounted) _handleWidgetAction(action);
@@ -46,6 +47,7 @@ class _TasksScreenState extends State<TasksScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider = context.read<TaskProvider>();
+      final settings = context.read<SettingsProvider>();
       // Check if launched from widget with initial action immediately
       final initialAction = await WidgetService.getInitialAction();
       if (initialAction != null && mounted) {
@@ -55,12 +57,30 @@ class _TasksScreenState extends State<TasksScreen> {
       await provider.loadInitialData();
       if (!mounted) return;
       _checkAccountStatusAtStartup(provider);
+      if (settings.autoSyncEnabled && settings.syncOnAppStart) {
+        provider.triggerAutoSyncIfNeeded(reason: 'startup', ignoreCooldown: true).then((ok) {
+          if (mounted && !ok && provider.errorMessage != null) {
+            _checkAccountStatusAtStartup(provider);
+          }
+        });
+      }
       if (_pendingPreviewTaskId != null) {
         final pendingId = _pendingPreviewTaskId!;
         _pendingPreviewTaskId = null;
         _openTaskPreviewById(pendingId);
       }
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      final settings = context.read<SettingsProvider>();
+      final provider = context.read<TaskProvider>();
+      if (settings.autoSyncEnabled && settings.syncOnAppResume) {
+        provider.triggerAutoSyncIfNeeded(reason: 'resume');
+      }
+    }
   }
 
   void _handleWidgetAction(String action) {
@@ -887,6 +907,7 @@ class _TasksScreenState extends State<TasksScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     WidgetService.setActionListener(null);
     _searchDebounce?.cancel();
     _searchController.dispose();
